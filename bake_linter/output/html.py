@@ -118,6 +118,14 @@ class HtmlFormatter(BaseFormatter):
         
         <footer>
             <p>Bake Linter Report • {summary.total_issues} issue(s) in {summary.files_scanned} file(s)</p>
+            <blockquote style="margin:2em 0 0 0;padding:1em 1.5em;background:#f8f9fa;border-left:5px solid #667eea;font-style:italic;color:#444;">
+                <span style="font-size:1.1em;">“A linter this, that runs by hearth or hall,<br>
+                On local ground or Bitbucket’s far domain,<br>
+                To bar the joining of all errant code<br>
+                That strays from vows once sworn at system dawn,<br>
+                Our records writ when first the course was set.”</span>
+                <br><span style="font-size:0.95em;color:#888;">— The Linter’s Lay (joke)</span>
+            </blockquote>
         </footer>
     </div>
     
