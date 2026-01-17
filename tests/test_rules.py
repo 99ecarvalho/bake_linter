@@ -2038,6 +2038,30 @@ LICENSE = "CLOSED"
         # Should NOT flag - these are just text descriptions
         assert len(results) == 0
 
+    def test_destdir_paths_ok(self):
+        """Test that ${D}/usr/lib paths are not flagged (target filesystem via destdir)."""
+        from bake_linter.rules.portability import AbsoluteHostPathRule
+        
+        # These paths are prefixed with ${D} - they're target filesystem, not host
+        content = '''do_install:append() {
+    sed -i '/^EnvironmentFile=/d' ${D}/usr/lib/systemd/system/discovery.service
+    sed -i '/^ExecStart=/c\\ExecStart=/bin/sh -c . /etc/device_discovery/iface.setup' ${D}/usr/lib/systemd/system/discovery.service
+    install -d ${D}/etc/myapp
+}
+'''
+        context = FileContext(
+            path=Path("myapp_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = AbsoluteHostPathRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - all paths are prefixed with ${D} (target destdir)
+        assert len(results) == 0
+
     def test_non_portable_sed(self):
         """Test that GNU-specific sed is flagged."""
         from bake_linter.rules.portability import NonPortableSedRule

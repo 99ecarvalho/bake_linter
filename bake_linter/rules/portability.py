@@ -150,6 +150,16 @@ class AbsoluteHostPathRule(BaseRule):
                 in_task = False
                 continue
             
+            # Skip lines with ${D} or ${STAGING_*} - these are target filesystem paths
+            # This handles cases like: sed ... ${D}/usr/lib/... or install ... ${D}/etc/...
+            if '${D}' in stripped or '${STAGING_' in stripped:
+                continue
+            
+            # Skip lines that are primarily sed/echo with quoted runtime paths
+            # (runtime paths inside sed substitution strings are for target, not host)
+            if re.match(r'^\s*(sed|echo)\s+-', stripped):
+                continue
+            
             # Check for host paths
             for pattern in self.HOST_PATH_PATTERNS:
                 match = pattern.search(stripped)
