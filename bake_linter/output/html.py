@@ -90,6 +90,7 @@ class HtmlFormatter(BaseFormatter):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(self.title)}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     {self._get_styles()}
 </head>
 <body>
@@ -97,14 +98,24 @@ class HtmlFormatter(BaseFormatter):
         <header>
             <h1>🔍 {html.escape(self.title)}</h1>
             <p class="timestamp">Generated: {timestamp}</p>
-            <p class="copyright">© 2024-2026 Eduardo Correia &lt;ecorreia@apliant.com.br&gt;</p>
+            <div class="copyright-section">
+                <p class="copyright-main">© 2024-2026 <a href="https://www.apliant.com.br/cv" target="_blank" class="author-link">Eduardo Correia</a> — <a href="https://www.apliant.com.br/cv" target="_blank" class="cv-link">📄 Curriculum Vitae</a></p>
+                <p class="copyright-links">
+                    <a href="mailto:ecorreia@apliant.com.br" class="contact-link">📧 ecorreia@apliant.com.br</a>
+                    <span class="link-separator">•</span>
+                    <a href="https://www.apliant.com.br" target="_blank" class="contact-link">🌐 www.apliant.com.br</a>
+                    <span class="link-separator">•</span>
+                    <a href="https://www.linkedin.com/in/c99-eduardo/" target="_blank" class="contact-link linkedin-link">💼 LinkedIn</a>
+                </p>
+            </div>
         </header>
         
         {self._render_summary(summary)}
         
         <nav class="tabs">
-            <button class="tab-btn" data-tab="files">By File</button>
-            <button class="tab-btn active" data-tab="rules">By Rule</button>
+            <button class="tab-btn" data-tab="files">📁 By File</button>
+            <button class="tab-btn active" data-tab="rules">📋 By Rule</button>
+            <button class="tab-btn" data-tab="statistics">📊 Statistics</button>
         </nav>
         
         <div class="severity-filters">
@@ -132,6 +143,10 @@ class HtmlFormatter(BaseFormatter):
             {self._render_rules_section(by_rule, by_file, rule_categories)}
         </div>
         
+        <div id="statistics" class="tab-content">
+            {self._render_statistics_section(summary, by_rule, by_file, rule_categories)}
+        </div>
+        
         <footer>
             <p>Bake Linter Report • {summary.total_issues} issue(s) in {summary.files_scanned} file(s)</p>
             <blockquote style="margin:2em 0 0 0;padding:1em 1.5em;background:#f8f9fa;border-left:5px solid #667eea;font-style:italic;color:#444;">
@@ -140,7 +155,7 @@ class HtmlFormatter(BaseFormatter):
                 To bar the joining of all errant code<br>
                 That strays from vows once sworn at system dawn,<br>
                 Our records writ when first the course was set.”</span>
-                <br><span style="font-size:0.95em;color:#888;">— The Linter’s Lay (joke)</span>
+                <br><span style="font-size:0.95em;color:#888;">— The Linter’s Lay</span>
             </blockquote>
         </footer>
     </div>
@@ -383,10 +398,11 @@ class HtmlFormatter(BaseFormatter):
             </div>"""
         
         return f"""
-        <div class="issue {severity_class}">
+        <div class="issue {severity_class}" data-rule-id="{html.escape(result.rule_id)}" data-rule-name="{html.escape(result.rule_name)}">
             <div class="issue-header">
                 <span class="severity-badge {severity_class}">{result.severity.name}</span>
                 <span class="rule-id">[{html.escape(result.rule_id)}]</span>
+                <span class="rule-name" style="display:none;">{html.escape(result.rule_name)}</span>
                 {line_info}
             </div>
             <div class="issue-message">{html.escape(result.message)}</div>
@@ -469,6 +485,192 @@ class HtmlFormatter(BaseFormatter):
         
         return file_view_html
 
+    def _render_statistics_section(
+        self,
+        summary: LintSummary,
+        by_rule: Dict[str, List[LintResult]],
+        by_file: Dict[Path, List[LintResult]],
+        rule_categories: Dict[str, str],
+    ) -> str:
+        """Render the statistics section with charts."""
+        import json
+        
+        # Prepare data for charts
+        severity_data = {
+            'labels': ['Errors', 'Warnings', 'Info'],
+            'values': [summary.errors, summary.warnings, summary.infos],
+            'colors': ['#dc3545', '#ffc107', '#17a2b8'],
+        }
+        
+        # Category data
+        category_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {'errors': 0, 'warnings': 0, 'infos': 0})
+        for rule_id, rule_results in by_rule.items():
+            category = rule_categories.get(rule_id, 'OTHER')
+            for r in rule_results:
+                if r.severity == Severity.ERROR:
+                    category_counts[category]['errors'] += 1
+                elif r.severity == Severity.WARNING:
+                    category_counts[category]['warnings'] += 1
+                else:
+                    category_counts[category]['infos'] += 1
+        
+        # Top rules by issue count with severity breakdown for stacked charts
+        rule_stats = []
+        for rule_id, results in by_rule.items():
+            errors = sum(1 for r in results if r.severity == Severity.ERROR)
+            warnings = sum(1 for r in results if r.severity == Severity.WARNING)
+            infos = sum(1 for r in results if r.severity == Severity.INFO)
+            total = errors + warnings + infos
+            rule_name = results[0].rule_name if results else rule_id
+            rule_stats.append((rule_id, total, rule_name, errors, warnings, infos))
+        top_rules = sorted(rule_stats, key=lambda x: -x[1])[:15]
+        
+        # File issues distribution with severity breakdown for stacked charts
+        file_stats = []
+        for f, results in by_file.items():
+            errors = sum(1 for r in results if r.severity == Severity.ERROR)
+            warnings = sum(1 for r in results if r.severity == Severity.WARNING)
+            infos = sum(1 for r in results if r.severity == Severity.INFO)
+            total = errors + warnings + infos
+            file_stats.append((str(f.name), total, errors, warnings, infos))
+        top_files = sorted(file_stats, key=lambda x: -x[1])[:10]
+        
+        # Encode data for JavaScript
+        severity_json = json.dumps(severity_data)
+        category_labels = json.dumps(list(category_counts.keys()))
+        category_errors = json.dumps([v['errors'] for v in category_counts.values()])
+        category_warnings = json.dumps([v['warnings'] for v in category_counts.values()])
+        category_infos = json.dumps([v['infos'] for v in category_counts.values()])
+        
+        top_rule_labels = json.dumps([r[0] for r in top_rules])
+        top_rule_values = json.dumps([r[1] for r in top_rules])
+        top_rule_names = json.dumps([r[2] for r in top_rules])  # Rule names for tooltips
+        top_rule_errors = json.dumps([r[3] for r in top_rules])
+        top_rule_warnings = json.dumps([r[4] for r in top_rules])
+        top_rule_infos = json.dumps([r[5] for r in top_rules])
+        
+        top_file_labels = json.dumps([f[0] for f in top_files])
+        top_file_values = json.dumps([f[1] for f in top_files])
+        top_file_errors = json.dumps([f[2] for f in top_files])
+        top_file_warnings = json.dumps([f[3] for f in top_files])
+        top_file_infos = json.dumps([f[4] for f in top_files])
+        
+        return f"""
+        <div class="statistics-container">
+            <h2>📊 Analysis Dashboard</h2>
+            
+            <div class="stats-grid">
+                <div class="chart-card">
+                    <h3>🎯 Severity Distribution</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="severityPieChart"></canvas>
+                    </div>
+                    <p class="chart-description">Distribution of issues by severity level</p>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>📊 Severity Breakdown</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="severityDoughnutChart"></canvas>
+                    </div>
+                    <p class="chart-description">Proportional view of issue types</p>
+                </div>
+                
+                <div class="chart-card wide">
+                    <h3>📁 Issues by Category</h3>
+                    <div class="chart-wrapper-wide">
+                        <canvas id="categoryBarChart"></canvas>
+                    </div>
+                    <p class="chart-description">Stacked bar chart showing errors, warnings, and info by rule category</p>
+                </div>
+                
+                <div class="chart-card wide">
+                    <h3>🔝 Top 15 Rules by Issue Count</h3>
+                    <div class="chart-wrapper-wide">
+                        <canvas id="topRulesChart"></canvas>
+                    </div>
+                    <p class="chart-description">Rules that generated the most issues</p>
+                </div>
+                
+                <div class="chart-card wide">
+                    <h3>📄 Top 10 Files by Issue Count</h3>
+                    <div class="chart-wrapper-wide">
+                        <canvas id="topFilesChart"></canvas>
+                    </div>
+                    <p class="chart-description">Files with the highest number of issues</p>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>📈 Quick Stats</h3>
+                    <div class="quick-stats">
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-total-issues">{summary.total_issues}</span>
+                            <span class="qs-label">Total Issues</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-files-with-issues">{len(by_file)}</span>
+                            <span class="qs-label">Files with Issues</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-rules-triggered">{len(by_rule)}</span>
+                            <span class="qs-label">Rules Triggered</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-categories-affected">{len(category_counts)}</span>
+                            <span class="qs-label">Categories Affected</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-avg-issues-file">{summary.total_issues / max(len(by_file), 1):.1f}</span>
+                            <span class="qs-label">Avg Issues/File</span>
+                        </div>
+                        <div class="quick-stat error-highlight">
+                            <span class="qs-value" id="qs-error-rate">{(summary.errors / max(summary.total_issues, 1) * 100):.1f}%</span>
+                            <span class="qs-label">Error Rate</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>🏆 Health Score</h3>
+                    <div class="health-score-container">
+                        <canvas id="healthGauge"></canvas>
+                        <div class="health-score-text">
+                            <span class="health-value" id="healthValue">--</span>
+                            <span class="health-label">Code Health</span>
+                        </div>
+                    </div>
+                    <p class="chart-description">Based on error/warning ratio and issue density</p>
+                </div>
+            </div>
+        </div>
+        
+        <script id="chart-data" type="application/json">
+        {{
+            "severity": {severity_json},
+            "categoryLabels": {category_labels},
+            "categoryErrors": {category_errors},
+            "categoryWarnings": {category_warnings},
+            "categoryInfos": {category_infos},
+            "topRuleLabels": {top_rule_labels},
+            "topRuleValues": {top_rule_values},
+            "topRuleNames": {top_rule_names},
+            "topRuleErrors": {top_rule_errors},
+            "topRuleWarnings": {top_rule_warnings},
+            "topRuleInfos": {top_rule_infos},
+            "topFileLabels": {top_file_labels},
+            "topFileValues": {top_file_values},
+            "topFileErrors": {top_file_errors},
+            "topFileWarnings": {top_file_warnings},
+            "topFileInfos": {top_file_infos},
+            "totalIssues": {summary.total_issues},
+            "errors": {summary.errors},
+            "warnings": {summary.warnings},
+            "infos": {summary.infos},
+            "filesScanned": {summary.files_scanned}
+        }}
+        </script>
+        """
+
     def _get_styles(self) -> str:
         """Get embedded CSS styles."""
         return """
@@ -526,10 +728,67 @@ class HtmlFormatter(BaseFormatter):
             margin: 0;
         }
         
-        .copyright {
-            opacity: 0.7;
-            font-size: 0.8em;
-            margin: 5px 0 0 0;
+        .copyright-section {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .copyright-main {
+            opacity: 0.95;
+            font-size: 0.95em;
+            margin: 0 0 8px 0;
+        }
+        
+        .copyright-main a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .copyright-main a:hover {
+            text-decoration: underline;
+        }
+        
+        .author-link {
+            font-weight: 600 !important;
+        }
+        
+        .cv-link {
+            opacity: 0.9;
+            margin-left: 5px;
+        }
+        
+        .copyright-links {
+            opacity: 0.9;
+            font-size: 0.85em;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .contact-link {
+            color: white;
+            text-decoration: none;
+            padding: 3px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        
+        .contact-link:hover {
+            background-color: rgba(255,255,255,0.15);
+            transform: translateY(-1px);
+        }
+        
+        .linkedin-link:hover {
+            background-color: rgba(10, 102, 194, 0.4);
+        }
+        
+        .link-separator {
+            opacity: 0.5;
         }
         
         .summary {
@@ -1146,6 +1405,151 @@ class HtmlFormatter(BaseFormatter):
                 font-size: 1.5em;
             }
         }
+        
+        /* Statistics Section Styles */
+        .statistics-container {
+            padding: 20px;
+        }
+        
+        .statistics-container h2 {
+            color: #667eea;
+            margin-bottom: 25px;
+            text-align: center;
+            font-size: 1.8em;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .chart-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .chart-card.wide {
+            grid-column: span 2;
+        }
+        
+        .chart-card h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 1.1em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 250px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .chart-wrapper-wide {
+            position: relative;
+            height: 300px;
+        }
+        
+        .chart-description {
+            text-align: center;
+            color: #888;
+            font-size: 0.85em;
+            margin-top: 10px;
+            font-style: italic;
+        }
+        
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .quick-stat {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        
+        .quick-stat:hover {
+            transform: scale(1.02);
+        }
+        
+        .quick-stat.error-highlight {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        }
+        
+        .qs-value {
+            display: block;
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .error-highlight .qs-value {
+            color: #dc3545;
+        }
+        
+        .qs-label {
+            display: block;
+            font-size: 0.8em;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        
+        .health-score-container {
+            position: relative;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .health-score-text {
+            position: absolute;
+            text-align: center;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .health-value {
+            display: block;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #28a745;
+        }
+        
+        .health-label {
+            display: block;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        @media (max-width: 1024px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-card.wide {
+                grid-column: span 1;
+            }
+        }
     </style>"""
 
     def _get_scripts(self) -> str:
@@ -1299,11 +1703,10 @@ class HtmlFormatter(BaseFormatter):
                 }
             });
             
-            // Update summary stats
-            const allVisibleIssues = document.querySelectorAll('.issue:not(.hidden-by-filter)');
-            const visibleErrors = document.querySelectorAll('.issue.error:not(.hidden-by-filter)').length;
-            const visibleWarnings = document.querySelectorAll('.issue.warning:not(.hidden-by-filter)').length;
-            const visibleInfos = document.querySelectorAll('.issue.info:not(.hidden-by-filter)').length;
+            // Update summary stats - ONLY count from #files to avoid double-counting
+            const visibleErrors = document.querySelectorAll('#files .issue.error:not(.hidden-by-filter)').length;
+            const visibleWarnings = document.querySelectorAll('#files .issue.warning:not(.hidden-by-filter)').length;
+            const visibleInfos = document.querySelectorAll('#files .issue.info:not(.hidden-by-filter)').length;
             
             // Update summary stat values if they exist
             const errorStat = document.querySelector('.stat.error .stat-value');
@@ -1313,6 +1716,9 @@ class HtmlFormatter(BaseFormatter):
             if (errorStat) errorStat.textContent = visibleErrors;
             if (warningStat) warningStat.textContent = visibleWarnings;
             if (infoStat) infoStat.textContent = visibleInfos;
+            
+            // Update charts if they exist
+            updateChartsWithFilter(visibleErrors, visibleWarnings, visibleInfos);
         }
         
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -1324,4 +1730,593 @@ class HtmlFormatter(BaseFormatter):
         
         // Apply filters on page load (all active by default)
         applySeverityFilters();
+        
+        // Initialize Charts when Statistics tab is shown
+        let chartsInitialized = false;
+        
+        function initializeCharts() {
+            if (chartsInitialized) return;
+            
+            const dataElement = document.getElementById('chart-data');
+            if (!dataElement) return;
+            
+            const data = JSON.parse(dataElement.textContent);
+            chartsInitialized = true;
+            
+            // Color palette
+            const colors = {
+                error: '#dc3545',
+                warning: '#ffc107',
+                info: '#17a2b8',
+                primary: '#667eea',
+                secondary: '#764ba2',
+                success: '#28a745',
+                gradient: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe']
+            };
+            
+            // Store chart references for dynamic updates
+            window.linterCharts = window.linterCharts || {};
+            
+            // Severity Pie Chart
+            const severityPieCtx = document.getElementById('severityPieChart');
+            if (severityPieCtx) {
+                window.linterCharts.severityPie = new Chart(severityPieCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: data.severity.labels,
+                        datasets: [{
+                            data: data.severity.values,
+                            backgroundColor: data.severity.colors,
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { padding: 15, usePointStyle: true }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                                        return `${context.label}: ${context.raw} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Severity Doughnut Chart
+            const doughnutCtx = document.getElementById('severityDoughnutChart');
+            if (doughnutCtx) {
+                window.linterCharts.severityDoughnut = new Chart(doughnutCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.severity.labels,
+                        datasets: [{
+                            data: data.severity.values,
+                            backgroundColor: data.severity.colors,
+                            borderWidth: 3,
+                            borderColor: '#fff',
+                            hoverOffset: 10
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '60%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { padding: 15, usePointStyle: true }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Category Stacked Bar Chart
+            const categoryCtx = document.getElementById('categoryBarChart');
+            if (categoryCtx && data.categoryLabels.length > 0) {
+                window.linterCharts.categoryBar = new Chart(categoryCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.categoryLabels,
+                        datasets: [
+                            {
+                                label: 'Errors',
+                                data: data.categoryErrors,
+                                backgroundColor: colors.error,
+                                borderRadius: 4
+                            },
+                            {
+                                label: 'Warnings',
+                                data: data.categoryWarnings,
+                                backgroundColor: colors.warning,
+                                borderRadius: 4
+                            },
+                            {
+                                label: 'Info',
+                                data: data.categoryInfos,
+                                backgroundColor: colors.info,
+                                borderRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                grid: { display: false }
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top'
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Top Rules Horizontal Stacked Bar Chart with severity breakdown
+            const topRulesCtx = document.getElementById('topRulesChart');
+            if (topRulesCtx && data.topRuleLabels.length > 0) {
+                window.linterCharts.topRules = new Chart(topRulesCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.topRuleLabels,
+                        datasets: [
+                            {
+                                label: 'Errors',
+                                data: data.topRuleErrors || [],
+                                backgroundColor: colors.error,
+                                borderRadius: 0
+                            },
+                            {
+                                label: 'Warnings',
+                                data: data.topRuleWarnings || [],
+                                backgroundColor: colors.warning,
+                                borderRadius: 0
+                            },
+                            {
+                                label: 'Info',
+                                data: data.topRuleInfos || [],
+                                backgroundColor: colors.info,
+                                borderRadius: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                beginAtZero: true,
+                                grid: { color: '#f0f0f0' }
+                            },
+                            y: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: { font: { family: 'monospace', size: 10 } }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(context) {
+                                        const idx = context[0].dataIndex;
+                                        const ruleId = data.topRuleLabels[idx];
+                                        const ruleName = data.topRuleNames ? data.topRuleNames[idx] : '';
+                                        return ruleName ? `${ruleId}: ${ruleName}` : ruleId;
+                                    },
+                                    afterTitle: function(context) {
+                                        const idx = context[0].dataIndex;
+                                        const errors = data.topRuleErrors ? data.topRuleErrors[idx] : 0;
+                                        const warnings = data.topRuleWarnings ? data.topRuleWarnings[idx] : 0;
+                                        const infos = data.topRuleInfos ? data.topRuleInfos[idx] : 0;
+                                        const total = errors + warnings + infos;
+                                        return `Total: ${total} issues`;
+                                    },
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.raw}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Top Files Stacked Bar Chart with severity breakdown
+            const topFilesCtx = document.getElementById('topFilesChart');
+            if (topFilesCtx && data.topFileLabels.length > 0) {
+                window.linterCharts.topFiles = new Chart(topFilesCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.topFileLabels,
+                        datasets: [
+                            {
+                                label: 'Errors',
+                                data: data.topFileErrors || [],
+                                backgroundColor: colors.error,
+                                borderRadius: 0
+                            },
+                            {
+                                label: 'Warnings',
+                                data: data.topFileWarnings || [],
+                                backgroundColor: colors.warning,
+                                borderRadius: 0
+                            },
+                            {
+                                label: 'Info',
+                                data: data.topFileInfos || [],
+                                backgroundColor: colors.info,
+                                borderRadius: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                stacked: true,
+                                beginAtZero: true
+                            },
+                            x: {
+                                stacked: true,
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    font: { size: 9 }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(context) {
+                                        return context[0].label;
+                                    },
+                                    afterTitle: function(context) {
+                                        const idx = context[0].dataIndex;
+                                        const errors = data.topFileErrors ? data.topFileErrors[idx] : 0;
+                                        const warnings = data.topFileWarnings ? data.topFileWarnings[idx] : 0;
+                                        const infos = data.topFileInfos ? data.topFileInfos[idx] : 0;
+                                        const total = errors + warnings + infos;
+                                        return `Total: ${total} issues`;
+                                    },
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.raw}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Health Gauge Chart
+            const healthCtx = document.getElementById('healthGauge');
+            if (healthCtx) {
+                // Calculate health score (0-100)
+                // Lower is better: more errors = lower score
+                const errorWeight = 10;
+                const warningWeight = 3;
+                const infoWeight = 1;
+                
+                const infos = data.infos || (data.totalIssues - data.errors - data.warnings);
+                const weightedScore = (data.errors * errorWeight) + 
+                                      (data.warnings * warningWeight) + 
+                                      (infos * infoWeight);
+                
+                // Normalize to 0-100 (lower weighted score = higher health)
+                const maxExpectedScore = data.filesScanned * 50; // Assume max 50 weighted issues per file
+                let healthScore = Math.max(0, 100 - (weightedScore / Math.max(maxExpectedScore, 1)) * 100);
+                healthScore = Math.min(100, Math.round(healthScore));
+                
+                // Update the text
+                const healthValueEl = document.getElementById('healthValue');
+                if (healthValueEl) {
+                    healthValueEl.textContent = healthScore;
+                    if (healthScore >= 80) {
+                        healthValueEl.style.color = '#28a745';
+                    } else if (healthScore >= 50) {
+                        healthValueEl.style.color = '#ffc107';
+                    } else {
+                        healthValueEl.style.color = '#dc3545';
+                    }
+                }
+                
+                window.linterCharts.healthGauge = new Chart(healthCtx, {
+                    type: 'doughnut',
+                    data: {
+                        datasets: [{
+                            data: [healthScore, 100 - healthScore],
+                            backgroundColor: [
+                                healthScore >= 80 ? '#28a745' : healthScore >= 50 ? '#ffc107' : '#dc3545',
+                                '#e9ecef'
+                            ],
+                            borderWidth: 0,
+                            circumference: 180,
+                            rotation: 270
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '75%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { enabled: false }
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Function to update charts when filters change
+        function updateChartsWithFilter(errors, warnings, infos) {
+            const charts = window.linterCharts;
+            if (!charts) return;
+            
+            const dataElement = document.getElementById('chart-data');
+            const originalData = dataElement ? JSON.parse(dataElement.textContent) : null;
+            
+            // Get active filters
+            const showError = document.querySelector('.filter-btn[data-severity="error"]').classList.contains('active');
+            const showWarning = document.querySelector('.filter-btn[data-severity="warning"]').classList.contains('active');
+            const showInfo = document.querySelector('.filter-btn[data-severity="info"]').classList.contains('active');
+            
+            // Update pie chart
+            if (charts.severityPie) {
+                charts.severityPie.data.datasets[0].data = [errors, warnings, infos];
+                charts.severityPie.update('none');
+            }
+            
+            // Update doughnut chart
+            if (charts.severityDoughnut) {
+                charts.severityDoughnut.data.datasets[0].data = [errors, warnings, infos];
+                charts.severityDoughnut.update('none');
+            }
+            
+            // Update health gauge
+            if (charts.healthGauge) {
+                const errorWeight = 10;
+                const warningWeight = 3;
+                const infoWeight = 1;
+                const totalIssues = errors + warnings + infos;
+                
+                const weightedScore = (errors * errorWeight) + 
+                                      (warnings * warningWeight) + 
+                                      (infos * infoWeight);
+                
+                const maxExpectedScore = (originalData ? originalData.filesScanned : 1) * 50;
+                let healthScore = Math.max(0, 100 - (weightedScore / Math.max(maxExpectedScore, 1)) * 100);
+                healthScore = Math.min(100, Math.round(healthScore));
+                
+                // Update gauge data
+                charts.healthGauge.data.datasets[0].data = [healthScore, 100 - healthScore];
+                charts.healthGauge.data.datasets[0].backgroundColor[0] = 
+                    healthScore >= 80 ? '#28a745' : healthScore >= 50 ? '#ffc107' : '#dc3545';
+                charts.healthGauge.update('none');
+                
+                // Update text
+                const healthValueEl = document.getElementById('healthValue');
+                if (healthValueEl) {
+                    healthValueEl.textContent = healthScore;
+                    healthValueEl.style.color = healthScore >= 80 ? '#28a745' : healthScore >= 50 ? '#ffc107' : '#dc3545';
+                }
+            }
+            
+            // Collect detailed stats from visible issues in #files section
+            const visibleIssues = document.querySelectorAll('#files .issue:not(.hidden-by-filter)');
+            const filesWithIssues = new Map(); // fileName -> {errors, warnings, infos}
+            const rulesTriggered = new Map(); // ruleId -> {name, errors, warnings, infos}
+            const categoriesAffected = new Map(); // category -> {errors, warnings, infos}
+            
+            visibleIssues.forEach(issue => {
+                // Get file name from parent file-section
+                const fileSection = issue.closest('.file-section');
+                const fileName = fileSection ? (fileSection.querySelector('.file-path-link')?.textContent || 'unknown') : 'unknown';
+                
+                if (!filesWithIssues.has(fileName)) {
+                    filesWithIssues.set(fileName, { errors: 0, warnings: 0, infos: 0 });
+                }
+                
+                // Get rule ID and name from data attributes (cleaner than parsing text)
+                const ruleId = issue.dataset.ruleId || 'UNKNOWN';
+                const ruleName = issue.dataset.ruleName || ruleId;
+                
+                if (!rulesTriggered.has(ruleId)) {
+                    rulesTriggered.set(ruleId, { name: ruleName, errors: 0, warnings: 0, infos: 0 });
+                }
+                
+                // Determine category from rule ID prefix
+                let category = 'OTHER';
+                if (ruleId.startsWith('BESTPRACTICE')) category = 'BESTPRACTICE';
+                else if (ruleId.startsWith('METADATA')) category = 'METADATA';
+                else if (ruleId.startsWith('NAMING')) category = 'NAMING';
+                else if (ruleId.startsWith('TASK')) category = 'TASK';
+                else if (ruleId.startsWith('VAR')) category = 'VARIABLES';
+                else if (ruleId.startsWith('LIFECYCLE')) category = 'LIFECYCLE';
+                else if (ruleId.startsWith('URI')) category = 'URI';
+                else if (ruleId.startsWith('PYTHON')) category = 'PYTHON';
+                else if (ruleId.startsWith('SYSTEMD')) category = 'SYSTEMD';
+                else if (ruleId.startsWith('STYLE')) category = 'STYLE';
+                
+                if (!categoriesAffected.has(category)) {
+                    categoriesAffected.set(category, { errors: 0, warnings: 0, infos: 0 });
+                }
+                
+                // Update counts based on severity
+                if (issue.classList.contains('error')) {
+                    categoriesAffected.get(category).errors++;
+                    rulesTriggered.get(ruleId).errors++;
+                    filesWithIssues.get(fileName).errors++;
+                } else if (issue.classList.contains('warning')) {
+                    categoriesAffected.get(category).warnings++;
+                    rulesTriggered.get(ruleId).warnings++;
+                    filesWithIssues.get(fileName).warnings++;
+                } else if (issue.classList.contains('info')) {
+                    categoriesAffected.get(category).infos++;
+                    rulesTriggered.get(ruleId).infos++;
+                    filesWithIssues.get(fileName).infos++;
+                }
+            });
+            
+            const totalIssues = errors + warnings + infos;
+            const filesCount = filesWithIssues.size;
+            const rulesCount = rulesTriggered.size;
+            const categoriesCount = categoriesAffected.size;
+            const avgIssuesPerFile = filesCount > 0 ? (totalIssues / filesCount).toFixed(1) : '0.0';
+            const errorRate = totalIssues > 0 ? ((errors / totalIssues) * 100).toFixed(1) + '%' : '0.0%';
+            
+            // Update all Quick Stats
+            const qsTotal = document.getElementById('qs-total-issues');
+            const qsFiles = document.getElementById('qs-files-with-issues');
+            const qsRules = document.getElementById('qs-rules-triggered');
+            const qsCategories = document.getElementById('qs-categories-affected');
+            const qsAvg = document.getElementById('qs-avg-issues-file');
+            const qsErrorRate = document.getElementById('qs-error-rate');
+            
+            if (qsTotal) qsTotal.textContent = totalIssues;
+            if (qsFiles) qsFiles.textContent = filesCount;
+            if (qsRules) qsRules.textContent = rulesCount;
+            if (qsCategories) qsCategories.textContent = categoriesCount;
+            if (qsAvg) qsAvg.textContent = avgIssuesPerFile;
+            if (qsErrorRate) qsErrorRate.textContent = errorRate;
+            
+            // Update Category Bar Chart
+            if (charts.categoryBar && categoriesAffected.size > 0) {
+                const catLabels = Array.from(categoriesAffected.keys());
+                const catErrors = catLabels.map(c => categoriesAffected.get(c).errors);
+                const catWarnings = catLabels.map(c => categoriesAffected.get(c).warnings);
+                const catInfos = catLabels.map(c => categoriesAffected.get(c).infos);
+                
+                charts.categoryBar.data.labels = catLabels;
+                charts.categoryBar.data.datasets[0].data = catErrors;
+                charts.categoryBar.data.datasets[1].data = catWarnings;
+                charts.categoryBar.data.datasets[2].data = catInfos;
+                charts.categoryBar.update('none');
+            } else if (charts.categoryBar && categoriesAffected.size === 0) {
+                charts.categoryBar.data.labels = [];
+                charts.categoryBar.data.datasets[0].data = [];
+                charts.categoryBar.data.datasets[1].data = [];
+                charts.categoryBar.data.datasets[2].data = [];
+                charts.categoryBar.update('none');
+            }
+            
+            // Update Top Rules Chart with severity breakdown
+            if (charts.topRules) {
+                // Sort rules by total count and take top 15
+                const sortedRules = Array.from(rulesTriggered.entries())
+                    .map(([id, data]) => ({
+                        id,
+                        name: data.name,
+                        errors: data.errors,
+                        warnings: data.warnings,
+                        infos: data.infos,
+                        total: data.errors + data.warnings + data.infos
+                    }))
+                    .sort((a, b) => b.total - a.total)
+                    .slice(0, 15);
+                
+                const ruleLabels = sortedRules.map(r => r.id);
+                const ruleErrors = sortedRules.map(r => r.errors);
+                const ruleWarnings = sortedRules.map(r => r.warnings);
+                const ruleInfos = sortedRules.map(r => r.infos);
+                
+                // Store rule names and totals for tooltips
+                charts.topRules.filteredRuleData = sortedRules;
+                
+                charts.topRules.data.labels = ruleLabels;
+                charts.topRules.data.datasets[0].data = ruleErrors;
+                charts.topRules.data.datasets[1].data = ruleWarnings;
+                charts.topRules.data.datasets[2].data = ruleInfos;
+                
+                // Update tooltip callbacks to use filtered data
+                charts.topRules.options.plugins.tooltip.callbacks.title = function(context) {
+                    const idx = context[0].dataIndex;
+                    const ruleData = charts.topRules.filteredRuleData[idx];
+                    return ruleData ? `${ruleData.id}: ${ruleData.name}` : context[0].label;
+                };
+                charts.topRules.options.plugins.tooltip.callbacks.afterTitle = function(context) {
+                    const idx = context[0].dataIndex;
+                    const ruleData = charts.topRules.filteredRuleData[idx];
+                    return ruleData ? `Total: ${ruleData.total} issues` : '';
+                };
+                
+                charts.topRules.update('none');
+            }
+            
+            // Update Top Files Chart with severity breakdown
+            if (charts.topFiles) {
+                // Sort files by total count and take top 10
+                const sortedFiles = Array.from(filesWithIssues.entries())
+                    .map(([name, data]) => ({
+                        name: name.split('/').pop() || name,  // Get just filename
+                        errors: data.errors,
+                        warnings: data.warnings,
+                        infos: data.infos,
+                        total: data.errors + data.warnings + data.infos
+                    }))
+                    .sort((a, b) => b.total - a.total)
+                    .slice(0, 10);
+                
+                const fileLabels = sortedFiles.map(f => f.name);
+                const fileErrors = sortedFiles.map(f => f.errors);
+                const fileWarnings = sortedFiles.map(f => f.warnings);
+                const fileInfos = sortedFiles.map(f => f.infos);
+                
+                // Store file data for tooltips
+                charts.topFiles.filteredFileData = sortedFiles;
+                
+                charts.topFiles.data.labels = fileLabels;
+                charts.topFiles.data.datasets[0].data = fileErrors;
+                charts.topFiles.data.datasets[1].data = fileWarnings;
+                charts.topFiles.data.datasets[2].data = fileInfos;
+                
+                // Update tooltip callbacks to use filtered data
+                charts.topFiles.options.plugins.tooltip.callbacks.afterTitle = function(context) {
+                    const idx = context[0].dataIndex;
+                    const fileData = charts.topFiles.filteredFileData[idx];
+                    return fileData ? `Total: ${fileData.total} issues` : '';
+                };
+                
+                charts.topFiles.update('none');
+            }
+        }
+        
+        // Initialize charts when tab is clicked or if already on statistics tab
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.tab === 'statistics') {
+                    setTimeout(initializeCharts, 100);
+                }
+            });
+        });
+        
+        // Also check on page load if statistics is the default tab
+        if (document.querySelector('.tab-btn[data-tab="statistics"].active')) {
+            setTimeout(initializeCharts, 100);
+        }
     </script>"""
