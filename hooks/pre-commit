@@ -91,6 +91,7 @@ echo -e "${BOLD}Running linter...${NC}"
 echo ""
 
 # Run linter and capture exit code
+echo "command line: [$LINTER_CMD --ci $STAGED_FILES]"
 set +e
 $LINTER_CMD --ci $STAGED_FILES
 LINT_EXIT_CODE=$?
