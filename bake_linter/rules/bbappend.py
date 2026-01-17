@@ -141,3 +141,85 @@ class TaskOverrideWithoutSuffixRule(BaseRule):
                         ))
         
         return results
+
+
+class VersionSpecificBbappendRule(BaseRule):
+    """
+    Check for version-specific .bbappend files that may break on updates.
+    
+    Files like recipe_1.5.3.bbappend will stop working when the base recipe
+    updates to a new version. Use recipe_%.bbappend for robustness.
+    """
+    
+    rule_id = "BBAPPEND003"
+    name = "Version-Specific bbappend"
+    description = "Detects version-specific .bbappend files that may break on updates"
+    default_severity = Severity.INFO
+    groups = ["bbappend", "maintenance"]
+    hint = "Consider using recipe_%.bbappend for version-agnostic appends"
+    
+    applicable_file_types = {"bbappend"}
+
+    # Pattern to detect version-specific bbappend (has version number, not %)
+    VERSION_PATTERN = re.compile(r'_\d+\.\d+(?:\.\d+)?\.bbappend$')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        if not str(context.path).endswith('.bbappend'):
+            return results
+        
+        filename = context.path.name
+        
+        if self.VERSION_PATTERN.search(filename) and '%' not in filename:
+            results.append(self.create_result(
+                file=context.path,
+                line=1,
+                message=f"Version-specific bbappend '{filename}' may break on version updates",
+                hint="Use recipe_%.bbappend unless version-specific changes are required",
+            ))
+        
+        return results
+
+
+class EmptyBbappendRule(BaseRule):
+    """
+    Check for empty or comment-only .bbappend files.
+    
+    Empty bbappend files add build overhead without providing value
+    and should be removed or populated with actual content.
+    """
+    
+    rule_id = "BBAPPEND004"
+    name = "Empty bbappend File"
+    description = "Detects .bbappend files with no actual content"
+    default_severity = Severity.WARNING
+    groups = ["bbappend", "cleanup"]
+    hint = "Remove empty .bbappend or add actual configuration"
+    
+    applicable_file_types = {"bbappend"}
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        if not str(context.path).endswith('.bbappend'):
+            return results
+        
+        # Check if there's any non-comment, non-whitespace content
+        has_content = False
+        for line in context.lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                has_content = True
+                break
+        
+        if not has_content:
+            results.append(self.create_result(
+                file=context.path,
+                line=1,
+                message="Empty .bbappend file (only comments or whitespace)",
+                hint="Remove unused .bbappend or add actual configuration",
+            ))
+        
+        return results
+

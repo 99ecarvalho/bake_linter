@@ -155,6 +155,9 @@ exclude:
 | SECURITY002 | Missing Checksum | Warning | Check SRC_URI has checksums |
 | SECURITY003 | Insecure Permissions | Warning | Detect overly permissive chmod |
 | SECURITY004 | Hardcoded Credentials | Error | Detect potential hardcoded secrets |
+| SECURITY005 | Dangerous rm -rf | Error | Detect rm -rf with dangerous patterns |
+| SECURITY006 | eval Usage | Warning | Detect eval in shell tasks |
+| SECURITY007 | Build Path Leakage | Warning | Detect ${S}/${WORKDIR} in runtime files |
 
 ### Systemd Rules
 | Rule ID | Name | Default Severity | Description |
@@ -168,23 +171,65 @@ exclude:
 |---------|------|-----------------|-------------|
 | INSTALL001 | cp Instead of install | Warning | Detect cp usage in do_install |
 | INSTALL002 | Install Without Mode | Warning | Detect install without -m permission |
+| INSTALL003 | mkdir Instead of install -d | Info | Detect mkdir -p instead of install -d |
+| INSTALL004 | Installation to /usr/local | Error | Detect /usr/local which is non-standard |
+| INSTALL005 | Non-FHS Installation Path | Info | Detect files installed outside standard FHS paths |
 
 ### BBAppend Rules
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
 | BBAPPEND001 | Missing FILESEXTRAPATHS | Warning | Detect file:// without FILESEXTRAPATHS |
 | BBAPPEND002 | Task Override Without Suffix | Error | Detect do_install() without :append |
+| BBAPPEND003 | Version-Specific bbappend | Info | Detect version-specific .bbappend files |
+| BBAPPEND004 | Empty bbappend File | Warning | Detect empty or comment-only .bbappend |
 
 ### Dependency Rules
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
 | DEPENDENCY001 | Wrong Dependency Type | Warning | Detect build tools in RDEPENDS |
+| DEPENDENCY002 | Missing pkgconfig Inherit | Warning | Detect pkg-config usage without inherit |
+| DEPENDENCY003 | Essential in RRECOMMENDS | Warning | Detect essential libs in RRECOMMENDS |
+
+### Variables Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| VARIABLES001 | Git Recipe Without SRCPV | Warning | Detect git recipes without ${SRCPV} in PV |
+| VARIABLES002 | Unconventional S Assignment | Warning | Detect S = "${WORKDIR}" pattern |
 
 ### Patch/Source Rules
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
 | PATCH001 | Patch Without Strip Level | Info | Detect patches without ;striplevel= |
 | SRCREV001 | Unpinned Git SRCREV | Error | Detect AUTOREV/branch names in SRCREV |
+
+### Syntax Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| SYNTAX001 | Unmatched Quotes | Error | Detect unmatched quotes in assignments |
+| SYNTAX002 | Missing Line Continuation | Warning | Detect missing \\ in multiline |
+| SYNTAX003 | Tabs in Python Functions | Error | Detect tabs in Python indentation |
+| SYNTAX004 | Unclosed Variable Expansion | Error | Detect unclosed ${...} |
+
+### Metadata Rules
+| Rule ID | Name | Default Severity | Enabled | Description |
+|---------|------|-----------------|---------|-------------|
+| METADATA001 | Missing BUGTRACKER | Info | No | Detect recipes without BUGTRACKER |
+| METADATA002 | COMPATIBLE_MACHINE Syntax | Warning | Yes | Detect improper regex patterns |
+| METADATA003 | Missing SECTION | Info | No | Detect recipes without SECTION |
+
+### Best Practice Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| BESTPRACTICE001 | do_fetch Modification | Warning | Detect modifications to do_fetch |
+| BESTPRACTICE002 | Cleanup in do_configure | Info | Detect rm commands in do_configure |
+| BESTPRACTICE003 | Missing HOMEPAGE | Info | Detect recipes without HOMEPAGE |
+| BESTPRACTICE004 | sed in do_install | Warning | Detect sed -i in do_install |
+
+### Compatibility Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| COMPAT001 | Deprecated COMPATIBLE_HOST | Warning | Detect improper COMPATIBLE_HOST patterns |
+| COMPAT002 | Unjustified MACHINE_ARCH | Warning | Detect MACHINE_ARCH without justification |
 
 ## Adding a New Rule
 

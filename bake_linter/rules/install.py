@@ -158,3 +158,193 @@ class InstallWithoutModeRule(BaseRule):
                         ))
         
         return results
+
+
+class MkdirInsteadOfInstallDRule(BaseRule):
+    """
+    Check for mkdir -p usage instead of install -d in do_install.
+    
+    Using install -d is preferred because:
+    - Sets consistent ownership and permissions
+    - Standard Yocto/OE practice
+    - More explicit about intent
+    """
+    
+    rule_id = "INSTALL003"
+    name = "mkdir Instead of install -d"
+    description = "Detects mkdir -p usage instead of install -d in do_install"
+    default_severity = Severity.INFO
+    groups = ["install", "best_practices"]
+    hint = "Use 'install -d' instead of 'mkdir -p'"
+
+    MKDIR_PATTERN = re.compile(r'^\s*mkdir\s+(?:-p\s+)?')
+    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_do_install = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            if self.INSTALL_TASK_PATTERN.match(stripped):
+                in_do_install = True
+                if '{' in stripped:
+                    brace_depth = 1
+                continue
+            
+            if in_do_install:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_do_install = False
+                    brace_depth = 0
+                    continue
+                
+                if self.MKDIR_PATTERN.match(stripped):
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message="Using 'mkdir' instead of 'install -d'",
+                        context=stripped[:60],
+                        hint="Replace 'mkdir -p' with 'install -d' for consistency",
+                    ))
+        
+        return results
+
+
+class UsrLocalInstallRule(BaseRule):
+    """
+    Check for installations to /usr/local which is non-standard for Yocto.
+    
+    /usr/local is inappropriate for Yocto builds because:
+    - Conflicts with package management
+    - Not part of standard Yocto FHS
+    - May cause rootfs inconsistencies
+    """
+    
+    rule_id = "INSTALL004"
+    name = "Installation to /usr/local"
+    description = "Detects installations to /usr/local which is non-standard for Yocto"
+    default_severity = Severity.ERROR
+    groups = ["install", "portability"]
+    hint = "Use ${bindir}, ${libdir}, ${datadir} instead of /usr/local/*"
+
+    USR_LOCAL_PATTERN = re.compile(r'/usr/local(?:/|$)')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            if self.USR_LOCAL_PATTERN.search(line):
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message="Installation to /usr/local is non-standard for Yocto",
+                    context=stripped[:60],
+                    hint="Use standard variables: ${bindir}, ${libdir}, ${datadir}",
+                ))
+        
+        return results
+
+
+class NonFHSPathRule(BaseRule):
+    """
+    Check for installations outside standard FHS paths.
+    
+    Detects files installed to non-standard locations that may cause:
+    - Package management issues
+    - Portability problems
+    - Maintenance difficulties
+    """
+    
+    rule_id = "INSTALL005"
+    name = "Non-FHS Installation Path"
+    description = "Detects files installed outside standard FHS paths"
+    default_severity = Severity.INFO
+    groups = ["install", "portability"]
+    hint = "Use standard paths: ${bindir}, ${libdir}, ${datadir}, ${sysconfdir}"
+
+    # Standard FHS paths (as variables or literals)
+    STANDARD_PATHS = [
+        r'\$\{D\}\$\{bindir\}',
+        r'\$\{D\}\$\{sbindir\}',
+        r'\$\{D\}\$\{libdir\}',
+        r'\$\{D\}\$\{libexecdir\}',
+        r'\$\{D\}\$\{datadir\}',
+        r'\$\{D\}\$\{sysconfdir\}',
+        r'\$\{D\}\$\{localstatedir\}',
+        r'\$\{D\}\$\{includedir\}',
+        r'\$\{D\}\$\{docdir\}',
+        r'\$\{D\}\$\{mandir\}',
+        r'\$\{D\}\$\{infodir\}',
+        r'\$\{D\}\$\{systemd_system_unitdir\}',
+        r'\$\{D\}\$\{systemd_user_unitdir\}',
+        r'\$\{D\}/usr/',
+        r'\$\{D\}/etc/',
+        r'\$\{D\}/var/',
+        r'\$\{D\}/opt/',
+        r'\$\{D\}/lib/',
+        r'\$\{D\}/run/',
+        r'\$\{D\}/srv/',
+        r'\$\{D\}/home/',
+    ]
+    
+    STANDARD_PATTERN = re.compile('|'.join(STANDARD_PATHS))
+    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+    INSTALL_PATTERN = re.compile(r'^\s*install\s+.*\$\{D\}(/\S+)')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_do_install = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            if self.INSTALL_TASK_PATTERN.match(stripped):
+                in_do_install = True
+                if '{' in stripped:
+                    brace_depth = 1
+                continue
+            
+            if in_do_install:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_do_install = False
+                    brace_depth = 0
+                    continue
+                
+                # Check for install commands with non-standard destinations
+                if 'install ' in stripped and '${D}' in stripped:
+                    # Skip if using standard paths
+                    if self.STANDARD_PATTERN.search(stripped):
+                        continue
+                    
+                    # Extract the destination path
+                    match = self.INSTALL_PATTERN.search(stripped)
+                    if match:
+                        dest_path = match.group(1)
+                        # Only flag truly unusual paths
+                        if not any(p in dest_path for p in ['/usr', '/etc', '/var', '/opt', '/lib', '/run']):
+                            results.append(self.create_result(
+                                file=context.path,
+                                line=line_num,
+                                message=f"Installation to non-FHS path: {dest_path}",
+                                context=stripped[:60],
+                                hint="Consider using standard FHS paths",
+                            ))
+        
+        return results
+

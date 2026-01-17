@@ -217,3 +217,171 @@ class HardcodedCredentialsRule(BaseRule):
                     break  # One warning per line
         
         return results
+
+
+class DangerousRmRfRule(BaseRule):
+    """
+    Check for potentially dangerous rm -rf usage.
+    
+    rm -rf with unguarded variables can delete unintended files
+    if the variable is empty or set to /.
+    """
+    
+    rule_id = "SECURITY005"
+    name = "Dangerous rm -rf Usage"
+    description = "Detects rm -rf with potentially dangerous patterns"
+    default_severity = Severity.ERROR
+    groups = ["security"]
+    hint = "Add guards to verify variables are set before rm -rf"
+
+    # Dangerous rm patterns
+    DANGEROUS_PATTERNS = [
+        re.compile(r'rm\s+-rf?\s+/\s'),  # rm -rf /
+        re.compile(r'rm\s+-rf?\s+/\*'),  # rm -rf /*
+        re.compile(r'rm\s+-rf?\s+\$\{D\}/\*'),  # rm -rf ${D}/*
+        re.compile(r'rm\s+-rf?\s+\$\{D\}\$\{[^}]+\}/\*'),  # rm -rf ${D}${VAR}/*
+    ]
+    
+    # Pattern to check for unguarded variable deletion
+    UNGUARDED_PATTERN = re.compile(r'rm\s+-rf?\s+\$\{D\}\$\{([^}]+)\}')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            for pattern in self.DANGEROUS_PATTERNS:
+                if pattern.search(stripped):
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message="Potentially dangerous rm -rf pattern",
+                        context=stripped[:60],
+                        hint="Add guards: [ -n \"${VAR}\" ] && rm -rf ...",
+                    ))
+                    break
+        
+        return results
+
+
+class EvalUsageRule(BaseRule):
+    """
+    Check for eval usage in shell tasks.
+    
+    eval can lead to code injection if used with untrusted input.
+    """
+    
+    rule_id = "SECURITY006"
+    name = "eval Usage in Shell"
+    description = "Detects eval usage which can lead to code injection"
+    default_severity = Severity.WARNING
+    groups = ["security"]
+    hint = "Avoid eval; use direct command execution"
+
+    EVAL_PATTERN = re.compile(r'^\s*eval\s+')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_shell_task = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            # Detect shell function start (not python)
+            if re.match(r'^do_\w+\s*\(', stripped) and 'python' not in stripped:
+                in_shell_task = True
+                if '{' in stripped:
+                    brace_depth = 1
+                continue
+            
+            if in_shell_task:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_shell_task = False
+                    brace_depth = 0
+                    continue
+                
+                if self.EVAL_PATTERN.match(stripped):
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message="eval usage can lead to code injection",
+                        context=stripped[:60],
+                        hint="Use direct command execution instead of eval",
+                    ))
+        
+        return results
+
+
+class BuildPathLeakageRule(BaseRule):
+    """
+    Check for build path leakage into runtime files.
+    
+    References to ${WORKDIR} or ${S} in installed files will break
+    reproducibility and may expose build system information.
+    """
+    
+    rule_id = "SECURITY007"
+    name = "Build Path Leakage"
+    description = "Detects build paths leaking into runtime configuration"
+    default_severity = Severity.WARNING
+    groups = ["security", "reproducibility"]
+    hint = "Use runtime paths (${datadir}, ${sysconfdir}) not build paths"
+
+    # Patterns that indicate build path leakage
+    LEAKAGE_PATTERNS = [
+        re.compile(r'\$\{S\}[^}]'),  # ${S} used outside variable context
+        re.compile(r'\$\{WORKDIR\}'),
+        re.compile(r'\$\{B\}[^}]'),  # ${B} used outside variable context
+        re.compile(r'/home/[^/]+/'),  # Hardcoded home paths
+    ]
+    
+    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_do_install = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            if self.INSTALL_TASK_PATTERN.match(stripped):
+                in_do_install = True
+                if '{' in stripped:
+                    brace_depth = 1
+                continue
+            
+            if in_do_install:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_do_install = False
+                    brace_depth = 0
+                    continue
+                
+                # Check for leakage patterns in echo/printf to config files
+                if 'echo' in stripped or 'printf' in stripped or 'cat' in stripped:
+                    for pattern in self.LEAKAGE_PATTERNS:
+                        if pattern.search(stripped):
+                            results.append(self.create_result(
+                                file=context.path,
+                                line=line_num,
+                                message="Build path may leak into installed file",
+                                context=stripped[:60],
+                                hint="Use ${datadir}, ${sysconfdir} instead of build paths",
+                            ))
+                            break
+        
+        return results
+

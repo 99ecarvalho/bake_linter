@@ -882,3 +882,539 @@ class TestRuleRegistry:
         
         rule_ids = [r.rule_id for r in license_rules]
         assert "LICENSE001" in rule_ids
+
+
+class TestInstallRulesExtended:
+    """Extended tests for install rules (INSTALL003-005)."""
+
+    def test_mkdir_instead_of_install_d(self):
+        """Test that mkdir -p in do_install is flagged."""
+        from bake_linter.rules.install import MkdirInsteadOfInstallDRule
+        
+        content = '''do_install() {
+    mkdir -p ${D}${bindir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MkdirInsteadOfInstallDRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "INSTALL003"
+
+    def test_install_d_ok(self):
+        """Test that install -d passes."""
+        from bake_linter.rules.install import MkdirInsteadOfInstallDRule
+        
+        content = '''do_install() {
+    install -d ${D}${bindir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MkdirInsteadOfInstallDRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_usr_local_installation(self):
+        """Test that /usr/local installation is flagged."""
+        from bake_linter.rules.install import UsrLocalInstallRule
+        
+        content = '''do_install() {
+    install -m 0755 myapp ${D}/usr/local/bin/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UsrLocalInstallRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "INSTALL004"
+
+
+class TestVariablesRules:
+    """Tests for variables rules."""
+
+    def test_git_recipe_without_srcpv(self):
+        """Test that git recipe without SRCPV is flagged."""
+        from bake_linter.rules.variables import GitRecipeWithoutSRCPVRule
+        
+        content = '''SRC_URI = "git://github.com/user/repo.git;protocol=https"
+PV = "1.0"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = GitRecipeWithoutSRCPVRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES001"
+
+    def test_git_recipe_with_srcpv_ok(self):
+        """Test that git recipe with SRCPV passes."""
+        from bake_linter.rules.variables import GitRecipeWithoutSRCPVRule
+        
+        content = '''SRC_URI = "git://github.com/user/repo.git;protocol=https"
+PV = "1.0+git${SRCPV}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = GitRecipeWithoutSRCPVRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_unconventional_s_workdir(self):
+        """Test that S = ${WORKDIR} is flagged."""
+        from bake_linter.rules.variables import UnconventionalSAssignmentRule
+        
+        content = '''S = "${WORKDIR}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnconventionalSAssignmentRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES002"
+
+
+class TestBbappendRulesExtended:
+    """Extended tests for bbappend rules (BBAPPEND003-004)."""
+
+    def test_version_specific_bbappend(self):
+        """Test that version-specific bbappend is flagged."""
+        from bake_linter.rules.bbappend import VersionSpecificBbappendRule
+        
+        content = '''FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+'''
+        context = FileContext(
+            path=Path("myrecipe_1.5.3.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VersionSpecificBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BBAPPEND003"
+
+    def test_percent_bbappend_ok(self):
+        """Test that %-wildcard bbappend passes."""
+        from bake_linter.rules.bbappend import VersionSpecificBbappendRule
+        
+        content = '''FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+'''
+        context = FileContext(
+            path=Path("myrecipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VersionSpecificBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_empty_bbappend(self):
+        """Test that empty bbappend is flagged."""
+        from bake_linter.rules.bbappend import EmptyBbappendRule
+        
+        content = '''# This is just a comment
+# No actual content
+'''
+        context = FileContext(
+            path=Path("myrecipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = EmptyBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BBAPPEND004"
+
+
+class TestDependencyRulesExtended:
+    """Extended tests for dependency rules."""
+
+    def test_missing_pkgconfig_inherit(self):
+        """Test that pkg-config usage without inherit is flagged."""
+        from bake_linter.rules.dependency import MissingPkgconfigInheritRule
+        
+        content = '''do_configure() {
+    PKG_CONFIG_PATH="${STAGING_LIBDIR}/pkgconfig" oe_runconf
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingPkgconfigInheritRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DEPENDENCY002"
+
+    def test_with_pkgconfig_inherit_ok(self):
+        """Test that pkg-config with inherit passes."""
+        from bake_linter.rules.dependency import MissingPkgconfigInheritRule
+        
+        content = '''inherit pkgconfig autotools
+
+do_configure() {
+    oe_runconf
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingPkgconfigInheritRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_essential_in_rrecommends(self):
+        """Test that essential library in RRECOMMENDS is flagged."""
+        from bake_linter.rules.dependency import RrecommendsEssentialRule
+        
+        content = '''RRECOMMENDS:${PN} = "libssl"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RrecommendsEssentialRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DEPENDENCY003"
+
+
+class TestSyntaxRules:
+    """Tests for syntax rules."""
+
+    def test_unmatched_quotes(self):
+        """Test that unmatched quotes are flagged."""
+        from bake_linter.rules.syntax import UnmatchedQuotesRule
+        
+        content = '''DESCRIPTION = "This is missing a quote
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnmatchedQuotesRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX001"
+
+    def test_tabs_in_python(self):
+        """Test that tabs in python functions are flagged."""
+        from bake_linter.rules.syntax import TabsInPythonFunctionRule
+        
+        content = '''python do_custom() {
+\tbb.note("Using tabs")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TabsInPythonFunctionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX003"
+
+    def test_unclosed_variable_expansion(self):
+        """Test that unclosed ${} is flagged."""
+        from bake_linter.rules.syntax import UnclosedVariableExpansionRule
+        
+        content = '''do_install() {
+    install -m 0755 ${S/myapp ${D}${bindir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnclosedVariableExpansionRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "SYNTAX004"
+
+
+class TestMetadataRules:
+    """Tests for metadata rules."""
+
+    def test_compatible_machine_syntax(self):
+        """Test that COMPATIBLE_MACHINE without anchors is flagged."""
+        from bake_linter.rules.metadata import CompatibleMachineSyntaxRule
+        
+        content = '''COMPATIBLE_MACHINE = "qemux86"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = CompatibleMachineSyntaxRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "METADATA002"
+
+    def test_compatible_machine_with_anchors_ok(self):
+        """Test that COMPATIBLE_MACHINE with anchors passes."""
+        from bake_linter.rules.metadata import CompatibleMachineSyntaxRule
+        
+        content = '''COMPATIBLE_MACHINE = "^qemux86$"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = CompatibleMachineSyntaxRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+
+class TestBestPracticeRules:
+    """Tests for best practice rules."""
+
+    def test_do_fetch_modification(self):
+        """Test that do_fetch modification is flagged."""
+        from bake_linter.rules.best_practices import DoFetchModificationRule
+        
+        content = '''do_fetch:append() {
+    wget https://example.com/extra.tar.gz
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = DoFetchModificationRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BESTPRACTICE001"
+
+    def test_sed_in_do_install(self):
+        """Test that sed -i in do_install is flagged."""
+        from bake_linter.rules.best_practices import SedInDoInstallRule
+        
+        content = '''do_install() {
+    sed -i 's/DEBUG/RELEASE/g' ${D}${bindir}/myapp
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SedInDoInstallRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BESTPRACTICE004"
+
+
+class TestSecurityRulesExtended:
+    """Extended tests for security rules."""
+
+    def test_dangerous_rm_rf(self):
+        """Test that dangerous rm -rf is flagged."""
+        from bake_linter.rules.security import DangerousRmRfRule
+        
+        content = '''do_install() {
+    rm -rf ${D}${MY_VAR}/*
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = DangerousRmRfRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SECURITY005"
+
+    def test_eval_usage(self):
+        """Test that eval usage is flagged."""
+        from bake_linter.rules.security import EvalUsageRule
+        
+        content = '''do_configure() {
+    eval ${CUSTOM_ARGS}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = EvalUsageRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SECURITY006"
+
+    def test_build_path_leakage(self):
+        """Test that build path leakage is flagged."""
+        from bake_linter.rules.security import BuildPathLeakageRule
+        
+        content = '''do_install() {
+    echo "DATA_DIR=${S}/data" > ${D}${sysconfdir}/myapp.conf
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = BuildPathLeakageRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SECURITY007"
+
+
+class TestCompatibilityRules:
+    """Tests for compatibility rules."""
+
+    def test_deprecated_compatible_host(self):
+        """Test that COMPATIBLE_HOST without anchors is flagged."""
+        from bake_linter.rules.compatibility import DeprecatedCompatibleHostRule
+        
+        content = '''COMPATIBLE_HOST = "i.86.*-linux"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = DeprecatedCompatibleHostRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "COMPAT001"
+
+    def test_unjustified_machine_arch(self):
+        """Test that MACHINE_ARCH without justification is flagged."""
+        from bake_linter.rules.compatibility import UnjustifiedMachineArchRule
+        
+        content = '''PACKAGE_ARCH = "${MACHINE_ARCH}"
+# Recipe just installs generic scripts
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnjustifiedMachineArchRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "COMPAT002"
+
+    def test_machine_arch_with_kernel_module_ok(self):
+        """Test that MACHINE_ARCH with kernel module passes."""
+        from bake_linter.rules.compatibility import UnjustifiedMachineArchRule
+        
+        content = '''inherit module
+PACKAGE_ARCH = "${MACHINE_ARCH}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnjustifiedMachineArchRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
