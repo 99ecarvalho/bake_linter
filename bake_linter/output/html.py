@@ -77,6 +77,11 @@ class HtmlFormatter(BaseFormatter):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         return f"""<!DOCTYPE html>
+<!--
+    Bake Linter Report
+    (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+    All rights reserved.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -89,16 +94,24 @@ class HtmlFormatter(BaseFormatter):
         <header>
             <h1>🔍 {html.escape(self.title)}</h1>
             <p class="timestamp">Generated: {timestamp}</p>
+            <p class="copyright">© 2024-2026 Eduardo Correia &lt;ecorreia@apliant.com.br&gt;</p>
         </header>
         
         {self._render_summary(summary)}
         
         <nav class="tabs">
-            <button class="tab-btn active" data-tab="files">By File</button>
-            <button class="tab-btn" data-tab="rules">By Rule</button>
+            <button class="tab-btn" data-tab="files">By File</button>
+            <button class="tab-btn active" data-tab="rules">By Rule</button>
         </nav>
         
-        <div id="files" class="tab-content active">
+        <div class="severity-filters">
+            <span class="filter-label">Filter by Severity:</span>
+            <button class="filter-btn active" data-severity="error">🔴 Errors</button>
+            <button class="filter-btn active" data-severity="warning">🟡 Warnings</button>
+            <button class="filter-btn active" data-severity="info">🔵 Info</button>
+        </div>
+        
+        <div id="files" class="tab-content">
             <div class="expand-controls">
                 <button class="expand-btn" data-action="expand-all" data-target="files">▼ Expand All</button>
                 <button class="expand-btn" data-action="collapse-all" data-target="files">▲ Collapse All</button>
@@ -106,7 +119,7 @@ class HtmlFormatter(BaseFormatter):
             {self._render_files_section(by_file)}
         </div>
         
-        <div id="rules" class="tab-content">
+        <div id="rules" class="tab-content active">
             <div class="expand-controls">
                 <button class="expand-btn" data-action="expand-all" data-target="rules">▼▼ Items</button>
                 <button class="expand-btn" data-action="expand-level1" data-target="rules">▲ Files</button>
@@ -308,11 +321,11 @@ class HtmlFormatter(BaseFormatter):
                 files_html = "\n".join(file_sections)
                 
                 rule_sections.append(f"""
-                <details class="rule-section" open>
+                <details class="rule-section" open data-total-occurrences="{len(rule_results)}">
                     <summary>
                         <span class="rule-id">{html.escape(rule_id)}</span>
                         <span class="rule-name">{html.escape(rule_name)}</span>
-                        <span class="rule-count">{' '.join(badges)} ({len(rule_results)} occurrence(s))</span>
+                        <span class="rule-count">{' '.join(badges)} (<span class="occurrence-count">{len(rule_results)}</span> occurrence(s))</span>
                     </summary>
                     <div class="rule-issues">
                         {files_html}
@@ -322,11 +335,11 @@ class HtmlFormatter(BaseFormatter):
             rules_html = "\n".join(rule_sections)
             
             category_sections.append(f"""
-            <details class="category-section" open>
+            <details class="category-section" open data-total-issues="{cat_total}" data-total-rules="{len(rules_in_category)}">
                 <summary>
                     <span class="category-name">📁 {html.escape(category)}</span>
                     <span class="category-badges">{' '.join(cat_badges)}</span>
-                    <span class="category-count">({cat_total} issue(s) in {len(rules_in_category)} rule(s))</span>
+                    <span class="category-count">(<span class="issue-count">{cat_total}</span> issue(s) in <span class="rule-count-num">{len(rules_in_category)}</span> rule(s))</span>
                 </summary>
                 <div class="category-rules">
                     {rules_html}
@@ -510,6 +523,12 @@ class HtmlFormatter(BaseFormatter):
             margin: 0;
         }
         
+        .copyright {
+            opacity: 0.7;
+            font-size: 0.8em;
+            margin: 5px 0 0 0;
+        }
+        
         .summary {
             padding: 20px 30px;
             border-bottom: 1px solid #eee;
@@ -603,6 +622,77 @@ class HtmlFormatter(BaseFormatter):
         
         .tab-content.active {
             display: block;
+        }
+        
+        .severity-filters {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 30px;
+            background: #f0f4f8;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .filter-label {
+            font-weight: 600;
+            color: #555;
+            margin-right: 10px;
+        }
+        
+        .filter-btn {
+            padding: 8px 16px;
+            border: 2px solid #ddd;
+            background: #f8f9fa;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.2s;
+            opacity: 0.5;
+        }
+        
+        .filter-btn:hover {
+            background: #e9ecef;
+        }
+        
+        .filter-btn.active {
+            opacity: 1;
+            border-color: currentColor;
+        }
+        
+        .filter-btn[data-severity="error"] {
+            color: var(--color-error);
+        }
+        
+        .filter-btn[data-severity="error"].active {
+            background: var(--color-error-bg);
+            border-color: var(--color-error);
+        }
+        
+        .filter-btn[data-severity="warning"] {
+            color: #856404;
+        }
+        
+        .filter-btn[data-severity="warning"].active {
+            background: var(--color-warning-bg);
+            border-color: var(--color-warning);
+        }
+        
+        .filter-btn[data-severity="info"] {
+            color: var(--color-info);
+        }
+        
+        .filter-btn[data-severity="info"].active {
+            background: var(--color-info-bg);
+            border-color: var(--color-info);
+        }
+        
+        .issue.hidden-by-filter,
+        .file-section.hidden-by-filter,
+        .rule-section.hidden-by-filter,
+        .category-section.hidden-by-filter,
+        .rule-file-section.hidden-by-filter {
+            display: none !important;
         }
         
         .expand-controls {
@@ -1121,4 +1211,114 @@ class HtmlFormatter(BaseFormatter):
                 }
             });
         });
+        
+        // Severity filter functionality
+        function applySeverityFilters() {
+            const activeFilters = Array.from(document.querySelectorAll('.filter-btn.active'))
+                .map(btn => btn.dataset.severity);
+            
+            // Filter individual issues
+            document.querySelectorAll('.issue').forEach(issue => {
+                const severity = issue.classList.contains('error') ? 'error' :
+                                issue.classList.contains('warning') ? 'warning' : 'info';
+                if (activeFilters.includes(severity)) {
+                    issue.classList.remove('hidden-by-filter');
+                } else {
+                    issue.classList.add('hidden-by-filter');
+                }
+            });
+            
+            // Filter issue markers in file view
+            document.querySelectorAll('.issue-marker').forEach(marker => {
+                const severity = marker.classList.contains('error') ? 'error' :
+                                marker.classList.contains('warning') ? 'warning' : 'info';
+                if (activeFilters.includes(severity)) {
+                    marker.classList.remove('hidden-by-filter');
+                } else {
+                    marker.classList.add('hidden-by-filter');
+                }
+            });
+            
+            // Hide file sections with no visible issues (By File tab)
+            document.querySelectorAll('#files .file-section').forEach(section => {
+                const visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+                if (visibleIssues.length === 0) {
+                    section.classList.add('hidden-by-filter');
+                } else {
+                    section.classList.remove('hidden-by-filter');
+                }
+            });
+            
+            // Hide rule-file sections with no visible issues (By Rules tab)
+            document.querySelectorAll('.rule-file-section').forEach(section => {
+                const visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+                if (visibleIssues.length === 0) {
+                    section.classList.add('hidden-by-filter');
+                } else {
+                    section.classList.remove('hidden-by-filter');
+                }
+            });
+            
+            // Hide rule sections with no visible file sections and update occurrence counts
+            document.querySelectorAll('.rule-section').forEach(section => {
+                const visibleFileSections = section.querySelectorAll('.rule-file-section:not(.hidden-by-filter)');
+                const visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+                if (visibleFileSections.length === 0) {
+                    section.classList.add('hidden-by-filter');
+                } else {
+                    section.classList.remove('hidden-by-filter');
+                }
+                // Update occurrence count
+                const countSpan = section.querySelector('.occurrence-count');
+                if (countSpan) {
+                    countSpan.textContent = visibleIssues.length;
+                }
+            });
+            
+            // Hide category sections with no visible rule sections and update counts
+            document.querySelectorAll('.category-section').forEach(section => {
+                const visibleRuleSections = section.querySelectorAll('.rule-section:not(.hidden-by-filter)');
+                const visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+                if (visibleRuleSections.length === 0) {
+                    section.classList.add('hidden-by-filter');
+                } else {
+                    section.classList.remove('hidden-by-filter');
+                }
+                // Update issue count
+                const issueCountSpan = section.querySelector('.issue-count');
+                if (issueCountSpan) {
+                    issueCountSpan.textContent = visibleIssues.length;
+                }
+                // Update rule count
+                const ruleCountSpan = section.querySelector('.rule-count-num');
+                if (ruleCountSpan) {
+                    ruleCountSpan.textContent = visibleRuleSections.length;
+                }
+            });
+            
+            // Update summary stats
+            const allVisibleIssues = document.querySelectorAll('.issue:not(.hidden-by-filter)');
+            const visibleErrors = document.querySelectorAll('.issue.error:not(.hidden-by-filter)').length;
+            const visibleWarnings = document.querySelectorAll('.issue.warning:not(.hidden-by-filter)').length;
+            const visibleInfos = document.querySelectorAll('.issue.info:not(.hidden-by-filter)').length;
+            
+            // Update summary stat values if they exist
+            const errorStat = document.querySelector('.stat.error .stat-value');
+            const warningStat = document.querySelector('.stat.warning .stat-value');
+            const infoStat = document.querySelector('.stat.info .stat-value');
+            
+            if (errorStat) errorStat.textContent = visibleErrors;
+            if (warningStat) warningStat.textContent = visibleWarnings;
+            if (infoStat) infoStat.textContent = visibleInfos;
+        }
+        
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.classList.toggle('active');
+                applySeverityFilters();
+            });
+        });
+        
+        // Apply filters on page load (all active by default)
+        applySeverityFilters();
     </script>"""
