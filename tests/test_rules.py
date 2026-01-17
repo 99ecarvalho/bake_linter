@@ -201,6 +201,77 @@ class TestStyleRules:
         assert results[0].rule_id == "STYLE006"
         assert "duplicate" in results[0].message.lower()
 
+    def test_package_list_format_alphabetical(self):
+        """Test that non-alphabetical package lists are flagged."""
+        from bake_linter.rules.style import PackageListFormatRule
+        
+        content = '''IMAGE_INSTALL:append = " \\
+    zebra-pkg \\
+    alpha-pkg \\
+"
+'''
+        context = FileContext(
+            path=Path("test-image.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PackageListFormatRule()
+        results = rule.check(context)
+        
+        # Should flag alphabetical order issue
+        alpha_issues = [r for r in results if "alphabetical" in r.message.lower()]
+        assert len(alpha_issues) >= 1
+        assert alpha_issues[0].rule_id == "STYLE007"
+
+    def test_package_list_format_correct(self):
+        """Test that correctly formatted package lists pass."""
+        from bake_linter.rules.style import PackageListFormatRule
+        
+        content = '''IMAGE_INSTALL:append = " \\
+    alpha-pkg \\
+    beta-pkg \\
+    zebra-pkg \\
+"
+
+'''
+        context = FileContext(
+            path=Path("test-image.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PackageListFormatRule()
+        results = rule.check(context)
+        
+        # Should have no issues (alphabetical and has blank line after)
+        assert len(results) == 0
+
+    def test_package_list_missing_blank_line(self):
+        """Test that missing blank line after closing quote is flagged."""
+        from bake_linter.rules.style import PackageListFormatRule
+        
+        content = '''IMAGE_INSTALL:append = " \\
+    alpha-pkg \\
+"
+ANOTHER_VAR = "value"
+'''
+        context = FileContext(
+            path=Path("test-image.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PackageListFormatRule()
+        results = rule.check(context)
+        
+        # Should flag missing blank line
+        blank_issues = [r for r in results if "blank line" in r.message.lower()]
+        assert len(blank_issues) >= 1
+
 
 class TestSecurityRules:
     """Tests for security rules."""

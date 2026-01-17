@@ -214,3 +214,170 @@ class DuplicateInheritRule(BaseRule):
                         seen_classes[cls] = line_num
         
         return results
+
+
+class PackageListFormatRule(BaseRule):
+    """
+    Check that package lists follow proper formatting conventions.
+    
+    Expected format:
+    - Opening line has only the variable, '= "' and backslash
+    - Each package on its own line, indented
+    - Packages in alphabetical order
+    - Closing line has only the closing quote
+    - One blank line after the closing quote
+    
+    Example:
+        IMAGE_INSTALL:append = " \\
+            package-a \\
+            package-b \\
+            package-c \\
+        "
+    """
+    
+    rule_id = "STYLE007"
+    name = "Package List Format"
+    description = "Check package list formatting (alphabetical, one per line)"
+    default_severity = Severity.WARNING
+    groups = ["style", "formatting"]
+    hint = "Format package lists with one package per line in alphabetical order"
+
+    # Variables that typically contain package lists
+    PACKAGE_LIST_VARS = [
+        "IMAGE_INSTALL",
+        "IMAGE_INSTALL:append",
+        "RDEPENDS",
+        "DEPENDS",
+        "RRECOMMENDS",
+        "PACKAGECONFIG",
+        "PACKAGES",
+        "INSTALL_PKGS",
+    ]
+
+    # Pattern to match package list variable assignments (including overrides)
+    VAR_PATTERN = re.compile(
+        r'^([A-Z_]+(?::[a-z_-]+)*)\s*[\+\?]?=\s*"(.*)$'
+    )
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        lines = context.lines
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith("#"):
+                i += 1
+                continue
+            
+            match = self.VAR_PATTERN.match(stripped)
+            if match:
+                var_name = match.group(1)
+                var_base = var_name.split(":")[0]
+                
+                # Check if this is a package list variable
+                if var_base in self.PACKAGE_LIST_VARS or any(
+                    var_name.startswith(v) for v in self.PACKAGE_LIST_VARS
+                ):
+                    # Check if it's a multi-line assignment
+                    if stripped.endswith("\\"):
+                        check_results = self._check_multiline_package_list(
+                            context, i, var_name, lines
+                        )
+                        results.extend(check_results)
+            
+            i += 1
+        
+        return results
+
+    def _check_multiline_package_list(
+        self, context: FileContext, start_line: int, var_name: str, lines: List[str]
+    ) -> List[LintResult]:
+        """Check a multi-line package list for formatting issues."""
+        results = []
+        line_num = start_line + 1  # Convert to 1-based
+        
+        first_line = lines[start_line].strip()
+        
+        # Rule 1: First line should have no packages (just var = " \)
+        # Extract content after the opening quote
+        quote_pos = first_line.find('"')
+        if quote_pos != -1:
+            after_quote = first_line[quote_pos + 1:].rstrip("\\").strip()
+            if after_quote:
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message=f"First line of '{var_name}' should not contain packages",
+                    context=first_line[:80],
+                    hint='Use format: VAR = " \\ (packages start on next line)',
+                ))
+        
+        # Collect all packages from continuation lines
+        packages = []
+        current_line = start_line + 1
+        closing_line = None
+        
+        while current_line < len(lines):
+            line = lines[current_line]
+            stripped = line.strip()
+            
+            # Check for closing quote
+            if '"' in stripped:
+                closing_line = current_line
+                # Check if there are packages on the closing line
+                before_quote = stripped.split('"')[0].rstrip("\\").strip()
+                if before_quote:
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=current_line + 1,
+                        message=f"Closing line of '{var_name}' should not contain packages",
+                        context=stripped[:80],
+                        hint='Use format: " (only closing quote on last line)',
+                    ))
+                break
+            
+            # Extract package name (remove trailing backslash)
+            pkg = stripped.rstrip("\\").strip()
+            if pkg:
+                packages.append((pkg, current_line + 1))
+            
+            current_line += 1
+        
+        # Rule 2: Check alphabetical order (if more than one package)
+        if len(packages) > 1:
+            pkg_names = [p[0].lower() for p in packages]
+            sorted_names = sorted(pkg_names)
+            
+            if pkg_names != sorted_names:
+                # Find first out-of-order package
+                for idx, (name, sorted_name) in enumerate(zip(pkg_names, sorted_names)):
+                    if name != sorted_name:
+                        pkg_name, pkg_line = packages[idx]
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=pkg_line,
+                            message=f"Packages in '{var_name}' are not in alphabetical order",
+                            context=f"'{pkg_name}' should come after previous packages alphabetically",
+                            hint="Sort packages alphabetically for consistency",
+                        ))
+                        break
+        
+        # Rule 3: Check for blank line after closing quote
+        if closing_line is not None:
+            next_line_idx = closing_line + 1
+            if next_line_idx < len(lines):
+                next_line = lines[next_line_idx]
+                # Check if next line is non-empty (not blank)
+                if next_line.strip():
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=closing_line + 1,
+                        message=f"Missing blank line after '{var_name}' closing quote",
+                        hint="Add a blank line after the closing quote for readability",
+                    ))
+        
+        return results
