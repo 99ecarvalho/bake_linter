@@ -77,6 +77,9 @@ class AbsoluteHostPathRule(BaseRule):
     
     Absolute paths like /usr/lib or /home/user break sysroot isolation
     and cause cross-compilation failures.
+    
+    Excludes documentation variables (SUMMARY, DESCRIPTION, etc.) which
+    may contain path-like strings as descriptive text.
     """
     
     rule_id = "PORT002"
@@ -106,6 +109,15 @@ class AbsoluteHostPathRule(BaseRule):
         'native.bbclass',
         '-native',
     ]
+    
+    # Documentation/metadata variables (paths here are just text, not code)
+    DOCUMENTATION_VARS = {
+        'SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER',
+        'AUTHOR', 'MAINTAINER', 'LICENSE', 'SECTION',
+    }
+    
+    # Pattern to detect variable assignment
+    VAR_ASSIGN_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*[+?:]?=')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -121,6 +133,13 @@ class AbsoluteHostPathRule(BaseRule):
             # Skip if this is clearly native recipe context
             if is_native or any(ctx in stripped for ctx in self.ACCEPTABLE_CONTEXTS):
                 continue
+            
+            # Skip documentation/metadata variables (they contain text, not code)
+            var_match = self.VAR_ASSIGN_PATTERN.match(stripped)
+            if var_match:
+                var_name = var_match.group(1)
+                if var_name in self.DOCUMENTATION_VARS:
+                    continue
             
             # Track task context
             if re.match(r'^(do_\w+|fakeroot\s+do_\w+)\s*\(\)\s*\{', stripped):

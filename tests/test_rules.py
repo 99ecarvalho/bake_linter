@@ -2016,6 +2016,28 @@ class TestPortabilityRules:
         
         assert len(results) == 0
 
+    def test_documentation_vars_paths_ok(self):
+        """Test that paths in SUMMARY/DESCRIPTION are not flagged (just text, not code)."""
+        from bake_linter.rules.portability import AbsoluteHostPathRule
+        
+        # These are documentation strings, not actual host path references
+        content = '''SUMMARY = "Update /etc/hosts with entries from /etc/hosts.d"
+DESCRIPTION = "Manages /usr/local/bin configuration and /opt/myapp settings"
+LICENSE = "CLOSED"
+'''
+        context = FileContext(
+            path=Path("update-hosts_0.1.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = AbsoluteHostPathRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - these are just text descriptions
+        assert len(results) == 0
+
     def test_non_portable_sed(self):
         """Test that GNU-specific sed is flagged."""
         from bake_linter.rules.portability import NonPortableSedRule
