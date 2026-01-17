@@ -251,6 +251,9 @@ class MixedOverrideSyntaxRule(BaseRule):
     
     Mixing _append with :append in the same file causes parsing issues
     in modern Yocto versions and indicates incomplete migration.
+    
+    IMPORTANT: Only checks BitBake variable assignments and function declarations,
+    NOT shell code inside task functions (where underscores in filenames are valid).
     """
     
     rule_id = "SYNTAX005"
@@ -260,25 +263,37 @@ class MixedOverrideSyntaxRule(BaseRule):
     groups = ["syntax", "deprecated"]
     hint = "Convert all underscores to colons for overrides"
 
-    # Old underscore-based override patterns
-    OLD_SYNTAX_PATTERNS = [
-        re.compile(r'_append\b'),
-        re.compile(r'_prepend\b'),
-        re.compile(r'_remove\b'),
-        re.compile(r'_class-'),
-        re.compile(r'_pn-'),
-        re.compile(r'_\$\{PN\}'),
-    ]
+    # Pattern to match BitBake variable assignments (where override syntax matters)
+    # Matches: VAR_append = "...", VAR:append = "...", RDEPENDS_${PN} = "..."
+    VAR_ASSIGN_PATTERN = re.compile(
+        r'^([A-Z_][A-Z0-9_]*)([_:][a-zA-Z0-9_${}\-]+)*\s*[+?:]?='
+    )
     
-    # New colon-based override patterns
-    NEW_SYNTAX_PATTERNS = [
-        re.compile(r':append\b'),
-        re.compile(r':prepend\b'),
-        re.compile(r':remove\b'),
-        re.compile(r':class-'),
-        re.compile(r':pn-'),
-        re.compile(r':\$\{PN\}'),
-    ]
+    # Pattern to match task/function declarations
+    # Matches: do_install_append() {, do_configure:prepend() {
+    FUNC_DECL_PATTERN = re.compile(
+        r'^(do_\w+|python\s+\w+|addtask\s+\w+|deltask\s+\w+|fakeroot\s+\w+)([_:][a-zA-Z0-9_${}\-]+)*\s*\('
+    )
+
+    # Old underscore-based override patterns (for variable/function context)
+    OLD_OVERRIDE_SUFFIXES = ['_append', '_prepend', '_remove', '_class-', '_pn-', '_${PN}']
+    
+    # New colon-based override patterns (for variable/function context)  
+    NEW_OVERRIDE_SUFFIXES = [':append', ':prepend', ':remove', ':class-', ':pn-', ':${PN}']
+
+    def _has_old_syntax(self, identifier: str) -> bool:
+        """Check if identifier uses old underscore override syntax."""
+        for suffix in self.OLD_OVERRIDE_SUFFIXES:
+            if suffix in identifier:
+                return True
+        return False
+    
+    def _has_new_syntax(self, identifier: str) -> bool:
+        """Check if identifier uses new colon override syntax."""
+        for suffix in self.NEW_OVERRIDE_SUFFIXES:
+            if suffix in identifier:
+                return True
+        return False
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -289,20 +304,45 @@ class MixedOverrideSyntaxRule(BaseRule):
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
+            # Skip comments
             if stripped.startswith("#"):
                 continue
             
-            # Check for old syntax
-            for pattern in self.OLD_SYNTAX_PATTERNS:
-                if pattern.search(stripped):
-                    old_syntax_lines.append((line_num, stripped))
-                    break
+            # Skip empty lines
+            if not stripped:
+                continue
             
-            # Check for new syntax
-            for pattern in self.NEW_SYNTAX_PATTERNS:
-                if pattern.search(stripped):
+            # Check for variable assignment
+            var_match = self.VAR_ASSIGN_PATTERN.match(stripped)
+            if var_match:
+                # Get the full variable name with any overrides
+                var_part = stripped[:stripped.find('=')].rstrip().rstrip('+?:')
+                
+                if self._has_old_syntax(var_part):
+                    old_syntax_lines.append((line_num, stripped))
+                elif self._has_new_syntax(var_part):
                     new_syntax_lines.append((line_num, stripped))
-                    break
+                continue
+            
+            # Check for function declaration (do_install_append, do_configure:prepend, etc.)
+            func_match = self.FUNC_DECL_PATTERN.match(stripped)
+            if func_match:
+                # Get the function name part before (
+                func_part = stripped[:stripped.find('(')].strip()
+                
+                if self._has_old_syntax(func_part):
+                    old_syntax_lines.append((line_num, stripped))
+                elif self._has_new_syntax(func_part):
+                    new_syntax_lines.append((line_num, stripped))
+                continue
+            
+            # Also check for addhandler, EXPORT_FUNCTIONS, etc. with overrides
+            # These are top-level BitBake directives
+            if any(stripped.startswith(kw) for kw in ['addhandler', 'EXPORT_FUNCTIONS', 'inherit']):
+                if self._has_old_syntax(stripped):
+                    old_syntax_lines.append((line_num, stripped))
+                elif self._has_new_syntax(stripped):
+                    new_syntax_lines.append((line_num, stripped))
         
         # Flag if both syntaxes are used
         if old_syntax_lines and new_syntax_lines:

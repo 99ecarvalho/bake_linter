@@ -1578,6 +1578,68 @@ CFLAGS:append = " -DFOO"
         
         assert len(results) == 0
 
+    def test_shell_underscores_not_false_positive(self):
+        """Test that underscores in shell commands don't trigger false positives.
+        
+        This tests the fix for the false positive where shell commands like
+        'mining_app_install' were incorrectly detected as old override syntax.
+        """
+        from bake_linter.rules.syntax import MixedOverrideSyntaxRule
+        
+        # This is valid code using new :append syntax
+        # The underscores in shell commands should NOT be flagged
+        content = '''SUMMARY = "Test recipe"
+LICENSE = "MIT"
+
+do_install:append() {
+    # Mining_app_install backwards compatibility
+    ln -sr ${D}/${usrsrcdir}/mpkg/mpkg.install ${D}/${sbindir}/mining_app_install
+    ln -sr ${D}/${usrsrcdir}/mpkg/mpkg.remove ${D}/${sbindir}/mining_app_remove
+    ln -sr ${D}/${usrsrcdir}/mpkg/mpkg.list ${D}/${sbindir}/mining_app_list
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MixedOverrideSyntaxRule()
+        results = rule.check(context)
+        
+        # Should have NO results - only new syntax is used (do_install:append)
+        # Shell code with underscores should be ignored
+        assert len(results) == 0, f"False positive detected: {results}"
+
+    def test_shell_underscores_with_actual_mixed_syntax(self):
+        """Test that actual mixed syntax is still detected even with shell underscores."""
+        from bake_linter.rules.syntax import MixedOverrideSyntaxRule
+        
+        # This has BOTH old _append variable and new :append function
+        content = '''SUMMARY = "Test recipe"
+LICENSE = "MIT"
+SRC_URI_append = " file://fix.patch"
+
+do_install:append() {
+    ln -sr ${D}/my_app_name ${D}/link
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MixedOverrideSyntaxRule()
+        results = rule.check(context)
+        
+        # Should detect the mixed syntax (SRC_URI_append vs do_install:append)
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX005"
+        assert "SRC_URI_append" in results[0].context
+
     def test_invalid_override_ordering(self):
         """Test that :prepend after :append is flagged."""
         from bake_linter.rules.syntax import InvalidOverrideOrderingRule
