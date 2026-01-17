@@ -101,8 +101,9 @@ class InstallWithoutModeRule(BaseRule):
     # Pattern to detect -d flag (directory creation, doesn't need -m)
     DIR_FLAG_PATTERN = re.compile(r'\s-d\s')
     
-    # Pattern to detect -m flag
-    MODE_FLAG_PATTERN = re.compile(r'\s-m\s+[0-7]+')
+    # Pattern to detect -m flag (handles various valid forms):
+    # -m 0644, -m0644, -Dm 0644, -Dm0644, -D -m 0644, etc.
+    MODE_FLAG_PATTERN = re.compile(r'-[A-Za-z]*m\s*[0-7]{3,4}')
     
     # Pattern to detect we're in a do_install task
     INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')

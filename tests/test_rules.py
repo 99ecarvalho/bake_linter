@@ -621,6 +621,33 @@ class TestInstallRules:
         
         assert len(results) == 0
 
+    def test_install_with_combined_flags_ok(self):
+        """Test that install with combined -Dm flag passes (not a false positive)."""
+        from bake_linter.rules.install import InstallWithoutModeRule
+        
+        # All these valid patterns should pass
+        content = '''do_install() {
+    install -d ${D}${systemd_unitdir}/system
+    install -m 0644 ${WORKDIR}/country-code.service ${D}${systemd_unitdir}/system
+    install -Dm 0644 ${WORKDIR}/country-code.in ${D}${sysconfdir}/country-code
+    install -Dm0644 ${WORKDIR}/another.in ${D}${sysconfdir}/another
+    install -D -m 0755 ${WORKDIR}/script.sh ${D}${bindir}/script.sh
+    install -m0755 mybin ${D}${bindir}/mybin
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InstallWithoutModeRule()
+        results = rule.check(context)
+        
+        # None of these should be flagged - they all have explicit modes
+        assert len(results) == 0
+
 
 class TestBbappendRules:
     """Tests for bbappend-related rules."""
