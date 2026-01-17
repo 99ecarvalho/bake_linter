@@ -1143,23 +1143,43 @@ class TestSyntaxRules:
     """Tests for syntax rules."""
 
     def test_unmatched_quotes(self):
-        """Test that unmatched quotes are flagged."""
+        """Test that unmatched quotes are flagged, but not for English text with apostrophes inside double quotes."""
         from bake_linter.rules.syntax import UnmatchedQuotesRule
-        
-        content = '''DESCRIPTION = "This is missing a quote
-'''
-        context = FileContext(
-            path=Path("test_1.0.bb"),
-            content=content,
-            lines=content.splitlines(keepends=True),
+
+        # Should flag: unmatched double quote
+        content1 = 'DESCRIPTION = "This is missing a quote\n'
+        context1 = FileContext(
+            path=Path("test1_1.0.bb"),
+            content=content1,
+            lines=content1.splitlines(keepends=True),
             variables={},
         )
-        
         rule = UnmatchedQuotesRule()
-        results = rule.check(context)
-        
-        assert len(results) == 1
-        assert results[0].rule_id == "SYNTAX001"
+        results1 = rule.check(context1)
+        assert len(results1) == 1
+        assert results1[0].rule_id == "SYNTAX001"
+
+        # Should NOT flag: English text with apostrophe inside double quotes
+        content2 = 'DESCRIPTION = "This is a liberally licensed VNC server library that\'s intended to be fast and neat."\n'
+        context2 = FileContext(
+            path=Path("test2_1.0.bb"),
+            content=content2,
+            lines=content2.splitlines(keepends=True),
+            variables={},
+        )
+        results2 = rule.check(context2)
+        assert len(results2) == 0
+
+        # Should NOT flag: English text with double quote inside single quotes
+        content3 = "DESCRIPTION = 'This is a " + '\"' + "quote inside single quotes.'\n"
+        context3 = FileContext(
+            path=Path("test3_1.0.bb"),
+            content=content3,
+            lines=content3.splitlines(keepends=True),
+            variables={},
+        )
+        results3 = rule.check(context3)
+        assert len(results3) == 0
 
     def test_tabs_in_python(self):
         """Test that tabs in python functions are flagged."""

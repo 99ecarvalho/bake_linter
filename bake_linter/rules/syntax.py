@@ -28,45 +28,45 @@ class UnmatchedQuotesRule(BaseRule):
     hint = "Add missing closing quote"
 
     # Pattern for variable assignments
-    VAR_ASSIGN_PATTERN = re.compile(r'^[A-Z_][A-Z0-9_]*(?:[_:]\S+)?\s*[+?:]?=')
+    VAR_ASSIGN_PATTERN = re.compile(r'^[A-Z_][A-Z0-9_]*(?:[_:][\w-]+)?\s*[+?:]?=')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.rstrip()
-            
             if stripped.startswith("#"):
                 continue
-            
             # Skip lines with continuation
             if stripped.endswith('\\'):
                 continue
-            
             # Check variable assignments
-            if self.VAR_ASSIGN_PATTERN.match(stripped):
-                # Count quotes (simple check, doesn't handle escaped quotes perfectly)
-                double_quotes = stripped.count('"') - stripped.count('\\"')
-                single_quotes = stripped.count("'") - stripped.count("\\'")
-                
-                if double_quotes % 2 != 0:
-                    results.append(self.create_result(
-                        file=context.path,
-                        line=line_num,
-                        message="Unmatched double quote in variable assignment",
-                        context=stripped[:60],
-                        hint="Add missing closing double quote",
-                    ))
-                
-                if single_quotes % 2 != 0:
-                    results.append(self.create_result(
-                        file=context.path,
-                        line=line_num,
-                        message="Unmatched single quote in variable assignment",
-                        context=stripped[:60],
-                        hint="Add missing closing single quote",
-                    ))
-        
+            m = self.VAR_ASSIGN_PATTERN.match(stripped)
+            if m:
+                # Find the first non-space after =
+                eq_idx = stripped.find('=')
+                value = stripped[eq_idx+1:].lstrip()
+                if not value:
+                    continue
+                first = value[0]
+                last = value[-1] if value else ''
+                # Only check if value starts with a quote
+                if first in ('"', "'"):
+                    # If it ends with the same quote, it's fine
+                    if last == first:
+                        continue
+                    # Otherwise, check if the number of that quote is odd (not closed)
+                    quote_count = value.count(first)
+                    # Allow single quotes inside double-quoted strings and vice versa
+                    if quote_count % 2 != 0:
+                        msg = f"Unmatched {'double' if first == '"' else 'single'} quote in variable assignment"
+                        hint = f"Add missing closing {'double' if first == '"' else 'single'} quote"
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message=msg,
+                            context=stripped[:60],
+                            hint=hint,
+                        ))
         return results
 
 
