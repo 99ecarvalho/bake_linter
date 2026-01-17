@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Rule registry for automatic rule discovery and management.
 
 This module provides the infrastructure for registering lint rules
 and discovering them automatically at runtime.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

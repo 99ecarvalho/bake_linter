@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Base class for all lint rules.
 
 This module provides the abstract base class that all lint rules must inherit from.
 Rules register themselves automatically with the registry upon class definition.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

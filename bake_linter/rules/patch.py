@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Patch-related rules for Yocto recipes.
 
 These rules check for proper patch handling.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

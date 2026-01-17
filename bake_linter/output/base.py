@@ -1,5 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 Base formatter class for output formatters.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

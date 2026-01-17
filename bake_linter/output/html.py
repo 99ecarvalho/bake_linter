@@ -7,6 +7,9 @@ Generates a standalone HTML report with:
 - Color-coded severities
 - Expandable sections
 - How-to-fix hints
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

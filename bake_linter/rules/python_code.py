@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Python code rules for Yocto recipes.
 
 These rules check for issues in inline Python code within recipes
 and Python function implementations.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

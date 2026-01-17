@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 URI and source validation rules for Yocto recipes.
 
 These rules check for SRC_URI consistency, protocol usage,
 and git revision validity.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

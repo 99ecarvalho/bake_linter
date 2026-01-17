@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Metadata rules for Yocto recipes.
 
 These rules check for proper recipe metadata.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Configuration system for the Bake Linter.
 
 Supports loading configuration from YAML/JSON files and merging with CLI options.
 CLI options always take precedence over config file settings.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

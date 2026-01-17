@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Dependency-related rules for Yocto recipes.
 
 These rules check for proper dependency declarations.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

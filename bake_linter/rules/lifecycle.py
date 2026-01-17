@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Lifecycle and maintenance rules for Yocto recipes.
 
 These rules check for metadata that helps with recipe maintenance
 and version tracking.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

@@ -1,5 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 JSON output formatter for machine-parseable output.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

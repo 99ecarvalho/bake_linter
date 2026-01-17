@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Best practices rules for Yocto recipes.
 
 These rules check for adherence to Yocto best practices.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

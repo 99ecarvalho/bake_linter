@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Variable assignment rules for Yocto recipes.
 
 These rules check for proper variable usage patterns.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

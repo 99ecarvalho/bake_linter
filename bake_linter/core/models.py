@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Core data models for the Bake Linter.
 
 This module defines the fundamental data structures used throughout the linter,
 including severity levels, lint results, and rule configuration.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

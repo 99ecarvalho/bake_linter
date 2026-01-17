@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Task implementation rules for Yocto recipes.
 
 These rules check for issues in shell task implementations like
 do_compile, do_install, etc.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

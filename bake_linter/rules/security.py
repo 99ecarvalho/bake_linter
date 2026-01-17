@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Security-related lint rules for Yocto recipes.
 
 These rules check for potential security issues in BitBake recipes.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

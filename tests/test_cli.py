@@ -1,5 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 Unit tests for CLI functionality.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 import pytest

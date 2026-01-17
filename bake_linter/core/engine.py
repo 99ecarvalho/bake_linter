@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 Lint engine - orchestrates rule execution and result collection.
 
 This module provides the main engine that coordinates file parsing,
 rule execution, and result aggregation.
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations

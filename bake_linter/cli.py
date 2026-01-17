@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Bake Linter - Command Line Interface.
 
@@ -12,6 +13,9 @@ Examples:
     bake-linter --format json meta-layer/
     bake-linter --enable LICENSE001,MANDATORY001 --disable STYLE001 .
     bake-linter --ci --output report.json recipes/
+
+(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+All rights reserved.
 """
 
 from __future__ import annotations
