@@ -43,13 +43,13 @@ class ExitCode(IntEnum):
     
     These codes are designed for CI integration:
     - 0: Success (no issues or only info-level)
-    - 1: Errors found (fail the build)
-    - 2: Warnings found (may or may not fail depending on CI config)
+    - 1: Warnings found (may or may not fail depending on CI config)
+    - 2: Errors found (fail the build)
     - 3: Configuration or runtime error
     """
     SUCCESS = 0
-    ERRORS_FOUND = 1
-    WARNINGS_FOUND = 2
+    WARNINGS_FOUND = 1
+    ERRORS_FOUND = 2
     RUNTIME_ERROR = 3
 
 
