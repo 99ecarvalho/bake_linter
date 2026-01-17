@@ -1,139 +1,596 @@
 # Bake Linter Configuration
 # This file configures the bake-linter tool for this workspace.
 # Place in project root as .bake-linter.yaml
+#
+# Total rules: 99
 
 # Rule configuration
 # Each rule can be enabled/disabled and have its severity overridden
 rules:
-  # License rules
-  LICENSE001:
+  # ============================================================================
+  # BBAPPEND Rules - Rules for .bbappend files
+  # ============================================================================
+  BBAPPEND001:
+    enabled: true
+    severity: warning
+    # description: Missing FILESEXTRAPATHS
+
+  BBAPPEND002:
     enabled: true
     severity: error
-    # description: Check that LICENSE variable is defined
+    # description: Task Override Without Suffix
 
-  LICENSE002:
-    enabled: true
-    severity: error
-    # description: Detect LICENSE typos (LICENSEX, LICENCE, etc.)
-
-  LICENSE003:
-    enabled: true
-    severity: warning
-    # description: Check for LIC_FILES_CHKSUM on non-CLOSED licenses
-
-  # Mandatory variable rules
-  MANDATORY001:
-    enabled: true
-    severity: warning
-    # description: Check for SUMMARY or DESCRIPTION
-
-  MANDATORY002:
+  BBAPPEND003:
     enabled: true
     severity: info
-    # description: Check for SRC_URI (where applicable)
+    # description: Version-Specific bbappend
 
-  MANDATORY003:
-    enabled: true
-    severity: info
-    # description: Check for HOMEPAGE on open-source recipes
-
-  MANDATORY004:
+  BBAPPEND004:
     enabled: true
     severity: warning
-    # description: Check for proper inherit directives
+    # description: Empty bbappend File
 
-  # Deprecated syntax rules
+  BBAPPEND005:
+    enabled: true
+    severity: warning
+    # description: Global Variable in bbappend
+
+  # ============================================================================
+  # BEST PRACTICES Rules
+  # ============================================================================
+  BESTPRACTICE001:
+    enabled: true
+    severity: warning
+    # description: do_fetch Modification
+
+  BESTPRACTICE002:
+    enabled: true
+    severity: info
+    # description: Cleanup in do_configure
+
+  BESTPRACTICE003:
+    enabled: false
+    severity: info
+    # description: Missing HOMEPAGE
+
+  BESTPRACTICE004:
+    enabled: true
+    severity: warning
+    # description: sed in do_install
+
+  # ============================================================================
+  # COMPATIBILITY Rules
+  # ============================================================================
+  COMPAT001:
+    enabled: true
+    severity: warning
+    # description: Deprecated COMPATIBLE_HOST Syntax
+
+  COMPAT002:
+    enabled: true
+    severity: warning
+    # description: Unjustified MACHINE_ARCH
+
+  # ============================================================================
+  # DEPENDENCY Rules
+  # ============================================================================
+  DEPENDENCY001:
+    enabled: true
+    severity: warning
+    # description: Wrong Dependency Type
+
+  DEPENDENCY002:
+    enabled: true
+    severity: warning
+    # description: Missing pkgconfig Inherit
+
+  DEPENDENCY003:
+    enabled: true
+    severity: warning
+    # description: Essential Dependency in RRECOMMENDS
+
+  DEPENDS001:
+    enabled: true
+    severity: warning
+    # description: Version Constraint Syntax
+
+  # ============================================================================
+  # DEPRECATED Rules
+  # ============================================================================
   DEPRECATED001:
     enabled: true
     severity: warning
-    # description: Detect old underscore override syntax
+    # description: Deprecated Override Syntax
 
   DEPRECATED002:
     enabled: true
     severity: warning
-    # description: Detect deprecated BitBake functions
+    # description: Deprecated Functions
 
   DEPRECATED003:
     enabled: true
     severity: warning
-    # description: Detect deprecated variables
+    # description: Deprecated Variables
 
   DEPRECATED004:
     enabled: true
     severity: error
-    # description: Detect Python 2 syntax
+    # description: Python 2 Syntax Detection
 
-  # Naming convention rules
+  # ============================================================================
+  # DOCUMENTATION Rules
+  # ============================================================================
+  DOC001:
+    enabled: true
+    severity: warning
+    # description: Identical SUMMARY and DESCRIPTION
+
+  DOC002:
+    enabled: true
+    severity: info
+    # description: Missing SUMMARY
+
+  DOC003:
+    enabled: true
+    severity: info
+    # description: Truncated DESCRIPTION
+
+  # ============================================================================
+  # FUNCTION Rules
+  # ============================================================================
+  FUNCTION001:
+    enabled: true
+    severity: info
+    # description: Task Function Order
+
+  FUNCTION002:
+    enabled: true
+    severity: warning
+    # description: Python/Shell Function Mixing
+
+  # ============================================================================
+  # INSTALL Rules
+  # ============================================================================
+  INSTALL001:
+    enabled: true
+    severity: warning
+    # description: Using cp Instead of install
+
+  INSTALL002:
+    enabled: true
+    severity: warning
+    # description: Install Without Explicit Mode
+
+  INSTALL003:
+    enabled: true
+    severity: info
+    # description: mkdir Instead of install -d
+
+  INSTALL004:
+    enabled: true
+    severity: error
+    # description: Installation to /usr/local
+
+  INSTALL005:
+    enabled: true
+    severity: info
+    # description: Non-FHS Installation Path
+
+  # ============================================================================
+  # LAYER Rules
+  # ============================================================================
+  LAYER001:
+    enabled: true
+    severity: error
+    # description: LAYERSERIES_COMPAT Validation
+
+  # ============================================================================
+  # LICENSE Rules
+  # ============================================================================
+  LICENSE001:
+    enabled: true
+    severity: error
+    # description: License Required
+
+  LICENSE002:
+    enabled: true
+    severity: error
+    # description: License Typo Detection
+
+  LICENSE003:
+    enabled: true
+    severity: warning
+    # description: License File Checksum
+
+  # ============================================================================
+  # LIFECYCLE Rules
+  # ============================================================================
+  LIFECYCLE001:
+    enabled: true
+    severity: info
+    # description: Missing Upstream Check Configuration
+
+  # ============================================================================
+  # MANDATORY Rules
+  # ============================================================================
+  MANDATORY001:
+    enabled: true
+    severity: warning
+    # description: Summary/Description Required
+
+  MANDATORY002:
+    enabled: true
+    severity: info
+    # description: SRC_URI Check
+
+  MANDATORY003:
+    enabled: true
+    severity: info
+    # description: Homepage Check
+
+  MANDATORY004:
+    enabled: true
+    severity: warning
+    # description: Inherit Directive Check
+
+  # ============================================================================
+  # METADATA Rules
+  # ============================================================================
+  METADATA001:
+    enabled: false
+    severity: info
+    # description: Missing BUGTRACKER
+
+  METADATA002:
+    enabled: true
+    severity: warning
+    # description: COMPATIBLE_MACHINE Syntax
+
+  METADATA003:
+    enabled: false
+    severity: info
+    # description: Missing SECTION
+
+  # ============================================================================
+  # NAMING Rules
+  # ============================================================================
   NAMING001:
     enabled: true
     severity: warning
-    # description: Check variable naming conventions
+    # description: Variable Naming Convention
 
   NAMING002:
     enabled: true
     severity: info
-    # description: Check recipe file naming conventions
+    # description: Recipe Naming Convention
 
   NAMING003:
     enabled: true
     severity: warning
-    # description: Check PN consistency with filename
+    # description: PN Consistency Check
 
-  # Style rules (some disabled by default - can be noisy)
+  # ============================================================================
+  # PACKAGING Rules
+  # ============================================================================
+  PKG001:
+    enabled: true
+    severity: error
+    # description: RDEPENDS on Development Package
+
+  PKG002:
+    enabled: true
+    severity: warning
+    # description: FILES Not Matching Installed Paths
+
+  PKG003:
+    enabled: true
+    severity: warning
+    # description: Wildcard bbappend Overreach
+
+  PKG004:
+    enabled: true
+    severity: warning
+    # description: FILES and PACKAGES Consistency
+
+  PKG005:
+    enabled: true
+    severity: error
+    # description: RDEPENDS Package Existence
+
+  PKG006:
+    enabled: true
+    severity: info
+    # description: RRECOMMENDS Package Validity
+
+  # ============================================================================
+  # PATCH Rules
+  # ============================================================================
+  PATCH001:
+    enabled: true
+    severity: info
+    # description: Patch Without Strip Level
+
+  # ============================================================================
+  # PORTABILITY Rules
+  # ============================================================================
+  PORT001:
+    enabled: true
+    severity: warning
+    # description: Hardcoded CPU Architecture Flags
+
+  PORT002:
+    enabled: true
+    severity: error
+    # description: Absolute Host Paths
+
+  PORT003:
+    enabled: true
+    severity: info
+    # description: Non-Portable Sed Usage
+
+  # ============================================================================
+  # PYTHON Rules
+  # ============================================================================
+  PYTHON001:
+    enabled: true
+    severity: info
+    # description: Print Instead of bb.note
+
+  PYTHON002:
+    enabled: true
+    severity: info
+    # description: Variable Assignment Without d.setVar
+
+  PYTHON003:
+    enabled: true
+    severity: warning
+    # description: Anonymous Python Issues
+
+  # ============================================================================
+  # REPRODUCIBILITY Rules
+  # ============================================================================
+  REPRO001:
+    enabled: true
+    severity: warning
+    # description: Unpinned Branch Usage
+
+  # ============================================================================
+  # SECURITY Rules
+  # ============================================================================
+  SECURITY001:
+    enabled: true
+    severity: warning
+    # description: Insecure URI
+
+  SECURITY002:
+    enabled: true
+    severity: warning
+    # description: Missing Checksum
+
+  SECURITY003:
+    enabled: true
+    severity: warning
+    # description: Insecure Permissions
+
+  SECURITY004:
+    enabled: true
+    severity: error
+    # description: Hardcoded Credentials
+
+  SECURITY005:
+    enabled: true
+    severity: error
+    # description: Dangerous rm -rf Usage
+
+  SECURITY006:
+    enabled: true
+    severity: warning
+    # description: eval Usage in Shell
+
+  SECURITY007:
+    enabled: true
+    severity: warning
+    # description: Build Path Leakage
+
+  SECURITY008:
+    enabled: true
+    severity: warning
+    # description: SUID/SGID Binary Detection
+
+  # ============================================================================
+  # SRCREV Rules
+  # ============================================================================
+  SRCREV001:
+    enabled: true
+    severity: error
+    # description: Unpinned Git SRCREV
+
+  # ============================================================================
+  # STYLE Rules (some disabled by default - can be noisy)
+  # ============================================================================
   STYLE001:
     enabled: false
     severity: info
-    # description: Check for trailing whitespace
+    # description: Trailing Whitespace
 
   STYLE002:
     enabled: false
     severity: info
     options:
       max_length: 120
-    # description: Check for long lines
+    # description: Long Lines
 
   STYLE003:
     enabled: true
     severity: warning
-    # description: Detect hardcoded paths
+    # description: Hardcoded Paths
 
   STYLE004:
     enabled: false
     severity: info
-    # description: Flag TODO/FIXME comments
+    # description: TODO/FIXME Detection
 
   STYLE005:
     enabled: true
     severity: info
-    # description: Flag empty variable assignments
+    # description: Empty Variable Assignment
 
   STYLE006:
     enabled: true
     severity: warning
-    # description: Detect duplicate inherit statements
+    # description: Duplicate Inherit
 
-  # Security rules
-  SECURITY001:
+  STYLE007:
     enabled: true
     severity: warning
-    # description: Check for insecure HTTP URIs
+    # description: Package List Format
 
-  SECURITY002:
+  STYLE008:
     enabled: true
     severity: warning
-    # description: Check for missing checksums
+    # description: SYSTEMD_AUTO_ENABLE Package Suffix
 
-  SECURITY003:
+  STYLE009:
+    enabled: true
+    severity: info
+    # description: Install Directory Trailing Slash
+
+  STYLE010:
     enabled: true
     severity: warning
-    # description: Check for overly permissive file permissions
+    # description: Service Files Not in FILES
 
-  SECURITY004:
+  # ============================================================================
+  # SUPPLY CHAIN Rules
+  # ============================================================================
+  SUPPLY001:
+    enabled: true
+    severity: warning
+    # description: Missing License Verification in bbappend
+
+  SUPPLY002:
+    enabled: true
+    severity: warning
+    # description: Unreliable Download Hosting
+
+  # ============================================================================
+  # SYNTAX Rules
+  # ============================================================================
+  SYNTAX001:
     enabled: true
     severity: error
-    # description: Detect potential hardcoded credentials
+    # description: Unmatched Quotes
 
+  SYNTAX002:
+    enabled: true
+    severity: warning
+    # description: Missing Line Continuation
+
+  SYNTAX003:
+    enabled: true
+    severity: error
+    # description: Tabs in Python Functions
+
+  SYNTAX004:
+    enabled: true
+    severity: error
+    # description: Unclosed Variable Expansion
+
+  SYNTAX005:
+    enabled: true
+    severity: error
+    # description: Mixed Override Syntax
+
+  SYNTAX006:
+    enabled: true
+    severity: warning
+    # description: Invalid Override Ordering
+
+  # ============================================================================
+  # SYSTEMD Rules
+  # ============================================================================
+  SYSTEMD001:
+    enabled: true
+    severity: error
+    # description: Systemd Usage Without Inherit
+
+  SYSTEMD002:
+    enabled: true
+    severity: error
+    # description: Missing SYSTEMD_SERVICE Declaration
+
+  SYSTEMD003:
+    enabled: true
+    severity: error
+    # description: Hardcoded Systemd Paths
+
+  # ============================================================================
+  # TASK Rules
+  # ============================================================================
+  TASK001:
+    enabled: true
+    severity: warning
+    # description: Unquoted Variable Expansion
+
+  TASK002:
+    enabled: true
+    severity: error
+    # description: Sudo Usage in Tasks
+
+  TASK003:
+    enabled: true
+    severity: error
+    # description: Network Access in Compile
+
+  TASK004:
+    enabled: true
+    severity: info
+    # description: Empty Task Override
+
+  # ============================================================================
+  # URI Rules
+  # ============================================================================
+  URI001:
+    enabled: true
+    severity: info
+    # description: SRC_URI Protocol Consistency
+
+  URI002:
+    enabled: true
+    severity: warning
+    # description: Git SRCREV Validity
+
+  # ============================================================================
+  # VARIABLES Rules
+  # ============================================================================
+  VARIABLES001:
+    enabled: true
+    severity: warning
+    # description: Git Recipe Without SRCPV
+
+  VARIABLES002:
+    enabled: true
+    severity: warning
+    # description: Unconventional S Assignment
+
+  VARIABLES003:
+    enabled: true
+    severity: info
+    # description: Unused Variable Assignment
+
+  VARIABLES004:
+    enabled: true
+    severity: warning
+    # description: Variable Redefinition
+
+  VARIABLES005:
+    enabled: true
+    severity: info
+    # description: Excessive Append/Prepend
+
+# ============================================================================
 # General settings
+# ============================================================================
 settings:
   # Skip files that appear to be autogenerated
   skip_autogenerated: true
@@ -144,7 +601,9 @@ settings:
   # Enable colored output (set to false for CI)
   color: true
 
+# ============================================================================
 # File patterns to exclude from linting
+# ============================================================================
 exclude:
   - "build/*"
   - "tmp/*"
@@ -153,6 +612,9 @@ exclude:
   - "*.bak"
   - "*~"
 
+# ============================================================================
+# Group configuration (optional)
+# ============================================================================
 # You can also enable/disable entire groups
 # enable_groups:
 #   - license
