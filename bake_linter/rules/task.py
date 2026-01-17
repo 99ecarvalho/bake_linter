@@ -101,6 +101,10 @@ class SudoUsageRule(BaseRule):
     
     Yocto builds should never require sudo - they use pseudo/fakeroot
     for privileged operations. sudo indicates a broken build process.
+    
+    Excludes:
+    - USERADD_PARAM where 'sudo' is a Unix group name (e.g., -G sudo)
+    - Group membership specifications
     """
     
     rule_id = "TASK002"
@@ -110,7 +114,19 @@ class SudoUsageRule(BaseRule):
     groups = ["security", "build"]
     hint = "Use fakeroot for privileged operations, not sudo"
 
-    SUDO_PATTERN = re.compile(r'\bsudo\s+')
+    # Pattern for sudo as a command (not as a group name)
+    SUDO_CMD_PATTERN = re.compile(r'(?:^|\s|;|&&|\|\||\|)\s*sudo\s+')
+    
+    # Variables where 'sudo' may appear as a group name, not a command
+    GROUP_CONTEXT_VARS = {
+        'USERADD_PARAM', 'GROUPADD_PARAM', 'GROUPMEMS_PARAM',
+    }
+    
+    # Pattern for sudo as a group name (not a command)
+    GROUP_CONTEXT_PATTERN = re.compile(r'-G\s+\S*sudo|--groups\s+\S*sudo')
+    
+    # Pattern to extract variable name
+    VAR_ASSIGN_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)(?::[^\s=]+)?\s*[+?:]?=')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -131,7 +147,18 @@ class SudoUsageRule(BaseRule):
                 in_task = False
                 continue
             
-            if in_task and self.SUDO_PATTERN.search(stripped):
+            # Skip if 'sudo' appears as a group name context
+            if self.GROUP_CONTEXT_PATTERN.search(stripped):
+                continue
+            
+            # Skip USERADD_PARAM and similar variables (sudo is a group name there)
+            var_match = self.VAR_ASSIGN_PATTERN.match(stripped)
+            if var_match:
+                var_name = var_match.group(1)
+                if var_name in self.GROUP_CONTEXT_VARS:
+                    continue
+            
+            if in_task and self.SUDO_CMD_PATTERN.search(stripped):
                 results.append(self.create_result(
                     file=context.path,
                     line=line_num,
@@ -140,9 +167,9 @@ class SudoUsageRule(BaseRule):
                     hint="Use 'fakeroot do_task()' for privileged operations",
                 ))
             
-            # Also check for sudo outside tasks (in variables)
-            if 'sudo' in stripped.lower() and '=' in stripped:
-                if self.SUDO_PATTERN.search(stripped):
+            # Also check for sudo outside tasks (in variables) - but not group names
+            elif not in_task and 'sudo' in stripped.lower() and '=' in stripped:
+                if self.SUDO_CMD_PATTERN.search(stripped):
                     results.append(self.create_result(
                         file=context.path,
                         line=line_num,

@@ -1823,6 +1823,27 @@ class TestTaskRules:
         assert results[0].rule_id == "TASK002"
         assert results[0].severity == Severity.ERROR
 
+    def test_sudo_group_in_useradd_ok(self):
+        """Test that 'sudo' as a Unix group name is NOT flagged (not a command)."""
+        from bake_linter.rules.task import SudoUsageRule
+        
+        # 'sudo' here is a Unix group, not a command being executed
+        content = '''USERADD_PARAM:${PN} = "-u 1010 -d /home/user -r -s /bin/bash -g user -G video,input,audio,dialout,sudo -p '${USER_HASH}' user"
+USERADD_PARAM:${PN}-setup = "-u 1012 -d /home/setup -r -s /bin/bash -g setup -G sudo -p '${USER_HASH}' setup"
+'''
+        context = FileContext(
+            path=Path("example-users_0.1.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SudoUsageRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - 'sudo' is a group name, not a command
+        assert len(results) == 0
+
     def test_network_in_compile(self):
         """Test that network access in do_compile is flagged."""
         from bake_linter.rules.task import NetworkAccessInCompileRule
