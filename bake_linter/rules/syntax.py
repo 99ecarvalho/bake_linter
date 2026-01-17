@@ -239,3 +239,131 @@ class UnclosedVariableExpansionRule(BaseRule):
                     ))
         
         return results
+
+
+class MixedOverrideSyntaxRule(BaseRule):
+    """
+    Check for recipes mixing old underscore and new colon override syntax.
+    
+    Mixing _append with :append in the same file causes parsing issues
+    in modern Yocto versions and indicates incomplete migration.
+    """
+    
+    rule_id = "SYNTAX005"
+    name = "Mixed Override Syntax"
+    description = "Detects recipes using both old (_) and new (:) override syntax"
+    default_severity = Severity.ERROR
+    groups = ["syntax", "deprecated"]
+    hint = "Convert all underscores to colons for overrides"
+
+    # Old underscore-based override patterns
+    OLD_SYNTAX_PATTERNS = [
+        re.compile(r'_append\b'),
+        re.compile(r'_prepend\b'),
+        re.compile(r'_remove\b'),
+        re.compile(r'_class-'),
+        re.compile(r'_pn-'),
+        re.compile(r'_\$\{PN\}'),
+    ]
+    
+    # New colon-based override patterns
+    NEW_SYNTAX_PATTERNS = [
+        re.compile(r':append\b'),
+        re.compile(r':prepend\b'),
+        re.compile(r':remove\b'),
+        re.compile(r':class-'),
+        re.compile(r':pn-'),
+        re.compile(r':\$\{PN\}'),
+    ]
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        old_syntax_lines = []
+        new_syntax_lines = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            # Check for old syntax
+            for pattern in self.OLD_SYNTAX_PATTERNS:
+                if pattern.search(stripped):
+                    old_syntax_lines.append((line_num, stripped))
+                    break
+            
+            # Check for new syntax
+            for pattern in self.NEW_SYNTAX_PATTERNS:
+                if pattern.search(stripped):
+                    new_syntax_lines.append((line_num, stripped))
+                    break
+        
+        # Flag if both syntaxes are used
+        if old_syntax_lines and new_syntax_lines:
+            # Report on the first old syntax line
+            line_num, line_content = old_syntax_lines[0]
+            results.append(self.create_result(
+                file=context.path,
+                line=line_num,
+                message=f"Mixed override syntax: found {len(old_syntax_lines)} old (_) and {len(new_syntax_lines)} new (:) syntax uses",
+                context=line_content[:60],
+                hint="Convert all old underscore syntax (_append) to new colon syntax (:append)",
+            ))
+        
+        return results
+
+
+class InvalidOverrideOrderingRule(BaseRule):
+    """
+    Check for incorrect override ordering in variable assignments.
+    
+    Canonical order: :class-*:pn-*:machine:distro:append/:prepend/:remove
+    Operation overrides (:append, :prepend, :remove) should always be last.
+    """
+    
+    rule_id = "SYNTAX006"
+    name = "Invalid Override Ordering"
+    description = "Detects incorrect override ordering in variable assignments"
+    default_severity = Severity.WARNING
+    groups = ["syntax"]
+    hint = "Place :append/:prepend/:remove at the end of override chain"
+
+    # Operation overrides that should be last
+    OPERATION_OVERRIDES = [':append', ':prepend', ':remove']
+    
+    # Pattern to find variable assignments with multiple overrides
+    MULTI_OVERRIDE_PATTERN = re.compile(r'^([A-Z_][A-Z0-9_]*)((?::[a-zA-Z0-9_${}+-]+)+)\s*[+?:]?=')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            match = self.MULTI_OVERRIDE_PATTERN.match(stripped)
+            if match:
+                overrides_str = match.group(2)
+                
+                # Split into individual overrides
+                overrides = [o for o in overrides_str.split(':') if o]
+                
+                if len(overrides) >= 2:
+                    # Check if operation override is not last
+                    for i, override in enumerate(overrides[:-1]):  # Exclude last
+                        if any(op.lstrip(':') == override for op in self.OPERATION_OVERRIDES):
+                            results.append(self.create_result(
+                                file=context.path,
+                                line=line_num,
+                                message=f"Override ':{override}' should be last in override chain",
+                                context=stripped[:60],
+                                hint="Reorder to: VAR:class-*:pn-*:append (operation last)",
+                            ))
+                            break
+        
+        return results
+

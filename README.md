@@ -209,6 +209,15 @@ exclude:
 | SYNTAX002 | Missing Line Continuation | Warning | Detect missing \\ in multiline |
 | SYNTAX003 | Tabs in Python Functions | Error | Detect tabs in Python indentation |
 | SYNTAX004 | Unclosed Variable Expansion | Error | Detect unclosed ${...} |
+| SYNTAX005 | Mixed Override Syntax | Error | Detect mixing _append and :append |
+| SYNTAX006 | Invalid Override Ordering | Warning | Detect improper override ordering |
+
+### Package Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| PKG001 | RDEPENDS on -dev Package | Error | Detect -dev packages in RDEPENDS |
+| PKG002 | FILES Not Matching Install | Warning | Detect installed paths not in FILES |
+| PKG003 | Wildcard bbappend Overreach | Warning | Detect version-specific content in wildcard bbappend |
 
 ### Metadata Rules
 | Rule ID | Name | Default Severity | Enabled | Description |
@@ -230,6 +239,41 @@ exclude:
 |---------|------|-----------------|-------------|
 | COMPAT001 | Deprecated COMPATIBLE_HOST | Warning | Detect improper COMPATIBLE_HOST patterns |
 | COMPAT002 | Unjustified MACHINE_ARCH | Warning | Detect MACHINE_ARCH without justification |
+
+### Supply Chain/Reproducibility Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| REPRO001 | Unpinned Branch Usage | Warning | Detect mutable branches (master/main) in git URIs |
+| SUPPLY001 | Missing License in bbappend | Warning | Detect bbappend modifying SRC_URI without LIC_FILES_CHKSUM |
+| SUPPLY002 | Unreliable Download Hosting | Warning | Detect downloads from personal/temp hosting |
+
+### Task Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| TASK001 | Unquoted Variable Expansion | Warning | Detect unquoted high-risk variables in tasks |
+| TASK002 | Sudo Usage in Tasks | Error | Detect sudo usage (should use fakeroot) |
+| TASK003 | Network Access in Compile | Error | Detect network access in build tasks |
+
+### Python Code Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| PYTHON001 | Print Instead of bb.note | Info | Detect print() where bb.note should be used |
+| PYTHON002 | Variable Assignment Without d.setVar | Info | Detect direct BitBake var assignment in Python |
+| PYTHON003 | Anonymous Python Issues | Warning | Detect sys.exit() and raise in anonymous Python |
+
+### Portability Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| PORT001 | Hardcoded CPU Flags | Warning | Detect hardcoded -march/-mtune flags |
+| PORT002 | Absolute Host Paths | Error | Detect /usr/lib, /home, etc. in recipes |
+| PORT003 | Non-Portable Sed | Info | Detect GNU-specific sed features |
+
+### Documentation Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| DOC001 | Identical SUMMARY/DESCRIPTION | Warning | Detect copy-pasted SUMMARY as DESCRIPTION |
+| DOC002 | Missing SUMMARY | Info | Detect recipes without SUMMARY |
+| DOC003 | Truncated DESCRIPTION | Info | Detect DESCRIPTION < 30 chars |
 
 ## Adding a New Rule
 

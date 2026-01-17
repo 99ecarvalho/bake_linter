@@ -1418,3 +1418,614 @@ PACKAGE_ARCH = "${MACHINE_ARCH}"
         results = rule.check(context)
         
         assert len(results) == 0
+
+
+class TestSyntaxRulesExtended:
+    """Tests for extended syntax rules (SYNTAX005-006)."""
+
+    def test_mixed_override_syntax_detected(self):
+        """Test that mixing _append and :append is detected."""
+        from bake_linter.rules.syntax import MixedOverrideSyntaxRule
+        
+        content = '''SRC_URI_append = " file://patch.patch"
+CFLAGS:append = " -DFOO"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MixedOverrideSyntaxRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "SYNTAX005"
+
+    def test_single_override_syntax_ok(self):
+        """Test that consistent syntax passes."""
+        from bake_linter.rules.syntax import MixedOverrideSyntaxRule
+        
+        content = '''SRC_URI:append = " file://patch.patch"
+CFLAGS:append = " -DFOO"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MixedOverrideSyntaxRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_invalid_override_ordering(self):
+        """Test that :prepend after :append is flagged."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''CFLAGS:append:prepend = " -DFOO"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX006"
+
+
+class TestPackageRules:
+    """Tests for package configuration rules."""
+
+    def test_rdepends_on_dev_package(self):
+        """Test that RDEPENDS on -dev package is flagged."""
+        from bake_linter.rules.package import RdependsOnDevPackageRule
+        
+        content = '''RDEPENDS:${PN} = "libfoo-dev"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RdependsOnDevPackageRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PKG001"
+        assert "-dev" in results[0].message
+
+    def test_rdepends_on_regular_package_ok(self):
+        """Test that RDEPENDS on regular package passes."""
+        from bake_linter.rules.package import RdependsOnDevPackageRule
+        
+        content = '''RDEPENDS:${PN} = "libfoo bash"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RdependsOnDevPackageRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_files_not_matching_install(self):
+        """Test that FILES paths not covered by install are flagged."""
+        from bake_linter.rules.package import FilesNotMatchingInstallRule
+        
+        content = '''do_install() {
+    install -d ${D}/opt/custom
+    install -m 0755 mybin ${D}/opt/custom/mybin
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = FilesNotMatchingInstallRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "PKG002"
+
+    def test_wildcard_bbappend_overreach(self):
+        """Test that wildcard bbappends with version-specific content are flagged."""
+        from bake_linter.rules.package import WildcardBbappendOverreachRule
+        
+        content = '''SRCREV = "abc123def456"
+SRC_URI += "file://fix-v2.0-build.patch"
+'''
+        context = FileContext(
+            path=Path("myrecipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = WildcardBbappendOverreachRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PKG003"
+
+
+class TestSupplyChainRules:
+    """Tests for supply chain and reproducibility rules."""
+
+    def test_unpinned_branch_master(self):
+        """Test that master branch usage is flagged."""
+        from bake_linter.rules.supply_chain import UnpinnedBranchRule
+        
+        content = '''SRC_URI = "git://github.com/foo/bar.git;branch=master;protocol=https"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnpinnedBranchRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "REPRO001"
+        assert "master" in results[0].message
+
+    def test_stable_branch_ok(self):
+        """Test that stable branch names pass."""
+        from bake_linter.rules.supply_chain import UnpinnedBranchRule
+        
+        content = '''SRC_URI = "git://github.com/foo/bar.git;branch=stable-2.0;protocol=https"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnpinnedBranchRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_bbappend_src_uri_without_lic_check(self):
+        """Test that bbappend modifying SRC_URI without license check is flagged."""
+        from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
+        
+        content = '''SRC_URI += "file://custom-patch.patch"
+'''
+        context = FileContext(
+            path=Path("test_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingLicenseChecksumInBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SUPPLY001"
+
+    def test_bbappend_with_lic_check_ok(self):
+        """Test that bbappend with LIC_FILES_CHKSUM passes."""
+        from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
+        
+        content = '''SRC_URI += "file://custom-patch.patch"
+LIC_FILES_CHKSUM += "file://CUSTOM_LICENSE;md5=abc123"
+'''
+        context = FileContext(
+            path=Path("test_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingLicenseChecksumInBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_unreliable_hosting_dropbox(self):
+        """Test that Dropbox downloads are flagged."""
+        from bake_linter.rules.supply_chain import UnreliableHostingRule
+        
+        content = '''SRC_URI = "https://www.dropbox.com/s/abc123/myfile.tar.gz"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnreliableHostingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SUPPLY002"
+
+
+class TestTaskRules:
+    """Tests for task implementation rules."""
+
+    def test_unquoted_variable_d(self):
+        """Test that unquoted ${D} is flagged."""
+        from bake_linter.rules.task import UnquotedVariableRule
+        
+        content = '''do_install() {
+    rm -rf ${D}${libdir}/*
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnquotedVariableRule()
+        results = rule.check(context)
+        
+        # Should flag D as unquoted
+        assert any(r.rule_id == "TASK001" for r in results)
+
+    def test_sudo_in_task(self):
+        """Test that sudo usage is flagged."""
+        from bake_linter.rules.task import SudoUsageRule
+        
+        content = '''do_install() {
+    sudo mkdir -p /opt/myapp
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SudoUsageRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "TASK002"
+        assert results[0].severity == Severity.ERROR
+
+    def test_network_in_compile(self):
+        """Test that network access in do_compile is flagged."""
+        from bake_linter.rules.task import NetworkAccessInCompileRule
+        
+        content = '''do_compile() {
+    npm install
+    make all
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = NetworkAccessInCompileRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "TASK003"
+
+    def test_network_in_fetch_ok(self):
+        """Test that network access in do_fetch is allowed."""
+        from bake_linter.rules.task import NetworkAccessInCompileRule
+        
+        content = '''do_fetch() {
+    wget http://example.com/file.tar.gz
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = NetworkAccessInCompileRule()
+        results = rule.check(context)
+        
+        # do_fetch is not in BUILD_TASKS, so should not trigger
+        assert len(results) == 0
+
+
+class TestPythonCodeRules:
+    """Tests for Python code rules."""
+
+    def test_print_in_python_function(self):
+        """Test that print() in Python function is flagged."""
+        from bake_linter.rules.python_code import PrintVsBbNoteRule
+        
+        content = '''python __anonymous() {
+    print("Debug message")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PrintVsBbNoteRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PYTHON001"
+
+    def test_bb_note_ok(self):
+        """Test that bb.note() passes."""
+        from bake_linter.rules.python_code import PrintVsBbNoteRule
+        
+        content = '''python __anonymous() {
+    bb.note("Debug message")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PrintVsBbNoteRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_direct_var_assignment(self):
+        """Test that direct BitBake var assignment is flagged."""
+        from bake_linter.rules.python_code import DirectVarAssignmentRule
+        
+        content = '''python __anonymous() {
+    PN = "mypackage"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = DirectVarAssignmentRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PYTHON002"
+
+    def test_d_setvar_ok(self):
+        """Test that d.setVar() passes."""
+        from bake_linter.rules.python_code import DirectVarAssignmentRule
+        
+        content = '''python __anonymous() {
+    d.setVar('PN', 'mypackage')
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = DirectVarAssignmentRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_sys_exit_in_anonymous(self):
+        """Test that sys.exit() in anonymous Python is flagged."""
+        from bake_linter.rules.python_code import AnonymousPythonIssuesRule
+        
+        content = '''python __anonymous() {
+    if error:
+        sys.exit(1)
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = AnonymousPythonIssuesRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PYTHON003"
+
+
+class TestPortabilityRules:
+    """Tests for portability rules."""
+
+    def test_hardcoded_march(self):
+        """Test that hardcoded -march is flagged."""
+        from bake_linter.rules.portability import HardcodedCpuFlagsRule
+        
+        content = '''CFLAGS += "-march=x86-64"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedCpuFlagsRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PORT001"
+
+    def test_absolute_usr_lib_path(self):
+        """Test that /usr/lib is flagged."""
+        from bake_linter.rules.portability import AbsoluteHostPathRule
+        
+        content = '''do_configure() {
+    ./configure --libdir=/usr/lib
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = AbsoluteHostPathRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PORT002"
+        assert results[0].severity == Severity.ERROR
+
+    def test_yocto_variable_path_ok(self):
+        """Test that ${D}${libdir} passes."""
+        from bake_linter.rules.portability import AbsoluteHostPathRule
+        
+        content = '''do_install() {
+    install -d ${D}${libdir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = AbsoluteHostPathRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_non_portable_sed(self):
+        """Test that GNU-specific sed is flagged."""
+        from bake_linter.rules.portability import NonPortableSedRule
+        
+        content = '''do_configure() {
+    sed -r 's/foo/bar/' file.txt
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = NonPortableSedRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PORT003"
+
+
+class TestDocumentationRules:
+    """Tests for documentation rules."""
+
+    def test_identical_summary_description(self):
+        """Test that identical SUMMARY and DESCRIPTION is flagged."""
+        from bake_linter.rules.documentation import IdenticalSummaryDescriptionRule
+        
+        content = '''SUMMARY = "My package"
+DESCRIPTION = "My package"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = IdenticalSummaryDescriptionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DOC001"
+
+    def test_different_summary_description_ok(self):
+        """Test that different SUMMARY and DESCRIPTION passes."""
+        from bake_linter.rules.documentation import IdenticalSummaryDescriptionRule
+        
+        content = '''SUMMARY = "My package"
+DESCRIPTION = "My package provides X, Y, and Z features for..."
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = IdenticalSummaryDescriptionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_missing_summary(self):
+        """Test that missing SUMMARY is flagged."""
+        from bake_linter.rules.documentation import MissingSummaryRule
+        
+        content = '''LICENSE = "MIT"
+DESCRIPTION = "My package provides..."
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingSummaryRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DOC002"
+
+    def test_truncated_description(self):
+        """Test that short DESCRIPTION is flagged."""
+        from bake_linter.rules.documentation import TruncatedDescriptionRule
+        
+        content = '''DESCRIPTION = "A package"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TruncatedDescriptionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DOC003"
