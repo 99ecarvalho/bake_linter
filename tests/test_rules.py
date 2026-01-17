@@ -272,6 +272,127 @@ ANOTHER_VAR = "value"
         blank_issues = [r for r in results if "blank line" in r.message.lower()]
         assert len(blank_issues) >= 1
 
+    def test_systemd_auto_enable_without_pn(self):
+        """Test that SYSTEMD_AUTO_ENABLE without :${PN} is flagged."""
+        from bake_linter.rules.style import SystemdAutoEnableRule
+        
+        content = '''inherit systemd
+SYSTEMD_AUTO_ENABLE = "enable"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdAutoEnableRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE008"
+        assert ":${PN}" in results[0].message
+
+    def test_systemd_auto_enable_with_pn_ok(self):
+        """Test that SYSTEMD_AUTO_ENABLE:${PN} passes."""
+        from bake_linter.rules.style import SystemdAutoEnableRule
+        
+        content = '''inherit systemd
+SYSTEMD_AUTO_ENABLE:${PN} = "enable"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdAutoEnableRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_install_dir_missing_trailing_slash(self):
+        """Test that install to directory without trailing slash is flagged."""
+        from bake_linter.rules.style import InstallDirectoryTrailingSlashRule
+        
+        content = '''do_install() {
+    install -m 0644 ${WORKDIR}/file.service ${D}${systemd_system_unitdir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InstallDirectoryTrailingSlashRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE009"
+        assert "trailing" in results[0].hint.lower()
+
+    def test_install_dir_with_trailing_slash_ok(self):
+        """Test that install to directory with trailing slash passes."""
+        from bake_linter.rules.style import InstallDirectoryTrailingSlashRule
+        
+        content = '''do_install() {
+    install -m 0644 ${WORKDIR}/file.service ${D}${systemd_system_unitdir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InstallDirectoryTrailingSlashRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_systemd_redundant_files_flagged(self):
+        """Test that redundant FILES with systemd is flagged."""
+        from bake_linter.rules.style import SystemdRedundantFilesRule
+        
+        content = '''inherit systemd
+FILES:${PN} += "${systemd_system_unitdir}/*.service"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdRedundantFilesRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE010"
+        assert "redundant" in results[0].message.lower()
+
+    def test_systemd_redundant_files_no_inherit_ok(self):
+        """Test that FILES without systemd inherit is not flagged."""
+        from bake_linter.rules.style import SystemdRedundantFilesRule
+        
+        content = '''FILES:${PN} += "${systemd_system_unitdir}/*.service"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdRedundantFilesRule()
+        results = rule.check(context)
+        
+        # No inherit systemd, so no flag
+        assert len(results) == 0
 
 class TestSecurityRules:
     """Tests for security rules."""

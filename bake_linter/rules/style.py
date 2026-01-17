@@ -381,3 +381,195 @@ class PackageListFormatRule(BaseRule):
                     ))
         
         return results
+
+
+class SystemdAutoEnableRule(BaseRule):
+    """
+    Check that SYSTEMD_AUTO_ENABLE has the :${PN} suffix.
+    
+    The correct syntax is SYSTEMD_AUTO_ENABLE:${PN} = "enable"
+    not just SYSTEMD_AUTO_ENABLE = "enable".
+    """
+    
+    rule_id = "STYLE008"
+    name = "SYSTEMD_AUTO_ENABLE Package Suffix"
+    description = "Check that SYSTEMD_AUTO_ENABLE uses :${PN} suffix"
+    default_severity = Severity.WARNING
+    groups = ["style", "systemd"]
+    hint = "Use SYSTEMD_AUTO_ENABLE:${PN} instead of SYSTEMD_AUTO_ENABLE"
+
+    # Pattern to match SYSTEMD_AUTO_ENABLE without :${PN}
+    PATTERN = re.compile(r'^SYSTEMD_AUTO_ENABLE\s*[+?]?=')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments
+            if stripped.startswith("#"):
+                continue
+            
+            # Check for SYSTEMD_AUTO_ENABLE without package suffix
+            if self.PATTERN.match(stripped):
+                # Make sure it's not already using :${PN} or similar
+                if not re.match(r'^SYSTEMD_AUTO_ENABLE:[^\s=]+', stripped):
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message="SYSTEMD_AUTO_ENABLE should have :${PN} suffix",
+                        context=stripped[:60],
+                        hint="Change to SYSTEMD_AUTO_ENABLE:${PN} = ...",
+                    ))
+        
+        return results
+
+
+class InstallDirectoryTrailingSlashRule(BaseRule):
+    """
+    Check that install commands use trailing slash for directory destinations.
+    
+    When installing files to a directory, using a trailing slash is good practice:
+    - Makes the destination type (directory) explicit
+    - Fails clearly if the directory doesn't exist
+    
+    Good:  install -m 0644 file.conf ${D}${sysconfdir}/
+    Bad:   install -m 0644 file.conf ${D}${sysconfdir}
+    """
+    
+    rule_id = "STYLE009"
+    name = "Install Directory Trailing Slash"
+    description = "Check install commands use trailing slash for directories"
+    default_severity = Severity.INFO
+    groups = ["style", "install"]
+    hint = "Add trailing / to directory destination in install command"
+
+    # Common directory variable suffixes that indicate a directory destination
+    DIRECTORY_VARS = [
+        'systemd_system_unitdir',
+        'systemd_user_unitdir',
+        'sysconfdir',
+        'bindir',
+        'sbindir',
+        'libdir',
+        'includedir',
+        'datadir',
+        'mandir',
+        'docdir',
+        'infodir',
+        'localstatedir',
+        'base_bindir',
+        'base_sbindir',
+        'base_libdir',
+        'servicedir',
+        'systemd_unitdir',
+    ]
+
+    # Pattern to match install commands
+    INSTALL_PATTERN = re.compile(
+        r'install\s+(?:-[a-zA-Z]+\s+)*(?:-m\s+\d+\s+)?'  # install with options
+        r'[^\s]+\s+'  # source file
+        r'\$\{D\}\$\{([a-z_]+)\}'  # destination ${D}${var}
+        r'(?!/)'  # NOT followed by /
+        r'\s*$'  # end of line (or just whitespace)
+    )
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments
+            if stripped.startswith("#"):
+                continue
+            
+            # Look for install commands
+            if "install " in stripped and "${D}" in stripped:
+                match = self.INSTALL_PATTERN.search(stripped)
+                if match:
+                    dir_var = match.group(1)
+                    if dir_var in self.DIRECTORY_VARS:
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message=f"Install to directory ${{{dir_var}}} should end with /",
+                            context=stripped[:70],
+                            hint=f"Change to ${{D}}${{{dir_var}}}/ (add trailing slash)",
+                        ))
+        
+        return results
+
+
+class SystemdRedundantFilesRule(BaseRule):
+    """
+    Check for redundant FILES entries when using systemd class.
+    
+    The systemd bbclass automatically adds service files to the package,
+    so explicitly listing them in FILES:${PN} is redundant.
+    
+    Files automatically handled by systemd class:
+    - *.service (systemd service units)
+    - *.socket (systemd socket units)
+    - *.timer (systemd timer units)
+    - *.path (systemd path units)
+    """
+    
+    rule_id = "STYLE010"
+    name = "Redundant Systemd FILES Entry"
+    description = "Check for redundant FILES when inheriting systemd"
+    default_severity = Severity.INFO
+    groups = ["style", "systemd", "redundancy"]
+    hint = "Remove redundant FILES entry; systemd class handles this automatically"
+
+    # Patterns that indicate systemd unit files in FILES
+    SYSTEMD_FILE_PATTERNS = [
+        re.compile(r'\$\{systemd_system_unitdir\}'),
+        re.compile(r'\$\{systemd_user_unitdir\}'),
+        re.compile(r'\$\{systemd_unitdir\}'),
+        re.compile(r'\.service'),
+        re.compile(r'\.socket'),
+        re.compile(r'\.timer'),
+        re.compile(r'\.path'),
+    ]
+
+    # Pattern to match FILES variable assignments
+    FILES_PATTERN = re.compile(r'^FILES[_:]')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        # First, check if recipe inherits systemd
+        inherits_systemd = False
+        for line in context.lines:
+            stripped = line.strip()
+            if stripped.startswith("inherit") and "systemd" in stripped:
+                inherits_systemd = True
+                break
+        
+        if not inherits_systemd:
+            return results
+        
+        # Check for FILES entries that reference systemd units
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments
+            if stripped.startswith("#"):
+                continue
+            
+            # Check for FILES:${PN} or FILES_${PN} assignments
+            if self.FILES_PATTERN.match(stripped):
+                for pattern in self.SYSTEMD_FILE_PATTERNS:
+                    if pattern.search(stripped):
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message="Redundant FILES entry for systemd units",
+                            context=stripped[:70],
+                            hint="The systemd class automatically adds service/socket/timer files to FILES",
+                        ))
+                        break  # One warning per line
+        
+        return results

@@ -143,6 +143,10 @@ exclude:
 | STYLE004 | TODO/FIXME Detection | Info | No | Flag TODO/FIXME comments |
 | STYLE005 | Empty Variable Assignment | Info | Yes | Flag empty assignments |
 | STYLE006 | Duplicate Inherit | Warning | Yes | Detect duplicate inherit |
+| STYLE007 | Package List Format | Warning | Yes | Check package list formatting (alphabetical, one per line) |
+| STYLE008 | SYSTEMD_AUTO_ENABLE Suffix | Warning | Yes | Check SYSTEMD_AUTO_ENABLE uses :${PN} |
+| STYLE009 | Install Directory Trailing Slash | Info | Yes | Check install commands use trailing / for directories |
+| STYLE010 | Redundant Systemd FILES Entry | Info | Yes | Flag redundant FILES when inheriting systemd |
 
 ### Security Rules
 | Rule ID | Name | Default Severity | Description |
