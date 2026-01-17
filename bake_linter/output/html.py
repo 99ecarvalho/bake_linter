@@ -108,10 +108,10 @@ class HtmlFormatter(BaseFormatter):
         
         <div id="rules" class="tab-content">
             <div class="expand-controls">
-                <button class="expand-btn" data-action="expand-level1" data-target="rules">▼ Expand Rules</button>
-                <button class="expand-btn" data-action="expand-all" data-target="rules">▼▼ Expand All</button>
-                <button class="expand-btn" data-action="collapse-level1" data-target="rules">▲ Collapse to Categories</button>
-                <button class="expand-btn" data-action="collapse-all" data-target="rules">▲▲ Collapse All</button>
+                <button class="expand-btn" data-action="expand-all" data-target="rules">▼▼ Items</button>
+                <button class="expand-btn" data-action="expand-level1" data-target="rules">▲ Files</button>
+                <button class="expand-btn" data-action="collapse-level1" data-target="rules">▲▲ Rules</button>
+                <button class="expand-btn" data-action="collapse-all" data-target="rules">▲▲▲ Categories</button>
             </div>
             {self._render_rules_section(by_rule, by_file, rule_categories)}
         </div>
