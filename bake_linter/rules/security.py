@@ -15,20 +15,30 @@ from bake_linter.rules.base import BaseRule
 
 class InsecureUriRule(BaseRule):
     """
-    Check for insecure (HTTP) URIs in SRC_URI.
+    Check for insecure URIs in SRC_URI.
     
-    Using HTTP instead of HTTPS can lead to man-in-the-middle attacks
-    during the build process.
+    Using unencrypted protocols can lead to man-in-the-middle attacks
+    during the build process:
+    - HTTP instead of HTTPS
+    - FTP instead of HTTPS/FTPS
+    - git:// instead of https://
     """
     
     rule_id = "SECURITY001"
     name = "Insecure URI"
-    description = "Check for HTTP URIs that should use HTTPS"
+    description = "Check for insecure URI protocols (HTTP, FTP, git://)"
     default_severity = Severity.WARNING
     groups = ["security", "network"]
-    hint = "Use https:// instead of http:// where possible"
+    hint = "Use https:// instead of insecure protocols"
 
+    # Pattern for HTTP (excluding localhost and private networks)
     HTTP_PATTERN = re.compile(r'http://(?!localhost|127\.|192\.168\.|10\.)')
+    
+    # Pattern for unencrypted FTP
+    FTP_PATTERN = re.compile(r'ftp://(?!localhost|127\.|192\.168\.|10\.)')
+    
+    # Pattern for unencrypted git protocol
+    GIT_PROTOCOL_PATTERN = re.compile(r'git://(?!localhost|127\.|192\.168\.|10\.)')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -39,12 +49,32 @@ class InsecureUriRule(BaseRule):
             if stripped.startswith("#"):
                 continue
             
+            # Check for HTTP
             if self.HTTP_PATTERN.search(line):
                 results.append(self.create_result(
                     file=context.path,
                     line=line_num,
-                    message="Insecure HTTP URI detected; consider using HTTPS",
+                    message="Insecure HTTP URI detected; use HTTPS instead",
                     context=stripped[:80],
+                    hint="Change http:// to https://",
+                ))
+            # Check for FTP
+            elif self.FTP_PATTERN.search(line):
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message="Insecure FTP URI detected; use HTTPS or FTPS instead",
+                    context=stripped[:80],
+                    hint="Change ftp:// to https:// or ftps://",
+                ))
+            # Check for git:// protocol
+            elif self.GIT_PROTOCOL_PATTERN.search(line):
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message="Insecure git:// protocol; use https:// for git repos",
+                    context=stripped[:80],
+                    hint="Change git://github.com to https://github.com",
                 ))
         
         return results

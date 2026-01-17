@@ -151,10 +151,40 @@ exclude:
 ### Security Rules
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
-| SECURITY001 | Insecure URI | Warning | Check for HTTP instead of HTTPS |
+| SECURITY001 | Insecure URI | Warning | Check for HTTP/FTP/git:// protocols |
 | SECURITY002 | Missing Checksum | Warning | Check SRC_URI has checksums |
 | SECURITY003 | Insecure Permissions | Warning | Detect overly permissive chmod |
 | SECURITY004 | Hardcoded Credentials | Error | Detect potential hardcoded secrets |
+
+### Systemd Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| SYSTEMD001 | Systemd Without Inherit | Error | Detect systemd usage without inherit |
+| SYSTEMD002 | Missing SYSTEMD_SERVICE | Error | Detect .service files without declaration |
+| SYSTEMD003 | Hardcoded Systemd Paths | Error | Detect /lib/systemd instead of variables |
+
+### Install Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| INSTALL001 | cp Instead of install | Warning | Detect cp usage in do_install |
+| INSTALL002 | Install Without Mode | Warning | Detect install without -m permission |
+
+### BBAppend Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| BBAPPEND001 | Missing FILESEXTRAPATHS | Warning | Detect file:// without FILESEXTRAPATHS |
+| BBAPPEND002 | Task Override Without Suffix | Error | Detect do_install() without :append |
+
+### Dependency Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| DEPENDENCY001 | Wrong Dependency Type | Warning | Detect build tools in RDEPENDS |
+
+### Patch/Source Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| PATCH001 | Patch Without Strip Level | Info | Detect patches without ;striplevel= |
+| SRCREV001 | Unpinned Git SRCREV | Error | Detect AUTOREV/branch names in SRCREV |
 
 ## Adding a New Rule
 

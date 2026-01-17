@@ -412,6 +412,429 @@ class TestSecurityRules:
         assert len(results) == 1
         assert results[0].rule_id == "SECURITY001"
 
+    def test_insecure_ftp_uri(self):
+        """Test that FTP URI is flagged."""
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content='SRC_URI = "ftp://example.com/foo.tar.gz"',
+            lines=['SRC_URI = "ftp://example.com/foo.tar.gz"'],
+            variables={},
+        )
+        
+        rule = InsecureUriRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert "ftp" in results[0].message.lower()
+
+    def test_insecure_git_protocol(self):
+        """Test that git:// protocol is flagged."""
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content='SRC_URI = "git://github.com/user/repo.git"',
+            lines=['SRC_URI = "git://github.com/user/repo.git"'],
+            variables={},
+        )
+        
+        rule = InsecureUriRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert "git://" in results[0].message
+
+
+class TestSystemdRules:
+    """Tests for systemd-related rules."""
+
+    def test_systemd_without_inherit(self):
+        """Test that systemd usage without inherit is flagged."""
+        from bake_linter.rules.systemd import SystemdWithoutInheritRule
+        
+        content = '''do_install() {
+    install -d ${D}${systemd_system_unitdir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdWithoutInheritRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SYSTEMD001"
+
+    def test_systemd_with_inherit_ok(self):
+        """Test that systemd usage with inherit passes."""
+        from bake_linter.rules.systemd import SystemdWithoutInheritRule
+        
+        content = '''inherit systemd
+
+do_install() {
+    install -d ${D}${systemd_system_unitdir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdWithoutInheritRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_systemd_hardcoded_paths(self):
+        """Test that hardcoded systemd paths are flagged."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''do_install() {
+    install -d ${D}/lib/systemd/system
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SYSTEMD003"
+
+
+class TestInstallRules:
+    """Tests for install-related rules."""
+
+    def test_cp_instead_of_install(self):
+        """Test that cp in do_install is flagged."""
+        from bake_linter.rules.install import CpInsteadOfInstallRule
+        
+        content = '''do_install() {
+    cp myfile ${D}${bindir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = CpInsteadOfInstallRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "INSTALL001"
+
+    def test_install_without_mode(self):
+        """Test that install without -m is flagged."""
+        from bake_linter.rules.install import InstallWithoutModeRule
+        
+        content = '''do_install() {
+    install myfile ${D}${bindir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InstallWithoutModeRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "INSTALL002"
+
+    def test_install_with_mode_ok(self):
+        """Test that install with -m passes."""
+        from bake_linter.rules.install import InstallWithoutModeRule
+        
+        content = '''do_install() {
+    install -m 0755 myfile ${D}${bindir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InstallWithoutModeRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_install_d_without_mode_ok(self):
+        """Test that install -d without -m passes (directory creation)."""
+        from bake_linter.rules.install import InstallWithoutModeRule
+        
+        content = '''do_install() {
+    install -d ${D}${bindir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InstallWithoutModeRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+
+class TestBbappendRules:
+    """Tests for bbappend-related rules."""
+
+    def test_missing_filesextrapaths(self):
+        """Test that missing FILESEXTRAPATHS is flagged."""
+        from bake_linter.rules.bbappend import MissingFilesextrapathsRule
+        
+        content = '''SRC_URI += "file://myconfig.conf"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingFilesextrapathsRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BBAPPEND001"
+
+    def test_with_filesextrapaths_ok(self):
+        """Test that FILESEXTRAPATHS set passes."""
+        from bake_linter.rules.bbappend import MissingFilesextrapathsRule
+        
+        content = '''FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://myconfig.conf"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingFilesextrapathsRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_task_override_without_suffix(self):
+        """Test that task override without :append is flagged."""
+        from bake_linter.rules.bbappend import TaskOverrideWithoutSuffixRule
+        
+        content = '''do_install() {
+    install -m 0644 myfile ${D}${sysconfdir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TaskOverrideWithoutSuffixRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BBAPPEND002"
+
+    def test_task_append_ok(self):
+        """Test that task :append passes."""
+        from bake_linter.rules.bbappend import TaskOverrideWithoutSuffixRule
+        
+        content = '''do_install:append() {
+    install -m 0644 myfile ${D}${sysconfdir}/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TaskOverrideWithoutSuffixRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+
+class TestDependencyRules:
+    """Tests for dependency-related rules."""
+
+    def test_native_in_rdepends(self):
+        """Test that -native in RDEPENDS is flagged."""
+        from bake_linter.rules.dependency import WrongDependencyTypeRule
+        
+        content = '''RDEPENDS:${PN} += "cmake-native"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = WrongDependencyTypeRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DEPENDENCY001"
+
+    def test_build_tool_in_rdepends(self):
+        """Test that build tools in RDEPENDS are flagged."""
+        from bake_linter.rules.dependency import WrongDependencyTypeRule
+        
+        content = '''RDEPENDS:${PN} += "cmake pkgconfig"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = WrongDependencyTypeRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+
+
+class TestPatchRules:
+    """Tests for patch-related rules."""
+
+    def test_patch_without_striplevel(self):
+        """Test that patch without striplevel is flagged."""
+        from bake_linter.rules.patch import PatchWithoutStriplevelRule
+        
+        content = '''SRC_URI += "file://fix-build.patch"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PatchWithoutStriplevelRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PATCH001"
+
+    def test_patch_with_striplevel_ok(self):
+        """Test that patch with striplevel passes."""
+        from bake_linter.rules.patch import PatchWithoutStriplevelRule
+        
+        content = '''SRC_URI += "file://fix-build.patch;striplevel=1"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PatchWithoutStriplevelRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_srcrev_autorev(self):
+        """Test that AUTOREV is flagged."""
+        from bake_linter.rules.patch import SrcrevUnpinnedRule
+        
+        content = '''SRCREV = "${AUTOREV}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcrevUnpinnedRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SRCREV001"
+
+    def test_srcrev_master(self):
+        """Test that branch name in SRCREV is flagged."""
+        from bake_linter.rules.patch import SrcrevUnpinnedRule
+        
+        content = '''SRCREV = "master"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcrevUnpinnedRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+
+    def test_srcrev_pinned_ok(self):
+        """Test that pinned SRCREV passes."""
+        from bake_linter.rules.patch import SrcrevUnpinnedRule
+        
+        content = '''SRCREV = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcrevUnpinnedRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_srcrev_git_recipe_autorev_ok(self):
+        """Test that AUTOREV in -git recipe passes."""
+        from bake_linter.rules.patch import SrcrevUnpinnedRule
+        
+        content = '''SRCREV = "${AUTOREV}"
+'''
+        context = FileContext(
+            path=Path("myapp-git.bb"),  # -git suffix indicates dev recipe
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcrevUnpinnedRule()
+        results = rule.check(context)
+        
+        # Should not flag -git recipes
+        assert len(results) == 0
+
 
 class TestRuleRegistry:
     """Tests for rule registry functionality."""
