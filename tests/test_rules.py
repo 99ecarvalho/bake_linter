@@ -1446,6 +1446,29 @@ class TestSecurityRulesExtended:
         assert len(results) == 1
         assert results[0].rule_id == "SECURITY007"
 
+    def test_build_path_leakage_runtime_env_ok(self):
+        """Test that runtime environment variables written to ${D} are NOT flagged."""
+        from bake_linter.rules.security import BuildPathLeakageRule
+        
+        # This is writing a runtime environment variable, NOT a build path leak
+        content = '''do_install() {
+    echo "export WAYLAND_DISPLAY=wayland-1" >> ${D}/home/user/.profile
+    echo "export PATH=$PATH:/usr/local/bin" >> ${D}/etc/profile.d/myapp.sh
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = BuildPathLeakageRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - these are runtime env vars, not build path leaks
+        assert len(results) == 0
+
 
 class TestCompatibilityRules:
     """Tests for compatibility rules."""

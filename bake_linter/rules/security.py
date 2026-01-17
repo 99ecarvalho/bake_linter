@@ -325,8 +325,12 @@ class BuildPathLeakageRule(BaseRule):
     """
     Check for build path leakage into runtime files.
     
-    References to ${WORKDIR} or ${S} in installed files will break
-    reproducibility and may expose build system information.
+    References to ${WORKDIR}, ${S}, ${B}, ${TMPDIR}, etc. written into
+    installed files will break reproducibility and may expose build 
+    system information.
+    
+    This rule detects when BUILD-TIME variables are being written into
+    config files or scripts that will end up on the target filesystem.
     """
     
     rule_id = "SECURITY007"
@@ -336,15 +340,24 @@ class BuildPathLeakageRule(BaseRule):
     groups = ["security", "reproducibility"]
     hint = "Use runtime paths (${datadir}, ${sysconfdir}) not build paths"
 
-    # Patterns that indicate build path leakage
-    LEAKAGE_PATTERNS = [
-        re.compile(r'\$\{S\}[^}]'),  # ${S} used outside variable context
-        re.compile(r'\$\{WORKDIR\}'),
-        re.compile(r'\$\{B\}[^}]'),  # ${B} used outside variable context
-        re.compile(r'/home/[^/]+/'),  # Hardcoded home paths
+    # Build-time variables that should NEVER appear in installed file content
+    # These are paths that exist only during build and would be invalid at runtime
+    BUILD_TIME_VARS = [
+        re.compile(r'\$\{S\}'),           # Source directory
+        re.compile(r'\$\{WORKDIR\}'),     # Work directory
+        re.compile(r'\$\{B\}'),           # Build directory
+        re.compile(r'\$\{TMPDIR\}'),      # Temp directory
+        re.compile(r'\$\{STAGING_DIR\}'), # Staging directory
+        re.compile(r'\$\{STAGING_INCDIR\}'),
+        re.compile(r'\$\{STAGING_LIBDIR\}'),
+        re.compile(r'\$\{RECIPE_SYSROOT\}'),
+        re.compile(r'\$\{RECIPE_SYSROOT_NATIVE\}'),
     ]
     
     INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+    
+    # Pattern to detect write operations to ${D} (content being written to target)
+    WRITE_TO_D_PATTERN = re.compile(r'(echo|printf|cat)\s+.*>.*\$\{D\}|>>.*\$\{D\}|sed\s+-i.*\$\{D\}')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -370,9 +383,12 @@ class BuildPathLeakageRule(BaseRule):
                     brace_depth = 0
                     continue
                 
-                # Check for leakage patterns in echo/printf to config files
-                if 'echo' in stripped or 'printf' in stripped or 'cat' in stripped:
-                    for pattern in self.LEAKAGE_PATTERNS:
+                # Only check lines that write content to ${D} (target filesystem)
+                # Look for echo/printf/cat/sed writing to ${D}
+                if ('echo' in stripped or 'printf' in stripped or 
+                    'cat' in stripped or 'sed' in stripped):
+                    # Check if any build-time variable is in the content
+                    for pattern in self.BUILD_TIME_VARS:
                         if pattern.search(stripped):
                             results.append(self.create_result(
                                 file=context.path,
