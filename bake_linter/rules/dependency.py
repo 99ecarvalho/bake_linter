@@ -86,6 +86,10 @@ class MissingPkgconfigInheritRule(BaseRule):
     
     Recipes that use pkg-config should inherit the pkgconfig class
     for proper sysroot and cross-compilation setup.
+    
+    Exceptions:
+    - Recipes with pkgconfig-native in DEPENDS (just need the tool, not cross setup)
+    - Native recipes (ending with -native)
     """
     
     rule_id = "DEPENDENCY002"
@@ -98,15 +102,21 @@ class MissingPkgconfigInheritRule(BaseRule):
     PKG_CONFIG_USAGE = [
         re.compile(r'PKG_CONFIG'),
         re.compile(r'pkg-config'),
-        re.compile(r'pkgconfig'),
+        re.compile(r'pkgconfig(?!-native)'),  # Exclude pkgconfig-native
         re.compile(r'\.pc\b'),  # .pc file references
     ]
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
-        # Check if already inherits pkgconfig
+        # Skip native recipes - they don't need cross-compilation setup
+        recipe_name = context.path.stem
+        if '-native' in recipe_name or '_native' in recipe_name:
+            return results
+        
+        # Check if already inherits pkgconfig or has pkgconfig-native in DEPENDS
         inherits_pkgconfig = False
+        has_pkgconfig_native = False
         uses_pkgconfig = False
         usage_line = 0
         
@@ -119,14 +129,23 @@ class MissingPkgconfigInheritRule(BaseRule):
             if stripped.startswith("inherit") and "pkgconfig" in stripped:
                 inherits_pkgconfig = True
             
+            # Check for pkgconfig-native in DEPENDS
+            if re.match(r'DEPENDS\s*[+?:]?=', stripped) and 'pkgconfig-native' in stripped:
+                has_pkgconfig_native = True
+            
             if not uses_pkgconfig:
                 for pattern in self.PKG_CONFIG_USAGE:
                     if pattern.search(line):
+                        # Don't flag pkgconfig-native references
+                        if 'pkgconfig-native' in line:
+                            has_pkgconfig_native = True
+                            continue
                         uses_pkgconfig = True
                         usage_line = line_num
                         break
         
-        if uses_pkgconfig and not inherits_pkgconfig:
+        # Only flag if uses pkgconfig and doesn't have inherit or pkgconfig-native
+        if uses_pkgconfig and not inherits_pkgconfig and not has_pkgconfig_native:
             results.append(self.create_result(
                 file=context.path,
                 line=usage_line,

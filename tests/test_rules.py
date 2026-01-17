@@ -1119,6 +1119,48 @@ do_configure() {
         
         assert len(results) == 0
 
+    def test_pkgconfig_native_in_depends_ok(self):
+        """Test that pkgconfig-native in DEPENDS does not flag (native build tool use)."""
+        from bake_linter.rules.dependency import MissingPkgconfigInheritRule
+        
+        # This is the false positive case - pkgconfig-native is sufficient for native builds
+        content = '''inherit cmake systemd
+DEPENDS = "boost nlohmann-json libarchive fmt grpc systemd pkgconfig-native cli11"
+'''
+        context = FileContext(
+            path=Path("usb-update-controller.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingPkgconfigInheritRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - pkgconfig-native is sufficient for build tool usage
+        assert len(results) == 0
+
+    def test_native_recipe_pkgconfig_ok(self):
+        """Test that native recipes using pkgconfig are not flagged."""
+        from bake_linter.rules.dependency import MissingPkgconfigInheritRule
+        
+        content = '''do_configure() {
+    PKG_CONFIG_PATH="${STAGING_LIBDIR}/pkgconfig" oe_runconf
+}
+'''
+        context = FileContext(
+            path=Path("myapp-native_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingPkgconfigInheritRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - native recipes don't need cross-compilation setup
+        assert len(results) == 0
+
     def test_essential_in_rrecommends(self):
         """Test that essential library in RRECOMMENDS is flagged."""
         from bake_linter.rules.dependency import RrecommendsEssentialRule
