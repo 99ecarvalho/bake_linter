@@ -130,21 +130,66 @@ class UnusedVariableAssignmentRule(BaseRule):
     groups = ["variables", "redundancy"]
     hint = "Remove unused variable or add reference if intended"
     
-    # Variables that should be excluded (metadata, exported, etc.)
+    # Variables that should be excluded (metadata, exported, consumed by classes, etc.)
     STANDARD_VARS = {
+        # Core BitBake variables
         'PN', 'PV', 'PR', 'PE', 'S', 'B', 'D', 'T', 'WORKDIR',
-        'LICENSE', 'LIC_FILES_CHKSUM', 'SRC_URI', 'SRCREV',
+        'SRCPV', 'SRCDATE', 'SRCREV',
+        
+        # Standard metadata (consumed by BitBake)
+        'LICENSE', 'LIC_FILES_CHKSUM', 'SRC_URI',
         'SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER',
-        'SECTION', 'DEPENDS', 'RDEPENDS', 'RRECOMMENDS', 'RPROVIDES',
-        'PACKAGES', 'FILES', 'FILESEXTRAPATHS', 'FILESPATH',
+        'SECTION', 'AUTHOR', 'MAINTAINER', 'PRIORITY',
+        
+        # Dependencies and packages
+        'DEPENDS', 'RDEPENDS', 'RRECOMMENDS', 'RPROVIDES',
+        'RCONFLICTS', 'RREPLACES', 'PACKAGES', 'PROVIDES',
+        'FILES', 'FILESEXTRAPATHS', 'FILESPATH',
+        
+        # Build configuration
         'EXTRA_OECONF', 'EXTRA_OECMAKE', 'EXTRA_OEMAKE',
         'PACKAGECONFIG', 'COMPATIBLE_MACHINE', 'COMPATIBLE_HOST',
         'MACHINE_FEATURES', 'DISTRO_FEATURES', 'BBCLASSEXTEND',
-        'inherit', 'require', 'include', 'PROVIDES', 'ALTERNATIVE',
-        'SYSTEMD_SERVICE', 'SYSTEMD_AUTO_ENABLE', 'INITSCRIPT_NAME',
+        'inherit', 'require', 'include',
+        
+        # Compiler flags
         'CFLAGS', 'CXXFLAGS', 'LDFLAGS', 'CPPFLAGS',
-        'PACKAGE_ARCH', 'UPSTREAM_CHECK_URI', 'UPSTREAM_CHECK_REGEX',
-        'CVE_PRODUCT', 'CVE_VERSION', 'INSANE_SKIP', 'ALLOW_EMPTY',
+        
+        # Package metadata
+        'PACKAGE_ARCH', 'INSANE_SKIP', 'ALLOW_EMPTY',
+        
+        # Features check variables (consumed by features_check.bbclass)
+        'REQUIRED_DISTRO_FEATURES', 'CONFLICT_DISTRO_FEATURES', 'ANY_OF_DISTRO_FEATURES',
+        'REQUIRED_MACHINE_FEATURES', 'CONFLICT_MACHINE_FEATURES', 'ANY_OF_MACHINE_FEATURES',
+        
+        # Upstream tracking (consumed by devtool/recipetool)
+        'UPSTREAM_CHECK_URI', 'UPSTREAM_CHECK_REGEX',
+        'UPSTREAM_CHECK_GITTAGREGEX', 'UPSTREAM_VERSION_UNKNOWN',
+        
+        # CVE tracking
+        'CVE_PRODUCT', 'CVE_VERSION', 'CVE_CHECK_IGNORE',
+        
+        # Layer metadata (consumed by bitbake-layers)
+        'LAYERSERIES_COMPAT', 'LAYERDEPENDS', 'LAYERRECOMMENDS',
+        
+        # Systemd (consumed by systemd.bbclass)
+        'SYSTEMD_SERVICE', 'SYSTEMD_AUTO_ENABLE', 'SYSTEMD_PACKAGES',
+        
+        # Init scripts (consumed by update-rc.d.bbclass)
+        'INITSCRIPT_NAME', 'INITSCRIPT_PARAMS', 'INITSCRIPT_PACKAGES',
+        
+        # Kernel modules (consumed by module.bbclass)
+        'KERNEL_MODULE_AUTOLOAD', 'KERNEL_MODULE_PROBECONF',
+        
+        # Update alternatives (consumed by update-alternatives.bbclass)
+        'ALTERNATIVE', 'ALTERNATIVE_PRIORITY', 'ALTERNATIVE_LINK_NAME', 'ALTERNATIVE_TARGET',
+        
+        # Useradd (consumed by useradd.bbclass)
+        'USERADD_PACKAGES', 'USERADD_PARAM', 'GROUPADD_PARAM', 'GROUPMEMS_PARAM',
+        
+        # RAUC (consumed by rauc.bbclass)
+        'RAUC_BUNDLE_COMPATIBLE', 'RAUC_BUNDLE_VERSION', 'RAUC_BUNDLE_DESCRIPTION',
+        'RAUC_BUNDLE_FORMAT', 'RAUC_BUNDLE_SLOTS', 'RAUC_KEY_FILE', 'RAUC_CERT_FILE',
     }
 
     VAR_ASSIGNMENT_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*[?:]?=')

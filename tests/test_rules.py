@@ -2225,6 +2225,30 @@ PV = "${CURRENT_VERSION}"
         assert results[0].rule_id == "VARIABLES003"
         assert "OLD_VERSION" in results[0].message
 
+    def test_unused_variable_special_vars_excluded(self):
+        """Test that special BitBake variables consumed by classes are not flagged."""
+        from bake_linter.rules.variables import UnusedVariableAssignmentRule
+        
+        # These are consumed by features_check.bbclass, not referenced directly
+        content = '''REQUIRED_DISTRO_FEATURES = "wayland"
+CONFLICT_DISTRO_FEATURES = "x11"
+SYSTEMD_SERVICE:${PN} = "myservice.service"
+USERADD_PACKAGES = "${PN}"
+UPSTREAM_CHECK_URI = "https://example.com"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnusedVariableAssignmentRule()
+        results = rule.check(context)
+        
+        # None of these special variables should be flagged
+        assert len(results) == 0
+
     def test_variable_redefinition(self):
         """Test that variable redefinition is flagged."""
         from bake_linter.rules.variables import VariableRedefinitionRule
