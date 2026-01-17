@@ -158,6 +158,7 @@ exclude:
 | SECURITY005 | Dangerous rm -rf | Error | Detect rm -rf with dangerous patterns |
 | SECURITY006 | eval Usage | Warning | Detect eval in shell tasks |
 | SECURITY007 | Build Path Leakage | Warning | Detect ${S}/${WORKDIR} in runtime files |
+| SECURITY008 | SUID/SGID Binary Detection | Warning | Detect chmod 4xxx/2xxx without security comment |
 
 ### Systemd Rules
 | Rule ID | Name | Default Severity | Description |
@@ -182,6 +183,7 @@ exclude:
 | BBAPPEND002 | Task Override Without Suffix | Error | Detect do_install() without :append |
 | BBAPPEND003 | Version-Specific bbappend | Info | Detect version-specific .bbappend files |
 | BBAPPEND004 | Empty bbappend File | Warning | Detect empty or comment-only .bbappend |
+| BBAPPEND005 | Global Variable in BBAppend | Warning | Detect distro-wide variables in .bbappend |
 
 ### Dependency Rules
 | Rule ID | Name | Default Severity | Description |
@@ -195,6 +197,9 @@ exclude:
 |---------|------|-----------------|-------------|
 | VARIABLES001 | Git Recipe Without SRCPV | Warning | Detect git recipes without ${SRCPV} in PV |
 | VARIABLES002 | Unconventional S Assignment | Warning | Detect S = "${WORKDIR}" pattern |
+| VARIABLES003 | Unused Variable Assignment | Info | Detect variables assigned but never referenced |
+| VARIABLES004 | Variable Redefinition | Warning | Detect same variable assigned multiple times |
+| VARIABLES005 | Excessive Append/Prepend | Info | Detect variables with many append/prepend operations |
 
 ### Patch/Source Rules
 | Rule ID | Name | Default Severity | Description |
@@ -218,6 +223,9 @@ exclude:
 | PKG001 | RDEPENDS on -dev Package | Error | Detect -dev packages in RDEPENDS |
 | PKG002 | FILES Not Matching Install | Warning | Detect installed paths not in FILES |
 | PKG003 | Wildcard bbappend Overreach | Warning | Detect version-specific content in wildcard bbappend |
+| PKG004 | FILES/PACKAGES Consistency | Warning | Verify FILES entries match packages in PACKAGES |
+| PKG005 | RDEPENDS Package Existence | Error | Ensure packages in RDEPENDS:pkg are in PACKAGES |
+| PKG006 | RRECOMMENDS Package Validity | Info | Check packages in RRECOMMENDS:pkg are defined |
 
 ### Metadata Rules
 | Rule ID | Name | Default Severity | Enabled | Description |
@@ -253,6 +261,13 @@ exclude:
 | TASK001 | Unquoted Variable Expansion | Warning | Detect unquoted high-risk variables in tasks |
 | TASK002 | Sudo Usage in Tasks | Error | Detect sudo usage (should use fakeroot) |
 | TASK003 | Network Access in Compile | Error | Detect network access in build tasks |
+| TASK004 | Empty Task Override | Info | Detect empty/placeholder task overrides |
+
+### Function Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| FUNCTION001 | Task Function Order | Info | Check ordering of task functions in recipes |
+| FUNCTION002 | Python/Shell Function Mixing | Warning | Detect mixed shell and Python syntax in functions |
 
 ### Python Code Rules
 | Rule ID | Name | Default Severity | Description |
@@ -274,6 +289,23 @@ exclude:
 | DOC001 | Identical SUMMARY/DESCRIPTION | Warning | Detect copy-pasted SUMMARY as DESCRIPTION |
 | DOC002 | Missing SUMMARY | Info | Detect recipes without SUMMARY |
 | DOC003 | Truncated DESCRIPTION | Info | Detect DESCRIPTION < 30 chars |
+
+### URI/Source Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| URI001 | SRC_URI Protocol Consistency | Info | Detect mixed protocols in same SRC_URI |
+| URI002 | Git SRCREV Validity | Warning | Validate SRCREV format for git URIs |
+| DEPENDS001 | Version Constraint Syntax | Warning | Validate version constraints in DEPENDS |
+
+### Layer Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| LAYER001 | LAYERSERIES_COMPAT Validation | Error | Validate layer.conf release names |
+
+### Lifecycle/Maintenance Rules
+| Rule ID | Name | Default Severity | Description |
+|---------|------|-----------------|-------------|
+| LIFECYCLE001 | Missing Upstream Check | Info | Detect missing UPSTREAM_CHECK_* configuration |
 
 ## Adding a New Rule
 

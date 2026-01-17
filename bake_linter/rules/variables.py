@@ -113,3 +113,181 @@ class UnconventionalSAssignmentRule(BaseRule):
                 ))
         
         return results
+
+
+class UnusedVariableAssignmentRule(BaseRule):
+    """
+    Check for variables assigned but never referenced.
+    
+    Variables that are defined but not used may indicate dead code
+    or forgotten refactoring.
+    """
+    
+    rule_id = "VARIABLES003"
+    name = "Unused Variable Assignment"
+    description = "Detects variables assigned but never referenced in the recipe"
+    default_severity = Severity.INFO
+    groups = ["variables", "redundancy"]
+    hint = "Remove unused variable or add reference if intended"
+    
+    # Variables that should be excluded (metadata, exported, etc.)
+    STANDARD_VARS = {
+        'PN', 'PV', 'PR', 'PE', 'S', 'B', 'D', 'T', 'WORKDIR',
+        'LICENSE', 'LIC_FILES_CHKSUM', 'SRC_URI', 'SRCREV',
+        'SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER',
+        'SECTION', 'DEPENDS', 'RDEPENDS', 'RRECOMMENDS', 'RPROVIDES',
+        'PACKAGES', 'FILES', 'FILESEXTRAPATHS', 'FILESPATH',
+        'EXTRA_OECONF', 'EXTRA_OECMAKE', 'EXTRA_OEMAKE',
+        'PACKAGECONFIG', 'COMPATIBLE_MACHINE', 'COMPATIBLE_HOST',
+        'MACHINE_FEATURES', 'DISTRO_FEATURES', 'BBCLASSEXTEND',
+        'inherit', 'require', 'include', 'PROVIDES', 'ALTERNATIVE',
+        'SYSTEMD_SERVICE', 'SYSTEMD_AUTO_ENABLE', 'INITSCRIPT_NAME',
+        'CFLAGS', 'CXXFLAGS', 'LDFLAGS', 'CPPFLAGS',
+        'PACKAGE_ARCH', 'UPSTREAM_CHECK_URI', 'UPSTREAM_CHECK_REGEX',
+        'CVE_PRODUCT', 'CVE_VERSION', 'INSANE_SKIP', 'ALLOW_EMPTY',
+    }
+
+    VAR_ASSIGNMENT_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*[?:]?=')
+    VAR_REFERENCE_PATTERN = re.compile(r'\$\{([A-Z][A-Z0-9_]*)\}')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        assignments = {}  # var_name -> line_num
+        references = set()
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            # Track assignments
+            match = self.VAR_ASSIGNMENT_PATTERN.match(stripped)
+            if match:
+                var_name = match.group(1)
+                if var_name not in self.STANDARD_VARS:
+                    assignments[var_name] = line_num
+            
+            # Track references
+            refs = self.VAR_REFERENCE_PATTERN.findall(line)
+            references.update(refs)
+        
+        # Find unused variables
+        for var_name, line_num in assignments.items():
+            if var_name not in references:
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message=f"Variable '{var_name}' assigned but never referenced",
+                    hint="Remove if unused or add ${" + var_name + "} reference",
+                ))
+        
+        return results
+
+
+class VariableRedefinitionRule(BaseRule):
+    """
+    Check for variables redefined without clear intent.
+    
+    Multiple immediate assignments to the same variable may indicate
+    copy-paste errors or confusion.
+    """
+    
+    rule_id = "VARIABLES004"
+    name = "Variable Redefinition"
+    description = "Detects variables redefined in same scope without clear intent"
+    default_severity = Severity.WARNING
+    groups = ["variables", "conflicts"]
+    hint = "Use ?= for defaults, += for additions, or remove duplicate"
+
+    IMMEDIATE_ASSIGN_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*=\s*')
+    # Override pattern: VAR:override or VAR_override (must have : or _ followed by non-underscore)
+    OVERRIDE_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]*:[a-z][\w-]*\s*=|^[A-Z][A-Z0-9_]*_[a-z][\w-]*\s*=')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        immediate_assignments = {}  # var_name -> [(line_num, line)]
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            # Skip override-specific assignments
+            if self.OVERRIDE_PATTERN.match(stripped):
+                continue
+            
+            match = self.IMMEDIATE_ASSIGN_PATTERN.match(stripped)
+            if match:
+                var_name = match.group(1)
+                if var_name not in immediate_assignments:
+                    immediate_assignments[var_name] = []
+                immediate_assignments[var_name].append((line_num, stripped))
+        
+        # Flag variables with multiple immediate assignments
+        for var_name, assigns in immediate_assignments.items():
+            if len(assigns) > 1:
+                first_line = assigns[0][0]
+                last_line = assigns[-1][0]
+                results.append(self.create_result(
+                    file=context.path,
+                    line=last_line,
+                    message=f"Variable '{var_name}' redefined (first at line {first_line})",
+                    hint="Use ?= for default, += to append, or remove duplicate",
+                ))
+        
+        return results
+
+
+class ExcessiveAppendPrependRule(BaseRule):
+    """
+    Check for excessive append/prepend chaining on same variable.
+    
+    Many append/prepend operations can be hard to track and may
+    indicate need for direct assignment.
+    """
+    
+    rule_id = "VARIABLES005"
+    name = "Excessive Append/Prepend"
+    description = "Detects variables with many append/prepend operations"
+    default_severity = Severity.INFO
+    groups = ["variables", "style"]
+    hint = "Consider using direct assignment or simplifying"
+    
+    MAX_OPERATIONS = 3
+
+    APPEND_PREPEND_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)[:_](append|prepend)')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        operations = {}  # var_name -> count
+        first_occurrence = {}  # var_name -> line_num
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            match = self.APPEND_PREPEND_PATTERN.match(stripped)
+            if match:
+                var_name = match.group(1)
+                if var_name not in operations:
+                    operations[var_name] = 0
+                    first_occurrence[var_name] = line_num
+                operations[var_name] += 1
+        
+        for var_name, count in operations.items():
+            if count > self.MAX_OPERATIONS:
+                results.append(self.create_result(
+                    file=context.path,
+                    line=first_occurrence[var_name],
+                    message=f"Variable '{var_name}' has {count} append/prepend operations",
+                    hint="Consider simplifying with direct assignment",
+                ))
+        
+        return results

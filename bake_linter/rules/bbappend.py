@@ -223,3 +223,58 @@ class EmptyBbappendRule(BaseRule):
         
         return results
 
+
+class GlobalVariableInBbappendRule(BaseRule):
+    """
+    Check for global configuration variables in .bbappend files.
+    
+    Certain variables should only be set in local.conf or distro config,
+    not in recipe bbappends as they affect the entire build.
+    """
+    
+    rule_id = "BBAPPEND005"
+    name = "Global Variable in bbappend"
+    description = "Detects global configuration variables in .bbappend files"
+    default_severity = Severity.WARNING
+    groups = ["bbappend", "scope"]
+    hint = "Move global settings to local.conf or distro configuration"
+    
+    applicable_file_types = {"bbappend"}
+
+    # Variables that should NOT be set in bbappend files
+    GLOBAL_VARIABLES = [
+        'TMPDIR', 'DL_DIR', 'SSTATE_DIR', 'DEPLOY_DIR',
+        'DISTRO', 'MACHINE', 'TCMODE', 'TCLIBC',
+        'BB_NUMBER_THREADS', 'PARALLEL_MAKE',
+        'PACKAGE_CLASSES', 'EXTRA_IMAGE_FEATURES',
+        'IMAGE_INSTALL', 'IMAGE_FEATURES',
+        'DISTRO_FEATURES', 'MACHINE_FEATURES',
+        'LICENSE_FLAGS_ACCEPTED', 'LICENSE_FLAGS_WHITELIST',
+        'BBMASK', 'BBLAYERS',
+    ]
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        if not str(context.path).endswith('.bbappend'):
+            return results
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            for var in self.GLOBAL_VARIABLES:
+                # Check for direct assignment or append
+                if re.match(rf'^{var}\s*[?+:]?=', stripped):
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"Global variable '{var}' should not be set in .bbappend",
+                        context=stripped[:60],
+                        hint="Move to local.conf, site.conf, or distro configuration",
+                    ))
+                    break  # One warning per line
+        
+        return results

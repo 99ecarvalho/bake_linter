@@ -385,3 +385,71 @@ class BuildPathLeakageRule(BaseRule):
         
         return results
 
+
+class SuidSgidBinaryRule(BaseRule):
+    """
+    Check for SUID/SGID binary installations without justification.
+    
+    SUID/SGID binaries run with elevated privileges and are security-sensitive.
+    They should be explicitly documented/justified.
+    """
+    
+    rule_id = "SECURITY008"
+    name = "SUID/SGID Binary Detection"
+    description = "Flags SUID/SGID binary installations"
+    default_severity = Severity.WARNING
+    groups = ["security", "permissions"]
+    hint = "Add security review comment or remove SUID/SGID if not necessary"
+
+    # Patterns for SUID/SGID
+    SUID_CHMOD_PATTERN = re.compile(r'chmod\s+[46][0-7]{3}\s')
+    SGID_CHMOD_PATTERN = re.compile(r'chmod\s+[26][0-7]{3}\s')
+    SYMBOLIC_SUID_PATTERN = re.compile(r'chmod\s+[^#]*u\+s')
+    SYMBOLIC_SGID_PATTERN = re.compile(r'chmod\s+[^#]*g\+s')
+    
+    SECURITY_COMMENT_PATTERN = re.compile(r'#.*(?:SECURITY|SUID|SGID|reviewed|justified)', re.IGNORECASE)
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_task = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Track do_install task
+            if re.match(r'^(?:fakeroot\s+)?do_install\s*\(\)\s*\{', stripped):
+                in_task = True
+                brace_depth = 1
+                continue
+            
+            if in_task:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_task = False
+                    continue
+                
+                # Skip if has security comment on preceding line
+                if line_num > 1:
+                    prev_line = context.lines[line_num - 2].strip()
+                    if self.SECURITY_COMMENT_PATTERN.search(prev_line):
+                        continue
+                
+                # Check for SUID/SGID patterns
+                is_suid_sgid = (
+                    self.SUID_CHMOD_PATTERN.search(stripped) or
+                    self.SGID_CHMOD_PATTERN.search(stripped) or
+                    self.SYMBOLIC_SUID_PATTERN.search(stripped) or
+                    self.SYMBOLIC_SGID_PATTERN.search(stripped)
+                )
+                
+                if is_suid_sgid:
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message="SUID/SGID binary detected - security review needed",
+                        context=stripped[:60],
+                        hint="Add # SECURITY: justification comment or remove setuid/setgid",
+                    ))
+        
+        return results

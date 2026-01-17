@@ -210,3 +210,182 @@ class WildcardBbappendOverreachRule(BaseRule):
                     return results  # One warning per file
         
         return results
+
+
+class FilesPackagesConsistencyRule(BaseRule):
+    """
+    Check that FILES entries correspond to packages in PACKAGES.
+    
+    Each FILES:${PN}-foo must have corresponding ${PN}-foo in PACKAGES.
+    """
+    
+    rule_id = "PKG004"
+    name = "FILES and PACKAGES Consistency"
+    description = "Verifies FILES entries match packages defined in PACKAGES"
+    default_severity = Severity.WARNING
+    groups = ["packaging", "consistency"]
+    hint = "Add missing package to PACKAGES or remove orphaned FILES"
+
+    FILES_PATTERN = re.compile(r'^FILES[_:]([\w${}-]+)')
+    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+:]?=')
+    
+    # Standard auto-generated packages
+    STANDARD_PACKAGES = [
+        '${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc', '${PN}-staticdev',
+        '${PN}-locale', '${PN}-src', '${PN}-lic',
+    ]
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        files_packages: List[tuple] = []  # (line_num, package_name)
+        packages_list: List[str] = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            # Collect FILES entries
+            match = self.FILES_PATTERN.match(stripped)
+            if match:
+                pkg_name = match.group(1)
+                files_packages.append((line_num, pkg_name))
+            
+            # Collect PACKAGES entries
+            if self.PACKAGES_PATTERN.match(stripped):
+                # Extract package names
+                value = stripped.split('=', 1)[1] if '=' in stripped else ''
+                packages_list.extend(re.findall(r'[\w${}-]+', value))
+        
+        # Check each FILES entry
+        for line_num, pkg_name in files_packages:
+            # Skip standard packages
+            if pkg_name in self.STANDARD_PACKAGES:
+                continue
+            
+            # Check if package is in PACKAGES
+            if pkg_name not in packages_list:
+                # Also check if ${PN}-something pattern
+                if not any(pkg_name in p for p in packages_list):
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"FILES:{pkg_name} defined but '{pkg_name}' not in PACKAGES",
+                        hint=f'Add: PACKAGES += "{pkg_name}"',
+                    ))
+        
+        return results
+
+
+class RdependsPackageExistenceRule(BaseRule):
+    """
+    Check that packages in RDEPENDS:pkg are defined in PACKAGES.
+    
+    RDEPENDS:${PN}-foo requires ${PN}-foo to exist in PACKAGES.
+    """
+    
+    rule_id = "PKG005"
+    name = "RDEPENDS Package Existence"
+    description = "Ensures packages referenced in RDEPENDS:pkg are in PACKAGES"
+    default_severity = Severity.ERROR
+    groups = ["packaging", "dependency"]
+    hint = "Add package to PACKAGES or fix package name"
+
+    RDEPENDS_PKG_PATTERN = re.compile(r'^RDEPENDS[_:]([\w${}-]+)')
+    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+:]?=')
+    
+    STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc']
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        rdepends_packages: List[tuple] = []
+        packages_list: List[str] = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            # Collect RDEPENDS:pkg entries
+            match = self.RDEPENDS_PKG_PATTERN.match(stripped)
+            if match:
+                pkg_name = match.group(1)
+                rdepends_packages.append((line_num, pkg_name))
+            
+            # Collect PACKAGES entries
+            if self.PACKAGES_PATTERN.match(stripped):
+                value = stripped.split('=', 1)[1] if '=' in stripped else ''
+                packages_list.extend(re.findall(r'[\w${}-]+', value))
+        
+        for line_num, pkg_name in rdepends_packages:
+            if pkg_name in self.STANDARD_PACKAGES:
+                continue
+            
+            if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message=f"RDEPENDS:{pkg_name} but '{pkg_name}' not defined in PACKAGES",
+                    hint=f'Add: PACKAGES += "{pkg_name}"',
+                ))
+        
+        return results
+
+
+class RrecommendsPackageValidityRule(BaseRule):
+    """
+    Check that packages in RRECOMMENDS:pkg are defined in PACKAGES.
+    
+    Similar to PKG005 but for RRECOMMENDS (lower severity).
+    """
+    
+    rule_id = "PKG006"
+    name = "RRECOMMENDS Package Validity"
+    description = "Checks packages in RRECOMMENDS:pkg are defined in PACKAGES"
+    default_severity = Severity.INFO
+    groups = ["packaging", "dependency"]
+    hint = "Add package to PACKAGES or fix package name"
+
+    RRECOMMENDS_PKG_PATTERN = re.compile(r'^RRECOMMENDS[_:]([\w${}-]+)')
+    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+:]?=')
+    
+    STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc']
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        rrecommends_packages: List[tuple] = []
+        packages_list: List[str] = []
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith("#"):
+                continue
+            
+            match = self.RRECOMMENDS_PKG_PATTERN.match(stripped)
+            if match:
+                pkg_name = match.group(1)
+                rrecommends_packages.append((line_num, pkg_name))
+            
+            if 'PACKAGES' in stripped and '=' in stripped:
+                value = stripped.split('=', 1)[1]
+                packages_list.extend(re.findall(r'[\w${}-]+', value))
+        
+        for line_num, pkg_name in rrecommends_packages:
+            if pkg_name in self.STANDARD_PACKAGES:
+                continue
+            
+            if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message=f"RRECOMMENDS:{pkg_name} but '{pkg_name}' not in PACKAGES",
+                    hint=f'Verify package name or add: PACKAGES += "{pkg_name}"',
+                ))
+        
+        return results

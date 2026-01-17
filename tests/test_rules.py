@@ -2029,3 +2029,495 @@ DESCRIPTION = "My package provides..."
         
         assert len(results) == 1
         assert results[0].rule_id == "DOC003"
+
+
+class TestUriRules:
+    """Tests for URI and source rules."""
+
+    def test_src_uri_protocol_consistency(self):
+        """Test that mixed protocols are flagged."""
+        from bake_linter.rules.uri import SrcUriProtocolConsistencyRule
+        
+        content = '''SRC_URI = "\\
+    git://github.com/foo/bar.git;protocol=https \\
+    git://github.com/foo/baz.git;protocol=git \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcUriProtocolConsistencyRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "URI001"
+
+    def test_git_srcrev_invalid_format(self):
+        """Test that invalid SRCREV format is flagged."""
+        from bake_linter.rules.uri import GitSrcrevValidityRule
+        
+        content = '''SRC_URI = "git://github.com/project/repo.git;protocol=https"
+SRCREV = "abc123"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = GitSrcrevValidityRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "URI002"
+
+    def test_git_srcrev_valid_sha1(self):
+        """Test that valid 40-char SRCREV passes."""
+        from bake_linter.rules.uri import GitSrcrevValidityRule
+        
+        content = '''SRC_URI = "git://github.com/project/repo.git;protocol=https"
+SRCREV = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = GitSrcrevValidityRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_version_constraint_missing_parens(self):
+        """Test that version constraint without parentheses is flagged."""
+        from bake_linter.rules.uri import VersionConstraintSyntaxRule
+        
+        content = '''RDEPENDS:${PN} += "libfoo >= 1.0"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VersionConstraintSyntaxRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "DEPENDS001"
+
+
+class TestPackageRulesExtended:
+    """Tests for extended package rules."""
+
+    def test_files_packages_consistency(self):
+        """Test that FILES for undefined package is flagged."""
+        from bake_linter.rules.package import FilesPackagesConsistencyRule
+        
+        content = '''PACKAGES = "${PN} ${PN}-doc"
+FILES:${PN} = "${bindir}/*"
+FILES:${PN}-extra = "${datadir}/extra/*"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = FilesPackagesConsistencyRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PKG004"
+
+    def test_rdepends_package_existence(self):
+        """Test that RDEPENDS for undefined package is flagged."""
+        from bake_linter.rules.package import RdependsPackageExistenceRule
+        
+        content = '''PACKAGES = "${PN}"
+RDEPENDS:${PN}-tools += "bash"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RdependsPackageExistenceRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PKG005"
+
+    def test_rrecommends_package_validity(self):
+        """Test that RRECOMMENDS for undefined package is flagged."""
+        from bake_linter.rules.package import RrecommendsPackageValidityRule
+        
+        content = '''PACKAGES = "${PN}"
+RRECOMMENDS:${PN}-utils += "extra-tools"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RrecommendsPackageValidityRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "PKG006"
+
+
+class TestVariablesRulesExtended:
+    """Tests for extended variable rules."""
+
+    def test_unused_variable_assignment(self):
+        """Test that unused variable is flagged."""
+        from bake_linter.rules.variables import UnusedVariableAssignmentRule
+        
+        content = '''OLD_VERSION = "1.0"
+CURRENT_VERSION = "2.0"
+PV = "${CURRENT_VERSION}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnusedVariableAssignmentRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES003"
+        assert "OLD_VERSION" in results[0].message
+
+    def test_variable_redefinition(self):
+        """Test that variable redefinition is flagged."""
+        from bake_linter.rules.variables import VariableRedefinitionRule
+        
+        content = '''MY_VAR = "initial"
+MY_VAR = "overridden"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VariableRedefinitionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES004"
+
+    def test_excessive_append_prepend(self):
+        """Test that excessive append/prepend is flagged."""
+        from bake_linter.rules.variables import ExcessiveAppendPrependRule
+        
+        content = '''CFLAGS:append = " -DA"
+CFLAGS:prepend = "B "
+CFLAGS:append = " -DC"
+CFLAGS:prepend = "D "
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = ExcessiveAppendPrependRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES005"
+
+
+class TestFunctionRules:
+    """Tests for function rules."""
+
+    def test_task_function_order(self):
+        """Test that non-standard task order is flagged."""
+        from bake_linter.rules.function import TaskFunctionOrderRule
+        
+        content = '''do_install() {
+    install -d ${D}${bindir}
+}
+
+do_configure() {
+    ./configure
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TaskFunctionOrderRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "FUNCTION001"
+
+    def test_python_shell_mixing(self):
+        """Test that mixing Python and shell for same task is flagged."""
+        from bake_linter.rules.function import PythonShellMixingRule
+        
+        content = '''do_custom() {
+    echo "Shell version"
+}
+
+python do_custom() {
+    bb.note("Python version")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PythonShellMixingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "FUNCTION002"
+
+    def test_empty_task_override(self):
+        """Test that empty task override is flagged."""
+        from bake_linter.rules.function import EmptyTaskOverrideRule
+        
+        content = '''do_configure:append() {
+    # Nothing here
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = EmptyTaskOverrideRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "TASK004"
+
+
+class TestSecurityRulesExtended2:
+    """Tests for extended security rules."""
+
+    def test_suid_binary_detection(self):
+        """Test that SUID binary is flagged."""
+        from bake_linter.rules.security import SuidSgidBinaryRule
+        
+        content = '''do_install() {
+    install -m 0755 mytool ${D}${bindir}/
+    chmod 4755 ${D}${bindir}/mytool
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SuidSgidBinaryRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SECURITY008"
+
+    def test_suid_with_justification_ok(self):
+        """Test that SUID with security comment passes."""
+        from bake_linter.rules.security import SuidSgidBinaryRule
+        
+        content = '''do_install() {
+    install -m 0755 mytool ${D}${bindir}/
+    # SECURITY: SUID required for network access
+    chmod 4755 ${D}${bindir}/mytool
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SuidSgidBinaryRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+
+class TestBbappendRulesExtended2:
+    """Tests for extended bbappend rules."""
+
+    def test_global_variable_in_bbappend(self):
+        """Test that global variable in bbappend is flagged."""
+        from bake_linter.rules.bbappend import GlobalVariableInBbappendRule
+        
+        content = '''TMPDIR = "/custom/tmp"
+SRC_URI += "file://patch.patch"
+'''
+        context = FileContext(
+            path=Path("recipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = GlobalVariableInBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "BBAPPEND005"
+
+    def test_recipe_specific_var_ok(self):
+        """Test that recipe-specific variable in bbappend passes."""
+        from bake_linter.rules.bbappend import GlobalVariableInBbappendRule
+        
+        content = '''RDEPENDS:${PN} += "custom-lib"
+SRC_URI += "file://patch.patch"
+'''
+        context = FileContext(
+            path=Path("recipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = GlobalVariableInBbappendRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+
+class TestLayerRules:
+    """Tests for layer configuration rules."""
+
+    def test_missing_layerseries_compat(self):
+        """Test that missing LAYERSERIES_COMPAT is flagged."""
+        from bake_linter.rules.layer import LayerseriesCompatRule
+        
+        content = '''BBFILE_COLLECTIONS += "mylayer"
+BBFILE_PATTERN_mylayer = "^${LAYERDIR}/"
+'''
+        context = FileContext(
+            path=Path("conf/layer.conf"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = LayerseriesCompatRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "LAYER001"
+
+    def test_invalid_release_name(self):
+        """Test that invalid release name is flagged."""
+        from bake_linter.rules.layer import LayerseriesCompatRule
+        
+        content = '''BBFILE_COLLECTIONS += "mylayer"
+LAYERSERIES_COMPAT_mylayer = "invalid-release scarthgap"
+'''
+        context = FileContext(
+            path=Path("conf/layer.conf"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = LayerseriesCompatRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "LAYER001"
+        assert "invalid-release" in results[0].message
+
+    def test_valid_layerseries_compat(self):
+        """Test that valid LAYERSERIES_COMPAT passes."""
+        from bake_linter.rules.layer import LayerseriesCompatRule
+        
+        content = '''BBFILE_COLLECTIONS += "mylayer"
+LAYERSERIES_COMPAT_mylayer = "kirkstone scarthgap"
+'''
+        context = FileContext(
+            path=Path("conf/layer.conf"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = LayerseriesCompatRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+
+class TestLifecycleRules:
+    """Tests for lifecycle/maintenance rules."""
+
+    def test_missing_upstream_check(self):
+        """Test that missing UPSTREAM_CHECK is flagged."""
+        from bake_linter.rules.lifecycle import MissingUpstreamCheckRule
+        
+        content = '''SUMMARY = "My package"
+SRC_URI = "https://example.com/releases/foo-${PV}.tar.gz"
+'''
+        context = FileContext(
+            path=Path("foo_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingUpstreamCheckRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "LIFECYCLE001"
+
+    def test_with_upstream_check_ok(self):
+        """Test that recipe with UPSTREAM_CHECK passes."""
+        from bake_linter.rules.lifecycle import MissingUpstreamCheckRule
+        
+        content = '''SUMMARY = "My package"
+SRC_URI = "https://example.com/releases/foo-${PV}.tar.gz"
+UPSTREAM_CHECK_URI = "https://example.com/releases/"
+UPSTREAM_CHECK_REGEX = "foo-(?P<pver>\\d+\\.\\d+)\\.tar\\.gz"
+'''
+        context = FileContext(
+            path=Path("foo_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MissingUpstreamCheckRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
