@@ -354,12 +354,13 @@ SYSTEMD_AUTO_ENABLE:${PN} = "enable"
         
         assert len(results) == 0
 
-    def test_systemd_redundant_files_flagged(self):
-        """Test that redundant FILES with systemd is flagged."""
+    def test_service_files_not_in_files_flagged(self):
+        """Test that service files installed to non-standard locations without FILES are flagged."""
         from bake_linter.rules.style import SystemdRedundantFilesRule
         
-        content = '''inherit systemd
-FILES:${PN} += "${systemd_system_unitdir}/*.service"
+        content = '''do_install() {
+    install -m 0644 ${WORKDIR}/custom.service ${D}/custom/location/
+}
 '''
         context = FileContext(
             path=Path("test_1.0.bb"),
@@ -373,13 +374,15 @@ FILES:${PN} += "${systemd_system_unitdir}/*.service"
         
         assert len(results) == 1
         assert results[0].rule_id == "STYLE010"
-        assert "redundant" in results[0].message.lower()
+        assert "not be packaged" in results[0].message.lower() or "non-standard" in results[0].message.lower()
 
-    def test_systemd_redundant_files_no_inherit_ok(self):
-        """Test that FILES without systemd inherit is not flagged."""
+    def test_service_files_in_standard_location_ok(self):
+        """Test that service files in standard locations are not flagged."""
         from bake_linter.rules.style import SystemdRedundantFilesRule
         
-        content = '''FILES:${PN} += "${systemd_system_unitdir}/*.service"
+        content = '''do_install() {
+    install -m 0644 ${WORKDIR}/my.service ${D}${systemd_system_unitdir}/
+}
 '''
         context = FileContext(
             path=Path("test_1.0.bb"),
@@ -391,7 +394,29 @@ FILES:${PN} += "${systemd_system_unitdir}/*.service"
         rule = SystemdRedundantFilesRule()
         results = rule.check(context)
         
-        # No inherit systemd, so no flag
+        # Standard location, no flag needed
+        assert len(results) == 0
+
+    def test_service_files_with_explicit_files_ok(self):
+        """Test that service files with explicit FILES entry are not flagged."""
+        from bake_linter.rules.style import SystemdRedundantFilesRule
+        
+        content = '''do_install() {
+    install -m 0644 ${WORKDIR}/custom.service ${D}/custom/location/
+}
+FILES:${PN} += "/custom/location/custom.service"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdRedundantFilesRule()
+        results = rule.check(context)
+        
+        # Has explicit FILES entry, no flag
         assert len(results) == 0
 
 class TestSecurityRules:

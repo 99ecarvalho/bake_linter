@@ -146,7 +146,7 @@ exclude:
 | STYLE007 | Package List Format | Warning | Yes | Check package list formatting (alphabetical, one per line) |
 | STYLE008 | SYSTEMD_AUTO_ENABLE Suffix | Warning | Yes | Check SYSTEMD_AUTO_ENABLE uses :${PN} |
 | STYLE009 | Install Directory Trailing Slash | Info | Yes | Check install commands use trailing / for directories |
-| STYLE010 | Redundant Systemd FILES Entry | Info | Yes | Flag redundant FILES when inheriting systemd |
+| STYLE010 | Service Files Not in FILES | Warning | Yes | Detect service files installed but not in FILES:${PN} |
 
 ### Security Rules
 | Rule ID | Name | Default Severity | Description |
@@ -420,4 +420,61 @@ When adding a new rule:
 - Include helpful fix hints
 - Add unit tests
 - Update this README
+
+## Testing Lint Rules
+
+### Quick Start
+
+To quickly run all rule tests:
+
+```bash
+cd tools/bake_linter
+source .venv/bin/activate  # if using a virtualenv
+pytest tests/test_rules.py
+```
+
+To run a specific test or group (e.g., only style rules):
+
+```bash
+pytest tests/test_rules.py -k style
+```
+
+### Detailed Usage
+
+The main test suite for all lint rules is in `tests/test_rules.py`. This file contains unit tests for every rule, organized by rule category (license, mandatory, deprecated, naming, style, security, systemd, install, bbappend, dependency, patch, etc.).
+
+**Structure:**
+- Each rule category has a test class (e.g., `TestLicenseRules`, `TestStyleRules`)
+- Each rule has one or more test methods covering both positive (should flag) and negative (should not flag) cases
+- Tests use the `FileContext` model to simulate recipe files and variables
+- All rules are tested in isolation for correctness and edge cases
+
+**How to add or debug tests:**
+- Add new test methods to the appropriate class in `tests/test_rules.py`
+- Use `pytest -k <pattern>` to run only tests matching a name or keyword
+- Use `pytest -v` for verbose output
+- Use `pytest --maxfail=1 -x` to stop on first failure
+- Use `pytest --cov=bake_linter --cov-report=html` for coverage
+
+**Example: Adding a new test**
+
+```python
+class TestStyleRules:
+    def test_trailing_whitespace(self):
+        from bake_linter.rules.style import TrailingWhitespaceRule
+        content = 'FOO = "bar"   '\n'
+        context = FileContext(
+            path=Path("test.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        rule = TrailingWhitespaceRule()
+        results = rule.check(context)
+        assert any(r.rule_id == "STYLE001" for r in results)
+```
+
+**Test Coverage:**
+- All rules must have at least one test for both detection and non-detection
+- Run `pytest` before submitting changes to ensure all tests pass
 

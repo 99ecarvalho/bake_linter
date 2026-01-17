@@ -507,51 +507,48 @@ class SystemdRedundantFilesRule(BaseRule):
     Check for redundant FILES entries when using systemd class.
     
     The systemd bbclass automatically adds service files to the package,
-    so explicitly listing them in FILES:${PN} is redundant.
+    service files installed to non-standard locations may not be packaged.
     
-    Files automatically handled by systemd class:
-    - *.service (systemd service units)
-    - *.socket (systemd socket units)
-    - *.timer (systemd timer units)
-    - *.path (systemd path units)
+    The systemd class auto-adds files from ${systemd_system_unitdir}, but
+    service files installed elsewhere need explicit FILES:${PN} entries.
     """
     
     rule_id = "STYLE010"
-    name = "Redundant Systemd FILES Entry"
-    description = "Check for redundant FILES when inheriting systemd"
-    default_severity = Severity.INFO
-    groups = ["style", "systemd", "redundancy"]
-    hint = "Remove redundant FILES entry; systemd class handles this automatically"
+    name = "Service Files Not in FILES"
+    description = "Check for systemd service files installed but not in FILES"
+    default_severity = Severity.WARNING
+    groups = ["style", "systemd", "packaging"]
+    hint = "Add service file path to FILES:${PN}"
 
-    # Patterns that indicate systemd unit files in FILES
-    SYSTEMD_FILE_PATTERNS = [
-        re.compile(r'\$\{systemd_system_unitdir\}'),
-        re.compile(r'\$\{systemd_user_unitdir\}'),
-        re.compile(r'\$\{systemd_unitdir\}'),
-        re.compile(r'\.service'),
-        re.compile(r'\.socket'),
-        re.compile(r'\.timer'),
-        re.compile(r'\.path'),
+    # Pattern to find service file installations in do_install
+    SERVICE_INSTALL_PATTERN = re.compile(
+        r'install\s+.*?(\S+\.service)\s+.*?\$\{D\}(/\S+)',
+        re.IGNORECASE
+    )
+    
+    # Standard systemd directories (auto-handled by systemd class)
+    STANDARD_SYSTEMD_DIRS = [
+        '${systemd_system_unitdir}',
+        '${systemd_user_unitdir}',
+        '${systemd_unitdir}',
+        '/lib/systemd/system',
+        '/usr/lib/systemd/system',
+        '/etc/systemd/system',
     ]
-
-    # Pattern to match FILES variable assignments
-    FILES_PATTERN = re.compile(r'^FILES[_:]')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
-        # First, check if recipe inherits systemd
-        inherits_systemd = False
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("inherit") and "systemd" in stripped:
-                inherits_systemd = True
-                break
+        # Track whether we're inside do_install
+        in_do_install = False
+        brace_depth = 0
         
-        if not inherits_systemd:
-            return results
+        # Collect service file installations to non-standard paths
+        service_installs = []  # List of (line_num, service_name, install_path)
         
-        # Check for FILES entries that reference systemd units
+        # Collect FILES entries
+        files_entries = []
+        
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
@@ -559,17 +556,62 @@ class SystemdRedundantFilesRule(BaseRule):
             if stripped.startswith("#"):
                 continue
             
-            # Check for FILES:${PN} or FILES_${PN} assignments
-            if self.FILES_PATTERN.match(stripped):
-                for pattern in self.SYSTEMD_FILE_PATTERNS:
-                    if pattern.search(stripped):
-                        results.append(self.create_result(
-                            file=context.path,
-                            line=line_num,
-                            message="Redundant FILES entry for systemd units",
-                            context=stripped[:70],
-                            hint="The systemd class automatically adds service/socket/timer files to FILES",
-                        ))
-                        break  # One warning per line
+            # Track do_install function
+            if re.match(r'do_install\s*\(', stripped) or \
+               re.match(r'do_install:append\s*\(', stripped) or \
+               re.match(r'do_install_append\s*\(', stripped):
+                in_do_install = True
+                brace_depth = 0
+            
+            if in_do_install:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0 and '{' not in stripped and '}' in stripped:
+                    in_do_install = False
+                
+                # Look for service file installations
+                match = self.SERVICE_INSTALL_PATTERN.search(line)
+                if match:
+                    service_name = match.group(1)
+                    install_path = match.group(2)
+                    
+                    # Check if it's a non-standard location
+                    is_standard = False
+                    for std_dir in self.STANDARD_SYSTEMD_DIRS:
+                        if std_dir in line or install_path.startswith(std_dir.replace('${', '').replace('}', '')):
+                            is_standard = True
+                            break
+                    
+                    if not is_standard:
+                        service_installs.append((line_num, service_name, install_path))
+            
+            # Collect FILES entries
+            if re.match(r'FILES[_:]\$\{PN\}', stripped):
+                files_entries.append(stripped)
+        
+        # Check if service installs are covered by FILES
+        for line_num, service_name, install_path in service_installs:
+            # Check if this path is covered by any FILES entry
+            path_covered = False
+            for files_entry in files_entries:
+                # Check if the install path or service name appears in FILES
+                if install_path in files_entry or service_name in files_entry:
+                    path_covered = True
+                    break
+                # Check for wildcard patterns
+                if '*.service' in files_entry:
+                    # Check if the directory is covered
+                    dir_path = '/'.join(install_path.split('/')[:-1])
+                    if dir_path in files_entry:
+                        path_covered = True
+                        break
+            
+            if not path_covered:
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message=f"Service file '{service_name}' installed to non-standard location may not be packaged",
+                    context=f"Installed to: {install_path}",
+                    hint=f"Add 'FILES:${{PN}} += \"{install_path}\"' to ensure the service is packaged",
+                ))
         
         return results
