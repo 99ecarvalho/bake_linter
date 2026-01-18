@@ -24,6 +24,10 @@ class VariableNamingRule(BaseRule):
     BitBake variables should follow these conventions:
     - All uppercase for standard variables (LICENSE, SRC_URI)
     - Lowercase for overrides after colon (RDEPENDS:${PN})
+    
+    IMPORTANT: This rule only applies to BitBake metadata context, NOT to
+    Python code inside python functions where PEP 8 lowercase_with_underscores
+    is the correct style for local variables.
     """
     
     rule_id = "NAMING001"
@@ -34,9 +38,20 @@ class VariableNamingRule(BaseRule):
 
     # Pattern for lowercase variable names (potential issue)
     LOWERCASE_VAR_PATTERN = re.compile(r'^[a-z][a-z0-9_]*\s*=')
+    
+    # Pattern to detect python function definition
+    # Matches: python __anonymous() {, python do_foo() {, python foo:append() {
+    PYTHON_FUNC_START = re.compile(r'^python\s+\w+(?::\w+)?\s*\(\s*\)\s*\{')
+    
+    # Pattern to detect shell function definition
+    # Matches: do_install() {, do_configure:append() {, fakeroot do_install() {
+    SHELL_FUNC_START = re.compile(r'^(?:fakeroot\s+)?do_\w+(?::\w+)?\s*\(\s*\)\s*\{')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
+        in_python_func = False
+        in_shell_func = False
+        brace_depth = 0
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -44,12 +59,34 @@ class VariableNamingRule(BaseRule):
             if stripped.startswith("#"):
                 continue
             
-            # Check for lowercase variable names (except shell functions)
+            # Track entry into Python function blocks
+            if self.PYTHON_FUNC_START.match(stripped):
+                in_python_func = True
+                brace_depth = 1
+                continue
+            
+            # Track entry into shell function blocks
+            if self.SHELL_FUNC_START.match(stripped):
+                in_shell_func = True
+                brace_depth = 1
+                continue
+            
+            # Track brace depth to know when we exit a function
+            if in_python_func or in_shell_func:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_python_func = False
+                    in_shell_func = False
+                    brace_depth = 0
+                # Skip checking inside Python functions - lowercase is correct PEP 8 style
+                # Skip checking inside shell functions - shell variables can be lowercase
+                continue
+            
+            # Check for lowercase variable names (only in BitBake metadata context)
             if self.LOWERCASE_VAR_PATTERN.match(stripped):
-                # Skip if it looks like a shell variable in a function
                 var_name = stripped.split("=")[0].strip()
                 
-                # These are valid lowercase names
+                # These are valid lowercase names (keywords/directives)
                 if var_name in {"do_", "python", "inherit", "require", "include"}:
                     continue
                 

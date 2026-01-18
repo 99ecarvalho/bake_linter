@@ -15,7 +15,7 @@ from bake_linter.core.registry import RuleRegistry, get_registry
 from bake_linter.rules.license import LicenseRequiredRule, LicenseTypoRule, LicFilesChkSumRule
 from bake_linter.rules.mandatory import SummaryDescriptionRule, SrcUriRule, InheritCheck
 from bake_linter.rules.deprecated import DeprecatedOverrideSyntaxRule
-from bake_linter.rules.naming import RecipeNamingRule
+from bake_linter.rules.naming import RecipeNamingRule, VariableNamingRule
 from bake_linter.rules.style import EmptyVariableRule, DuplicateInheritRule
 from bake_linter.rules.security import InsecureUriRule
 
@@ -184,6 +184,107 @@ class TestNamingRules:
         results = rule.check(context)
         
         assert any("version" in r.message.lower() for r in results)
+
+    def test_lowercase_bitbake_variable_flagged(self):
+        """Test that lowercase BitBake metadata variables are flagged."""
+        content = '''SUMMARY = "Test"
+my_custom_var = "value"
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(),
+            variables={},
+        )
+        
+        rule = VariableNamingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "NAMING001"
+        assert "my_custom_var" in results[0].message
+
+    def test_lowercase_python_variable_not_flagged(self):
+        """Test that Python local variables inside python functions are NOT flagged.
+        
+        Python functions follow PEP 8 style (lowercase_with_underscores for local vars).
+        This is correct style, NOT a BitBake naming violation.
+        """
+        content = '''SUMMARY = "Test"
+python build_syslinux_cfg:append () {
+    try:
+        menu_default = d.getVar('SYSLINUX_DEFAULT_MENU_FOR_HDDIMG_INSTALL')
+        if menu_default:
+            with open(cfile, 'a') as cfgadd:
+                cfgadd.write(menu_default + '\\n')
+    except Exception as e:
+        bb.error(str(e))
+}
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(),
+            variables={},
+        )
+        
+        rule = VariableNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag menu_default - it's a Python local variable
+        assert not any("menu_default" in r.message for r in results)
+        assert len(results) == 0
+
+    def test_lowercase_shell_variable_not_flagged(self):
+        """Test that shell variables inside do_* functions are NOT flagged.
+        
+        Shell functions may use lowercase variables which is valid shell style.
+        """
+        content = '''SUMMARY = "Test"
+do_install:append() {
+    local_var="/usr/local/bin"
+    install -d ${D}${local_var}
+}
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(),
+            variables={},
+        )
+        
+        rule = VariableNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag local_var - it's inside a shell function
+        assert not any("local_var" in r.message for r in results)
+        assert len(results) == 0
+
+    def test_python_anonymous_function_not_flagged(self):
+        """Test that Python variables in anonymous functions are NOT flagged."""
+        content = '''SUMMARY = "Test"
+python __anonymous() {
+    pn = d.getVar('PN')
+    depends = d.getVar('DEPENDS') or ''
+    d.setVar('DEPENDS', depends + ' ' + pn + '-native')
+}
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(),
+            variables={},
+        )
+        
+        rule = VariableNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag pn, depends - they're Python local variables
+        assert len(results) == 0
 
 
 class TestStyleRules:
