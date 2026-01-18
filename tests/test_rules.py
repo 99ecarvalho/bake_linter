@@ -325,6 +325,31 @@ LICENSE = "MIT"
         assert not any("'k'" in r.message for r in results)
         assert len(results) == 0
 
+    def test_hostname_lowercase_exception_not_flagged(self):
+        """Test that 'hostname' is NOT flagged - it's a known Yocto lowercase variable.
+        
+        The hostname variable is used by base-files recipe to control /etc/hostname.
+        Setting it to empty string prevents /etc/hostname creation.
+        """
+        content = '''COMPATIBLE_MACHINE = "^(max)$"
+# set hostname to "" so /etc/hostname is not created
+hostname = ""
+SRC_URI += "file://config"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(),
+            variables={},
+        )
+        
+        rule = VariableNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag hostname - it's a known Yocto lowercase exception
+        assert not any("hostname" in r.message for r in results)
+        assert len(results) == 0
+
 
 class TestStyleRules:
     """Tests for style rules."""

@@ -28,6 +28,7 @@ class VariableNamingRule(BaseRule):
     IMPORTANT: This rule only applies to BitBake metadata context, NOT to:
     - Python code inside python functions (PEP 8 lowercase is correct)
     - Shell code inside shell functions (lowercase locals are standard)
+    - Known lowercase Yocto/OE-Core variables (hostname, etc.)
     
     Shell functions include do_* tasks and any custom shell function like:
     - do_install() { ... }
@@ -40,6 +41,20 @@ class VariableNamingRule(BaseRule):
     description = "Check for proper BitBake variable naming"
     default_severity = Severity.WARNING
     groups = ["naming", "style"]
+
+    # Known lowercase BitBake/Yocto variables (intentional exceptions)
+    # These are legitimate lowercase variables defined by Yocto/OE-Core
+    LOWERCASE_EXCEPTIONS = {
+        # base-files recipe
+        'hostname',         # Controls /etc/hostname creation
+        # Python context (though usually inside functions)
+        'd',                # DataSmart object
+        'e',                # Event object
+        # Bootloader recipes
+        'cfgscript',        # U-Boot configuration script
+        # Kernel recipes
+        'kconf',            # Kernel config fragments
+    }
 
     # Pattern for lowercase variable names (potential issue)
     LOWERCASE_VAR_PATTERN = re.compile(r'^[a-z][a-z0-9_]*\s*=')
@@ -91,6 +106,10 @@ class VariableNamingRule(BaseRule):
             # Check for lowercase variable names (only in BitBake metadata context)
             if self.LOWERCASE_VAR_PATTERN.match(stripped):
                 var_name = stripped.split("=")[0].strip()
+                
+                # Skip known Yocto/OE-Core lowercase variables
+                if var_name in self.LOWERCASE_EXCEPTIONS:
+                    continue
                 
                 # These are valid lowercase names (keywords/directives)
                 if var_name in {"do_", "python", "inherit", "require", "include"}:
