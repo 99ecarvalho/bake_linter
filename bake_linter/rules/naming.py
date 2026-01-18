@@ -134,6 +134,13 @@ class RecipeNamingRule(BaseRule):
     - recipe-name_version.bb
     - Use hyphens, not underscores in names
     - Version should be present
+    
+    Exceptions where version in filename is optional:
+    - Native recipes (-native): often use PV in recipe
+    - Cross recipes (-cross, -crosssdk): toolchain components
+    - Packagegroups (packagegroup-*): configuration only
+    - Init scripts (init-*, initscripts): system configuration
+    - Base system (base-*, core-*): infrastructure
     """
     
     rule_id = "NAMING002"
@@ -145,6 +152,45 @@ class RecipeNamingRule(BaseRule):
 
     # Pattern for valid recipe names
     VALID_NAME_PATTERN = re.compile(r'^[a-z0-9][-a-z0-9+.]*_[0-9].*\.bb$')
+    
+    # Recipes that commonly don't have version in filename
+    # These are typically infrastructure/toolchain recipes where PV is set in recipe
+    VERSION_OPTIONAL_SUFFIXES = [
+        '-native',
+        '-cross',
+        '-crosssdk',
+        '-initial',
+        '-sdk',
+    ]
+    
+    VERSION_OPTIONAL_PREFIXES = [
+        'packagegroup-',
+        'init-',
+        'initscripts',
+        'base-',
+        'core-image-',
+        'virtual/',
+    ]
+
+    def _is_version_optional(self, filename: str, content: str) -> bool:
+        """Check if version in filename is optional for this recipe type."""
+        name_part = filename.replace('.bb', '')
+        
+        # Check suffixes (native, cross, etc.)
+        for suffix in self.VERSION_OPTIONAL_SUFFIXES:
+            if name_part.endswith(suffix):
+                return True
+        
+        # Check prefixes (packagegroup, init, etc.)
+        for prefix in self.VERSION_OPTIONAL_PREFIXES:
+            if name_part.startswith(prefix):
+                return True
+        
+        # Check if PV is defined in recipe content (version in recipe, not filename)
+        if re.search(r'^\s*PV\s*[?:]?=', content, re.MULTILINE):
+            return True
+        
+        return False
 
     def check(self, context: FileContext) -> List[LintResult]:
         if not self.is_applicable(context):
@@ -166,11 +212,13 @@ class RecipeNamingRule(BaseRule):
         
         # Check for missing version
         if "_" not in filename:
-            results.append(self.create_result(
-                file=context.path,
-                message="Recipe filename missing version (expected: name_version.bb)",
-                hint="Rename recipe to include version, e.g., myrecipe_1.0.bb or myrecipe_git.bb",
-            ))
+            # Skip if version is optional for this recipe type
+            if not self._is_version_optional(filename, context.content):
+                results.append(self.create_result(
+                    file=context.path,
+                    message="Recipe filename missing version (expected: name_version.bb)",
+                    hint="Rename recipe to include version, e.g., myrecipe_1.0.bb or myrecipe_git.bb",
+                ))
         
         # Check for uppercase in filename
         if filename != filename.lower():

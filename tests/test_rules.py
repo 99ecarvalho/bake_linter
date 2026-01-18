@@ -185,6 +185,92 @@ class TestNamingRules:
         
         assert any("version" in r.message.lower() for r in results)
 
+    def test_native_recipe_without_version_not_flagged(self):
+        """Test that native recipes without version in filename are NOT flagged.
+        
+        Native recipes commonly use PV in the recipe content and don't
+        require version in the filename.
+        """
+        content = '''SUMMARY = "Rockchip binary tools"
+LICENSE = "CLOSED"
+PV = "1.0+git${SRCPV}"
+SRCREV = "abc123..."
+'''
+        context = FileContext(
+            path=Path("rk-binary-native.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RecipeNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - native recipe with PV defined
+        version_issues = [r for r in results if "version" in r.message.lower()]
+        assert len(version_issues) == 0
+
+    def test_packagegroup_without_version_not_flagged(self):
+        """Test that packagegroup recipes without version are NOT flagged."""
+        content = '''SUMMARY = "Core packagegroup"
+LICENSE = "MIT"
+inherit packagegroup
+RDEPENDS:${PN} = "base-files"
+'''
+        context = FileContext(
+            path=Path("packagegroup-core.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RecipeNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - packagegroups don't need version
+        version_issues = [r for r in results if "version" in r.message.lower()]
+        assert len(version_issues) == 0
+
+    def test_cross_recipe_without_version_not_flagged(self):
+        """Test that cross-compiler recipes without version are NOT flagged."""
+        content = '''SUMMARY = "GCC cross compiler"
+LICENSE = "GPL-3.0"
+PV = "13.2"
+'''
+        context = FileContext(
+            path=Path("gcc-cross.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RecipeNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - cross recipes don't need version in filename
+        version_issues = [r for r in results if "version" in r.message.lower()]
+        assert len(version_issues) == 0
+
+    def test_recipe_with_pv_in_content_not_flagged(self):
+        """Test that recipe with PV defined is NOT flagged for missing version."""
+        content = '''SUMMARY = "Some tool"
+LICENSE = "MIT"
+PV = "2.0"
+'''
+        context = FileContext(
+            path=Path("sometool.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RecipeNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - PV is defined in recipe
+        version_issues = [r for r in results if "version" in r.message.lower()]
+        assert len(version_issues) == 0
+
     def test_lowercase_bitbake_variable_flagged(self):
         """Test that lowercase BitBake metadata variables are flagged."""
         content = '''SUMMARY = "Test"
