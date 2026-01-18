@@ -87,6 +87,11 @@ class UnconventionalSAssignmentRule(BaseRule):
     - Flat source structure (no subdirectory)
     - Missing source directory specification
     - Potential build isolation issues
+    
+    However, it IS acceptable for:
+    - File-only recipes (local scripts, config files)
+    - Recipes without compilation (no source tarball)
+    - Simple utility/configuration recipes
     """
     
     rule_id = "VARIABLES002"
@@ -94,7 +99,7 @@ class UnconventionalSAssignmentRule(BaseRule):
     description = "Detects S = \"${WORKDIR}\" which is unconventional"
     default_severity = Severity.WARNING
     groups = ["variables"]
-    hint = "Use S = \"${WORKDIR}/${PN}-${PV}\" or specify actual source directory"
+    hint = "Standard is S = \"${WORKDIR}/${PN}-${PV}\" - acceptable for file-only recipes without compilation"
 
     S_WORKDIR_PATTERN = re.compile(r'^S\s*=\s*["\']?\$\{WORKDIR\}["\']?\s*$')
 
@@ -113,7 +118,7 @@ class UnconventionalSAssignmentRule(BaseRule):
                     line=line_num,
                     message="Unconventional S = \"${WORKDIR}\" assignment",
                     context=stripped,
-                    hint="Standard is S = \"${WORKDIR}/${PN}-${PV}\" or custom subdirectory",
+                    hint="Standard is S = \"${WORKDIR}/${PN}-${PV}\" - acceptable for file-only recipes without compilation",
                 ))
         
         return results
