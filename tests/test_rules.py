@@ -3539,6 +3539,60 @@ FILES:${PN}-extra = "${datadir}/extra/*"
         # Should NOT flag ${PN}-extra - it's added via PACKAGES =+
         assert len(results) == 0
 
+    def test_rdepends_ptest_with_inherit_not_flagged(self):
+        """Test that RDEPENDS:${PN}-ptest with 'inherit ptest' is NOT flagged.
+        
+        The ptest class automatically creates ${PN}-ptest package.
+        """
+        from bake_linter.rules.package import RdependsPackageExistenceRule
+        
+        content = '''inherit autotools pkgconfig ptest
+
+do_install_ptest() {
+    cp -r ${S}/tests ${D}${PTEST_PATH}
+}
+
+RDEPENDS:${PN}-ptest += " \\
+    locale-base-en-us \\
+    perl-module-b \\
+    perl-module-base \\
+"
+'''
+        context = FileContext(
+            path=Path("curl_8.5.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RdependsPackageExistenceRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - ptest class auto-creates ${PN}-ptest
+        assert len(results) == 0
+
+    def test_rdepends_ptest_without_inherit_flagged(self):
+        """Test that RDEPENDS:${PN}-ptest WITHOUT 'inherit ptest' IS flagged."""
+        from bake_linter.rules.package import RdependsPackageExistenceRule
+        
+        content = '''inherit autotools pkgconfig
+
+RDEPENDS:${PN}-ptest += "bash"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RdependsPackageExistenceRule()
+        results = rule.check(context)
+        
+        # Should flag - no ptest inheritance, ${PN}-ptest doesn't exist
+        assert len(results) == 1
+        assert results[0].rule_id == "PKG005"
+
 
 class TestVariablesRulesExtended:
     """Tests for extended variable rules."""

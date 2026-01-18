@@ -331,6 +331,7 @@ class RdependsPackageExistenceRule(BaseRule):
     Recognizes packages added via:
     - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
     - PACKAGE_BEFORE_PN += "..."
+    - Inherited classes that auto-create packages (ptest, etc.)
     """
     
     rule_id = "PKG005"
@@ -344,13 +345,46 @@ class RdependsPackageExistenceRule(BaseRule):
     PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
     PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
     
-    STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc']
+    # Standard packages that always exist
+    STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc', 
+                         '${PN}-staticdev', '${PN}-locale']
+    
+    # Classes that auto-create packages: (class_name, package_suffix)
+    # When a recipe inherits these classes, the corresponding package is auto-created
+    CLASS_AUTO_PACKAGES = {
+        'ptest': '${PN}-ptest',
+        'python3-dir': '${PN}-staticdev',
+        'kernel': '${KERNEL_PACKAGE_NAME}-base',
+    }
+
+    def _get_inherited_classes(self, context: FileContext) -> set:
+        """Extract all inherited classes from the recipe."""
+        classes = set()
+        for line in context.lines:
+            stripped = line.strip()
+            if stripped.startswith('inherit'):
+                # Extract class names from "inherit foo bar baz"
+                parts = stripped.split()
+                classes.update(parts[1:])  # Skip 'inherit' keyword
+        return classes
+
+    def _get_auto_created_packages(self, inherited_classes: set) -> set:
+        """Get packages auto-created by inherited classes."""
+        auto_packages = set()
+        for class_name, pkg_pattern in self.CLASS_AUTO_PACKAGES.items():
+            if class_name in inherited_classes:
+                auto_packages.add(pkg_pattern)
+        return auto_packages
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
         rdepends_packages: List[tuple] = []
         packages_list: List[str] = []
+        
+        # Get auto-created packages from inherited classes
+        inherited_classes = self._get_inherited_classes(context)
+        auto_packages = self._get_auto_created_packages(inherited_classes)
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -375,7 +409,12 @@ class RdependsPackageExistenceRule(BaseRule):
                 packages_list.extend(re.findall(r'[\w${}-]+', value))
         
         for line_num, pkg_name in rdepends_packages:
+            # Skip standard packages
             if pkg_name in self.STANDARD_PACKAGES:
+                continue
+            
+            # Skip packages auto-created by inherited classes
+            if pkg_name in auto_packages:
                 continue
             
             if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
