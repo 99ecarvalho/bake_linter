@@ -286,6 +286,45 @@ LICENSE = "MIT"
         # Should NOT flag pn, depends - they're Python local variables
         assert len(results) == 0
 
+    def test_lowercase_custom_shell_function_not_flagged(self):
+        """Test that shell variables inside custom shell functions are NOT flagged.
+        
+        Custom shell functions like uboot_compile_config() should not have their
+        local variables flagged - lowercase is standard shell convention.
+        """
+        content = '''UBOOT_BINARY = "u-boot.img"
+uboot_compile_config () {
+    i=$1
+    config=$2
+    type=$3
+    oe_runmake -C ${S} O=${B}/${config} ${UBOOT_MAKE_TARGET}
+    unset k
+    for binary in ${UBOOT_BINARIES}; do
+        k=$(expr $k + 1);
+        if [ $k -eq $i ]; then
+            echo "Found"
+        fi
+    done
+}
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(),
+            variables={},
+        )
+        
+        rule = VariableNamingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag i, config, type, k - they're shell function local variables
+        assert not any("'i'" in r.message for r in results)
+        assert not any("config" in r.message for r in results)
+        assert not any("type" in r.message for r in results)
+        assert not any("'k'" in r.message for r in results)
+        assert len(results) == 0
+
 
 class TestStyleRules:
     """Tests for style rules."""

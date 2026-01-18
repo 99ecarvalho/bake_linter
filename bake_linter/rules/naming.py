@@ -25,9 +25,14 @@ class VariableNamingRule(BaseRule):
     - All uppercase for standard variables (LICENSE, SRC_URI)
     - Lowercase for overrides after colon (RDEPENDS:${PN})
     
-    IMPORTANT: This rule only applies to BitBake metadata context, NOT to
-    Python code inside python functions where PEP 8 lowercase_with_underscores
-    is the correct style for local variables.
+    IMPORTANT: This rule only applies to BitBake metadata context, NOT to:
+    - Python code inside python functions (PEP 8 lowercase is correct)
+    - Shell code inside shell functions (lowercase locals are standard)
+    
+    Shell functions include do_* tasks and any custom shell function like:
+    - do_install() { ... }
+    - my_helper_func () { ... }
+    - uboot_compile_config () { ... }
     """
     
     rule_id = "NAMING001"
@@ -44,8 +49,9 @@ class VariableNamingRule(BaseRule):
     PYTHON_FUNC_START = re.compile(r'^python\s+\w+(?::\w+)?\s*\(\s*\)\s*\{')
     
     # Pattern to detect shell function definition
-    # Matches: do_install() {, do_configure:append() {, fakeroot do_install() {
-    SHELL_FUNC_START = re.compile(r'^(?:fakeroot\s+)?do_\w+(?::\w+)?\s*\(\s*\)\s*\{')
+    # Matches any shell function: do_install() {, my_func () {, uboot_compile_config () {
+    # Also handles: fakeroot do_install() {, do_configure:append() {
+    SHELL_FUNC_START = re.compile(r'^(?:fakeroot\s+)?[a-zA-Z_][a-zA-Z0-9_]*(?::\w+)?\s*\(\s*\)\s*\{')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -65,7 +71,7 @@ class VariableNamingRule(BaseRule):
                 brace_depth = 1
                 continue
             
-            # Track entry into shell function blocks
+            # Track entry into shell function blocks (any function, not just do_*)
             if self.SHELL_FUNC_START.match(stripped):
                 in_shell_func = True
                 brace_depth = 1
