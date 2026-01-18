@@ -99,6 +99,7 @@ class HtmlFormatter(BaseFormatter):
             <h1>🔍 {html.escape(self.title)}</h1>
             <p class="timestamp">Generated: {timestamp}</p>
             <div class="copyright-section">
+                <!-- START: DO NOT REMOVE OR MODIFY THIS COPYRIGHT NOTICE -->
                 <p class="copyright-main">© 2024-2026 <a href="https://www.apliant.com.br/cv" target="_blank" class="author-link">Eduardo Correia</a> — <a href="https://www.apliant.com.br/cv" target="_blank" class="cv-link">📄 Curriculum Vitae</a></p>
                 <p class="copyright-links">
                     <a href="mailto:ecorreia@apliant.com.br" class="contact-link">📧 ecorreia@apliant.com.br</a>
@@ -107,6 +108,7 @@ class HtmlFormatter(BaseFormatter):
                     <span class="link-separator">•</span>
                     <a href="https://www.linkedin.com/in/c99-eduardo/" target="_blank" class="contact-link linkedin-link">💼 LinkedIn</a>
                 </p>
+                <!-- END: DO NOT REMOVE OR MODIFY THIS COPYRIGHT NOTICE -->
             </div>
         </header>
         
