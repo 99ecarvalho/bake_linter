@@ -57,6 +57,10 @@ bake-linter --format compact .
 # CI mode (no colors, strict exit codes)
 bake-linter --ci .
 
+# Exclude directories or files (can be used multiple times, like rsync)
+bake-linter --exclude 'build/*' --exclude 'test/' .
+bake-linter --exclude 'recipes-deprecated' --exclude '*.bak' meta-layer/
+
 # List all available rules
 bake-linter --list-rules
 

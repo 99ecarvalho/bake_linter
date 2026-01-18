@@ -79,6 +79,23 @@ class TestCLIParser:
         args = parser.parse_args(["--output", "html,/tmp/reports/output.html", "."])
         assert args.outputs == [("html", "/tmp/reports/output.html")]
 
+    def test_exclude_single(self):
+        """Test single exclude pattern."""
+        parser = create_parser()
+        args = parser.parse_args(["--exclude", "build/*", "."])
+        assert args.exclude_patterns == ["build/*"]
+
+    def test_exclude_multiple(self):
+        """Test multiple exclude patterns."""
+        parser = create_parser()
+        args = parser.parse_args([
+            "--exclude", "build/*",
+            "--exclude", "*.bak",
+            "--exclude", "test/",
+            "."
+        ])
+        assert args.exclude_patterns == ["build/*", "*.bak", "test/"]
+
 
 class TestOutputSpecParser:
     """Tests for output specification parser."""
