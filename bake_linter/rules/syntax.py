@@ -364,8 +364,24 @@ class InvalidOverrideOrderingRule(BaseRule):
     """
     Check for incorrect override ordering in variable assignments.
     
-    Canonical order: :class-*:pn-*:machine:distro:append/:prepend/:remove
-    Operation overrides (:append, :prepend, :remove) should always be last.
+    In BitBake, the correct order for variable overrides is:
+        VARIABLE:operation:conditional_overrides
+    
+    Where:
+    - Operations: :append, :prepend, :remove (come FIRST after variable name)
+    - Conditional overrides: :machine, :class-target, :pn-*, etc. (come AFTER operation)
+    
+    CORRECT examples:
+        RDEPENDS:append:${PN} = " package"      # operation first, then PN override
+        WKS_FILE_DEPENDS:append:qemux86-64 = " x"  # operation first, then machine override
+        DEPENDS:remove:class-native = "pkg"     # operation first, then class override
+    
+    INCORRECT examples:
+        RDEPENDS:${PN}:append = " package"      # WRONG - operation should be first
+        WKS_FILE_DEPENDS:qemux86-64:append = " x"  # WRONG - operation should be first
+    
+    This rule detects when operations are placed AFTER conditional overrides,
+    which is incorrect BitBake syntax.
     """
     
     rule_id = "SYNTAX006"
@@ -373,10 +389,10 @@ class InvalidOverrideOrderingRule(BaseRule):
     description = "Detects incorrect override ordering in variable assignments"
     default_severity = Severity.WARNING
     groups = ["syntax"]
-    hint = "Place :append/:prepend/:remove at the end of override chain"
+    hint = "Place :append/:prepend/:remove BEFORE conditional overrides (e.g., VAR:append:machine)"
 
-    # Operation overrides that should be last
-    OPERATION_OVERRIDES = [':append', ':prepend', ':remove']
+    # Operation overrides that should come first (right after variable name)
+    OPERATION_OVERRIDES = ['append', 'prepend', 'remove']
     
     # Pattern to find variable assignments with multiple overrides
     MULTI_OVERRIDE_PATTERN = re.compile(r'^([A-Z_][A-Z0-9_]*)((?::[a-zA-Z0-9_${}+-]+)+)\s*[+?:]?=')
@@ -398,17 +414,25 @@ class InvalidOverrideOrderingRule(BaseRule):
                 overrides = [o for o in overrides_str.split(':') if o]
                 
                 if len(overrides) >= 2:
-                    # Check if operation override is not last
-                    for i, override in enumerate(overrides[:-1]):  # Exclude last
-                        if any(op.lstrip(':') == override for op in self.OPERATION_OVERRIDES):
-                            results.append(self.create_result(
-                                file=context.path,
-                                line=line_num,
-                                message=f"Override ':{override}' should be last in override chain",
-                                context=stripped[:60],
-                                hint="Reorder to: VAR:class-*:pn-*:append (operation last)",
-                            ))
+                    # Find if there's an operation override
+                    operation_index = -1
+                    for i, override in enumerate(overrides):
+                        if override in self.OPERATION_OVERRIDES:
+                            operation_index = i
                             break
+                    
+                    # If operation found and it's NOT first, that's an error
+                    # Operations should come immediately after the variable name
+                    if operation_index > 0:
+                        # Operation is not first - this is wrong order
+                        operation = overrides[operation_index]
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message=f"Operation ':{operation}' should come BEFORE conditional overrides",
+                            context=stripped[:60],
+                            hint=f"Correct order: VAR:{operation}:override (e.g., VAR:{operation}:{overrides[0]})",
+                        ))
         
         return results
 

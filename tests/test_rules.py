@@ -1841,11 +1841,39 @@ do_install:append() {
         assert results[0].rule_id == "SYNTAX005"
         assert "SRC_URI_append" in results[0].context
 
-    def test_invalid_override_ordering(self):
-        """Test that :prepend after :append is flagged."""
+    def test_invalid_override_ordering_operation_after_conditional(self):
+        """Test that operation AFTER conditional override is flagged.
+        
+        BitBake requires operations (:append/:prepend/:remove) to come BEFORE
+        conditional overrides (:machine/:class-*/:pn-*).
+        
+        WRONG: VAR:qemux86-64:append = "value"  (conditional before operation)
+        RIGHT: VAR:append:qemux86-64 = "value"  (operation before conditional)
+        """
         from bake_linter.rules.syntax import InvalidOverrideOrderingRule
         
-        content = '''CFLAGS:append:prepend = " -DFOO"
+        content = '''CFLAGS:qemux86-64:append = " -DFOO"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        # Should flag - :append should come BEFORE :qemux86-64
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX006"
+        assert "append" in results[0].message
+
+    def test_invalid_override_ordering_class_before_prepend(self):
+        """Test that class override before :prepend is flagged."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''VAR:class-target:prepend = "value"
 '''
         context = FileContext(
             path=Path("test_1.0.bb"),
@@ -1859,6 +1887,116 @@ do_install:append() {
         
         assert len(results) == 1
         assert results[0].rule_id == "SYNTAX006"
+        assert "prepend" in results[0].message
+
+    def test_invalid_override_ordering_pn_before_remove(self):
+        """Test that pn override before :remove is flagged."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''VAR:pn-recipe:remove = "value"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX006"
+        assert "remove" in results[0].message
+
+    def test_valid_override_ordering_operation_first(self):
+        """Test that operation BEFORE conditional override is NOT flagged.
+        
+        This is the correct BitBake syntax:
+        VAR:append:machine = "value"
+        VAR:prepend:class-target = "value"
+        """
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''WKS_FILE_DEPENDS:append:qemux86-64 = " example-initramfs"
+RDEPENDS:append:${PN} = " bash"
+DEPENDS:remove:class-native = "pkgconfig"
+VAR:prepend:class-target = "value"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - operations come first (correct order)
+        assert len(results) == 0
+
+    def test_valid_override_ordering_single_operation(self):
+        """Test that single operation without conditional is NOT flagged."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''VAR:append = "value"
+VAR:prepend = "other"
+VAR:remove = "item"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - single operations are valid
+        assert len(results) == 0
+
+    def test_valid_override_ordering_just_conditional(self):
+        """Test that just conditional override without operation is NOT flagged."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''VAR:qemux86 = "value"
+VAR:class-native = "other"
+VAR:pn-myrecipe = "something"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - just overrides without operations
+        assert len(results) == 0
+
+    def test_valid_override_ordering_multiple_conditionals(self):
+        """Test that operation followed by multiple conditionals is NOT flagged."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+        
+        content = '''VAR:append:qemux86:class-target = "value"
+VAR:prepend:pn-recipe:qemuall = "value"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - operation comes first, multiple conditionals after
+        assert len(results) == 0
 
 
 class TestPackageRules:
