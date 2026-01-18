@@ -97,6 +97,9 @@ class SrcrevUnpinnedRule(BaseRule):
     
     SRCREV should be pinned to a specific commit SHA for reproducible builds.
     Using branch names or AUTOREV is dangerous for production.
+    
+    Note: SRCREV_FORMAT is a special variable used for multi-repo version
+    formatting and should not be checked - it's a format string, not a commit.
     """
     
     rule_id = "SRCREV001"
@@ -109,6 +112,10 @@ class SrcrevUnpinnedRule(BaseRule):
     # SHA-1 hash pattern (40 hex chars)
     SHA_PATTERN = re.compile(r'^[a-f0-9]{40}$')
     
+    # Pattern to match SRCREV variable assignments
+    # Captures the suffix (empty, _reponame, _FORMAT, etc.) and the value
+    SRCREV_PATTERN = re.compile(r'^SRCREV(_[\w]+)?\s*[?:]?=\s*["\']?([^"\']+)["\']?')
+    
     # Dangerous SRCREV values
     DANGEROUS_VALUES = [
         '${AUTOREV}',
@@ -120,6 +127,10 @@ class SrcrevUnpinnedRule(BaseRule):
         'dev',
         'trunk',
     ]
+    
+    # Special SRCREV suffixes that are NOT commit hashes
+    # SRCREV_FORMAT is a format string for multi-repo SRCPV generation
+    SPECIAL_SUFFIXES = ['_FORMAT']
     
     # Pattern for recipe names that are expected to track HEAD
     DEV_RECIPE_PATTERN = re.compile(r'[-_](git|dev|snapshot|trunk|tip)\.bb$')
@@ -139,31 +150,34 @@ class SrcrevUnpinnedRule(BaseRule):
                 continue
             
             # Look for SRCREV assignments
-            if stripped.startswith('SRCREV') and '=' in stripped:
-                # Extract value
-                parts = stripped.split('=', 1)
-                if len(parts) == 2:
-                    value = parts[1].strip().strip('"\'')
-                    
-                    # Check if it's a dangerous value
-                    if value in self.DANGEROUS_VALUES:
+            match = self.SRCREV_PATTERN.match(stripped)
+            if match:
+                suffix = match.group(1) or ''  # Could be None, '_FORMAT', '_reponame', etc.
+                value = match.group(2).strip()
+                
+                # Skip special suffixes like SRCREV_FORMAT (format string, not commit)
+                if suffix in self.SPECIAL_SUFFIXES:
+                    continue
+                
+                # Check if it's a dangerous value
+                if value in self.DANGEROUS_VALUES:
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"Unpinned SRCREV '{value}' causes non-reproducible builds",
+                        context=stripped[:60],
+                        hint="Pin to specific commit: SRCREV = \"<40-char-sha1>\"",
+                    ))
+                # Check if it looks like a branch name (not a SHA)
+                elif value and not self.SHA_PATTERN.match(value) and not value.startswith('${'):
+                    # Could be a branch name
+                    if not any(c in value for c in ['$', '{', '}']):
                         results.append(self.create_result(
                             file=context.path,
                             line=line_num,
-                            message=f"Unpinned SRCREV '{value}' causes non-reproducible builds",
+                            message=f"SRCREV '{value}' appears to be a branch name, not a commit hash",
                             context=stripped[:60],
                             hint="Pin to specific commit: SRCREV = \"<40-char-sha1>\"",
                         ))
-                    # Check if it looks like a branch name (not a SHA)
-                    elif value and not self.SHA_PATTERN.match(value) and not value.startswith('${'):
-                        # Could be a branch name
-                        if not any(c in value for c in ['$', '{', '}']):
-                            results.append(self.create_result(
-                                file=context.path,
-                                line=line_num,
-                                message=f"SRCREV '{value}' appears to be a branch name, not a commit hash",
-                                context=stripped[:60],
-                                hint="Pin to specific commit: SRCREV = \"<40-char-sha1>\"",
-                            ))
         
         return results

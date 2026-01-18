@@ -1684,6 +1684,57 @@ class TestPatchRules:
         # Should not flag -git recipes
         assert len(results) == 0
 
+    def test_srcrev_format_not_flagged(self):
+        """Test that SRCREV_FORMAT is NOT flagged as unpinned.
+        
+        SRCREV_FORMAT is a special variable for multi-repo version formatting.
+        It's a format string like "rkbin_tools", not a commit hash.
+        """
+        from bake_linter.rules.patch import SrcrevUnpinnedRule
+        
+        content = '''SRCREV_rkbin = "c41b714cacd249e3ef69b2bbe774da5095eefd72"
+SRCREV_tools = "1a32bc776af52494144fcef6641a73850cee628a"
+SRCREV_FORMAT ?= "rkbin_tools"
+S = "${WORKDIR}/git"
+'''
+        context = FileContext(
+            path=Path("firmware_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcrevUnpinnedRule()
+        results = rule.check(context)
+        
+        # SRCREV_FORMAT should NOT be flagged - it's a format string, not a commit
+        # The actual SRCREV_rkbin and SRCREV_tools are properly pinned
+        assert len(results) == 0
+
+    def test_srcrev_multi_repo_with_format(self):
+        """Test multi-repo recipe with SRCREV_FORMAT passes."""
+        from bake_linter.rules.patch import SrcrevUnpinnedRule
+        
+        content = '''SRC_URI = "git://example.com/rkbin.git;name=rkbin;branch=main \\
+           git://example.com/tools.git;name=tools;branch=master;destsuffix=tools"
+
+SRCREV_rkbin = "c41b714cacd249e3ef69b2bbe774da5095eefd72"
+SRCREV_tools = "1a32bc776af52494144fcef6641a73850cee628a"
+SRCREV_FORMAT = "rkbin_tools"
+'''
+        context = FileContext(
+            path=Path("firmware_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SrcrevUnpinnedRule()
+        results = rule.check(context)
+        
+        # All SRCREVs are properly pinned, FORMAT is a format string
+        assert len(results) == 0
+
 
 class TestRuleRegistry:
     """Tests for rule registry functionality."""
