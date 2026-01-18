@@ -740,6 +740,75 @@ do_install() {
         assert len(results) == 1
         assert results[0].rule_id == "SYSTEMD003"
 
+    def test_systemd_src_uri_path_not_flagged(self):
+        """Test that systemd paths in SRC_URI are NOT flagged (source location)."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''SRC_URI = "git://github.com/example/repo.git;protocol=https;branch=main \\
+           file://0001-fix.patch \\
+           file://res/usr/lib/systemd/system/myservice.service \\
+           file://res/usr/bin/myscript \\
+           "
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # SRC_URI paths are source file locations - should NOT be flagged
+        assert len(results) == 0
+
+    def test_systemd_workdir_source_with_proper_dest_not_flagged(self):
+        """Test that source path from WORKDIR with proper dest is NOT flagged."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''do_install() {
+    install -d ${D}${systemd_system_unitdir}
+    install -m 644 ${WORKDIR}/res/usr/lib/systemd/system/myservice.service ${D}${systemd_system_unitdir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Source path from ${WORKDIR} with proper ${D}${systemd_system_unitdir} dest
+        # should NOT be flagged
+        assert len(results) == 0
+
+    def test_systemd_hardcoded_dest_flagged(self):
+        """Test that hardcoded DESTINATION paths ARE flagged."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''do_install() {
+    install -d ${D}/usr/lib/systemd/system
+    install -m 644 myservice.service ${D}/usr/lib/systemd/system/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Hardcoded destination paths should BE flagged
+        assert len(results) >= 1
+        assert all(r.rule_id == "SYSTEMD003" for r in results)
+
 
 class TestInstallRules:
     """Tests for install-related rules."""

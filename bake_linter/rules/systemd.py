@@ -164,6 +164,9 @@ class SystemdHardcodedPathsRule(BaseRule):
     
     Hardcoded paths like /lib/systemd/system should use ${systemd_system_unitdir}
     for portability across different distributions.
+    
+    Note: Only DESTINATION paths need variables. Source paths (SRC_URI, ${WORKDIR})
+    can use literal paths since they refer to file locations in the build workspace.
     """
     
     rule_id = "SYSTEMD003"
@@ -183,8 +186,57 @@ class SystemdHardcodedPathsRule(BaseRule):
         (re.compile(r'/usr/lib/systemd(?![a-z/])'), "${systemd_unitdir}"),
     ]
 
+    # Patterns indicating the line is a SOURCE path context (not a destination)
+    SOURCE_PATH_PATTERNS = [
+        re.compile(r'^\s*SRC_URI\s*[+?]?='),           # SRC_URI assignment
+        re.compile(r'^\s*SRC_URI\s*:'),                # SRC_URI with override
+        re.compile(r'file://'),                        # file:// URI (source file location)
+        re.compile(r'\$\{WORKDIR\}/.*/systemd/'),      # ${WORKDIR}/path - source location
+        re.compile(r'\$\{S\}/.*/systemd/'),            # ${S}/path - source location
+        re.compile(r'\$\{UNPACKDIR\}/.*/systemd/'),    # ${UNPACKDIR}/path - source location
+    ]
+
+    # Pattern to detect install commands with proper destination
+    # e.g., "install ... ${WORKDIR}/path/file ${D}${systemd_system_unitdir}"
+    INSTALL_WITH_PROPER_DEST = re.compile(
+        r'install\s+.*\$\{(WORKDIR|S|UNPACKDIR)\}/.*/systemd/.*\s+\$\{D\}\$\{systemd_'
+    )
+
+    def _is_source_path_context(self, line: str) -> bool:
+        """Check if the line is in a source path context (not a destination)."""
+        for pattern in self.SOURCE_PATH_PATTERNS:
+            if pattern.search(line):
+                return True
+        
+        # Check for install command with source from WORKDIR and proper destination
+        if self.INSTALL_WITH_PROPER_DEST.search(line):
+            return True
+        
+        return False
+
+    def _is_hardcoded_destination(self, line: str) -> bool:
+        """
+        Check if the hardcoded path is used as a DESTINATION (which is bad).
+        
+        Bad: install -d ${D}/usr/lib/systemd/system
+        Bad: install file ${D}/usr/lib/systemd/system/
+        Good: install file ${D}${systemd_system_unitdir}
+        """
+        # Check for ${D}/ followed by hardcoded systemd path (bad destination)
+        if re.search(r'\$\{D\}/(usr/)?lib/systemd/', line):
+            return True
+        
+        # Check for install -d with hardcoded path after ${D}
+        if re.search(r'install\s+-[dDm0-9]*\s+\$\{D\}/(usr/)?lib/systemd', line):
+            return True
+        
+        return False
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
+        
+        # Track if we're inside a multi-line SRC_URI
+        in_src_uri = False
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -193,15 +245,33 @@ class SystemdHardcodedPathsRule(BaseRule):
             if stripped.startswith("#"):
                 continue
             
+            # Track multi-line SRC_URI blocks
+            if re.match(r'^\s*SRC_URI\s*[+?:]?=', line):
+                in_src_uri = True
+            if in_src_uri:
+                # SRC_URI continues if line ends with \ or we're in a quoted string
+                if not stripped.endswith('\\') and (stripped.endswith('"') or stripped.endswith("'")):
+                    in_src_uri = False
+                # Skip - SRC_URI paths are source file locations
+                continue
+            
+            # Skip source path contexts (file://, ${WORKDIR}, etc.)
+            if self._is_source_path_context(line):
+                continue
+            
+            # Check for hardcoded paths
             for pattern, replacement in self.HARDCODED_PATHS:
                 if pattern.search(line):
-                    results.append(self.create_result(
-                        file=context.path,
-                        line=line_num,
-                        message=f"Hardcoded systemd path found",
-                        context=stripped[:70],
-                        hint=f"Use {replacement} instead",
-                    ))
+                    # Only flag if it's clearly a destination path issue
+                    # or not in any recognized source context
+                    if self._is_hardcoded_destination(line) or not self._is_source_path_context(line):
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message="Hardcoded systemd path found",
+                            context=stripped[:70],
+                            hint=f"Use {replacement} instead",
+                        ))
                     break  # One warning per line
         
         return results
