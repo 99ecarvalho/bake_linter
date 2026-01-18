@@ -83,6 +83,9 @@ class HardcodedPathsRule(BaseRule):
     where literal paths like /etc/hosts are appropriate for human readability.
     Users reading package descriptions need to see actual paths, not variables.
     
+    Also skips shebang patterns (#!/usr/bin/env, #!/bin/sh, etc.) since these
+    are standard Unix runtime conventions, not build-time paths.
+    
     Only flags hardcoded paths in actual code contexts:
     - Shell task implementations (do_install, do_configure, etc.)
     - FILES variable assignments
@@ -127,6 +130,26 @@ class HardcodedPathsRule(BaseRule):
     
     # Pattern to detect documentation variable assignment
     DOC_VAR_PATTERN = re.compile(r'^(' + '|'.join(DOCUMENTATION_VARS) + r')\s*[+:]?=')
+    
+    # Shebang patterns - these are standard Unix runtime conventions, not build paths
+    # e.g., #!/usr/bin/env python3, #!/bin/sh, #!/bin/bash
+    SHEBANG_PATTERNS = [
+        re.compile(r'#!/usr/bin/env\b'),      # Portable shebang: #!/usr/bin/env python3
+        re.compile(r'#!/bin/sh\b'),           # Standard sh
+        re.compile(r'#!/bin/bash\b'),         # Bash
+        re.compile(r'#!\s*/usr/bin/'),        # Direct interpreter: #!/usr/bin/python3
+        re.compile(r'#!\s*/bin/'),            # Direct interpreter: #!/bin/sh
+        re.compile(r"'#!/"),                  # Quoted shebang in string
+        re.compile(r'"#!/'),                  # Quoted shebang in string
+        re.compile(r'\|#!/'),                 # Shebang in sed/awk pattern
+    ]
+
+    def _is_shebang_context(self, line: str) -> bool:
+        """Check if the line contains a shebang pattern (runtime convention)."""
+        for pattern in self.SHEBANG_PATTERNS:
+            if pattern.search(line):
+                return True
+        return False
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -145,6 +168,11 @@ class HardcodedPathsRule(BaseRule):
             # Skip documentation variables (SUMMARY, DESCRIPTION, etc.)
             # Literal paths are appropriate for human-readable documentation
             if self.DOC_VAR_PATTERN.match(stripped):
+                continue
+            
+            # Skip shebang patterns - these are runtime conventions, not build paths
+            # e.g., #!/usr/bin/env python3 is the standard portable shebang
+            if self._is_shebang_context(line):
                 continue
             
             for pattern, var_name, example_path in self.PATH_MAPPINGS:

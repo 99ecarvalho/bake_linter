@@ -517,6 +517,64 @@ LICENSE = "MIT"
         sharedstatedir_result = [r for r in results if 'sharedstatedir' in r.message][0]
         assert '${sharedstatedir}' in sharedstatedir_result.hint
 
+    def test_hardcoded_path_shebang_not_flagged(self):
+        """Test that shebang patterns like #!/usr/bin/env are NOT flagged.
+        
+        Shebangs are standard Unix runtime conventions, not build-time paths.
+        The pattern #!/usr/bin/env python3 is the portable way to find Python.
+        """
+        from bake_linter.rules.style import HardcodedPathsRule
+        
+        content = '''do_patch:append() {
+    for s in grep -rIl python ${S}/scripts; do
+        sed -i -e '1s|^#!.*python[23]*|#!/usr/bin/env ${PYTHON_PN}|' $s
+    done
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag #!/usr/bin/env - it's a shebang pattern
+        assert len(results) == 0
+
+    def test_hardcoded_path_various_shebangs_not_flagged(self):
+        """Test that various shebang patterns are NOT flagged."""
+        from bake_linter.rules.style import HardcodedPathsRule
+        
+        content = '''do_install:append() {
+    # Create wrapper with shebang
+    cat > ${D}${bindir}/wrapper << 'EOF'
+#!/bin/sh
+exec myprogram "$@"
+EOF
+    
+    # Fix shebang in Python scripts
+    sed -i '1s|.*|#!/usr/bin/env python3|' ${D}${bindir}/script.py
+    
+    # Another shebang pattern
+    echo '#!/bin/bash' > ${D}${bindir}/test.sh
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag any shebangs - they are runtime conventions
+        assert len(results) == 0
+
     def test_install_dir_missing_trailing_slash(self):
         """Test that install to directory without trailing slash is flagged."""
         from bake_linter.rules.style import InstallDirectoryTrailingSlashRule
