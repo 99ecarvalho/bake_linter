@@ -1947,12 +1947,13 @@ LIC_FILES_CHKSUM += "file://CUSTOM_LICENSE;md5=abc123"
 class TestTaskRules:
     """Tests for task implementation rules."""
 
-    def test_unquoted_variable_d(self):
-        """Test that unquoted ${D} is flagged."""
+    def test_shell_variable_flagged(self):
+        """Test that unquoted shell variable $D is flagged."""
         from bake_linter.rules.task import UnquotedVariableRule
         
+        # $D is a shell variable (no braces) - SHOULD be flagged
         content = '''do_install() {
-    rm -rf ${D}${libdir}/*
+    rm -rf $D/usr/lib/*
 }
 '''
         context = FileContext(
@@ -1965,8 +1966,57 @@ class TestTaskRules:
         rule = UnquotedVariableRule()
         results = rule.check(context)
         
-        # Should flag D as unquoted
+        # Should flag $D as unquoted shell variable
         assert any(r.rule_id == "TASK001" for r in results)
+        assert any("$D" in r.message for r in results)
+
+    def test_bitbake_variable_not_flagged(self):
+        """Test that BitBake variable expansion ${D} is NOT flagged.
+        
+        ${VAR} is BitBake expansion - it's expanded BEFORE the shell sees it,
+        so it's safe from word splitting. This is NOT a shell variable.
+        """
+        from bake_linter.rules.task import UnquotedVariableRule
+        
+        # ${D} is BitBake expansion (safe) - should NOT be flagged
+        content = '''do_install() {
+    install -d ${D}/${libexecdir}
+    install -m 0755 ${WORKDIR}/${BPN}.py ${D}/${libexecdir}
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnquotedVariableRule()
+        results = rule.check(context)
+        
+        # Should NOT flag ${D} or ${WORKDIR} - they're BitBake expansions
+        assert len(results) == 0
+
+    def test_quoted_shell_variable_ok(self):
+        """Test that quoted shell variable is NOT flagged."""
+        from bake_linter.rules.task import UnquotedVariableRule
+        
+        content = '''do_install() {
+    rm -rf "$D/usr/lib/*"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = UnquotedVariableRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - $D is properly quoted
+        assert len(results) == 0
 
     def test_sudo_in_task(self):
         """Test that sudo usage is flagged."""

@@ -24,27 +24,26 @@ class UnquotedVariableRule(BaseRule):
     
     Unquoted variables can cause issues with paths containing spaces
     or special characters. This is a common shell scripting pitfall.
+    
+    IMPORTANT: This rule distinguishes between:
+    - ${VAR} - BitBake variable expansion (SAFE - expanded before shell sees it)
+    - $VAR   - Shell variable (NEEDS QUOTES - shell does word splitting)
+    
+    BitBake expands ${VAR} at parse time, so the shell never sees the variable
+    syntax - it only sees the expanded value as a single token. This is safe.
+    
+    Only $VAR (without braces) is a shell variable that needs quoting.
     """
     
     rule_id = "TASK001"
     name = "Unquoted Variable Expansion"
-    description = "Detects unquoted shell variables in task code"
+    description = "Detects unquoted shell variables (not BitBake ${VAR}) in task code"
     default_severity = Severity.WARNING
     groups = ["shell", "reliability"]
-    hint = "Quote variable expansions: \"${var}\" instead of ${var}"
+    hint = "Quote shell variable expansions: \"$var\" instead of $var"
 
-    # Pattern for unquoted variable expansions in common contexts
-    # Matches ${VAR} or $VAR that's not inside quotes
-    UNQUOTED_PATTERNS = [
-        # rm, cp, mv, install with unquoted path args
-        re.compile(r'\b(rm|cp|mv|install|mkdir|chmod|chown)\s+(-[a-zA-Z]+\s+)*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?(?!\s*["\'])'),
-        # cd to unquoted variable
-        re.compile(r'\bcd\s+\$\{?[A-Za-z_][A-Za-z0-9_]*\}?(?!\s*["\'])'),
-        # for loop with unquoted variable in iteration
-        re.compile(r'\bfor\s+\w+\s+in\s+\$\{?[A-Za-z_][A-Za-z0-9_]*\}?(?!\s*["\'])'),
-    ]
-    
-    # High-risk variables that should always be quoted
+    # High-risk variables that should be quoted when used as shell variables
+    # Note: ${VAR} is BitBake expansion (safe), $VAR is shell (needs quotes)
     HIGH_RISK_VARS = ['D', 'S', 'B', 'WORKDIR', 'STAGING_DIR', 'TMPDIR', 'HOME']
 
     def check(self, context: FileContext) -> List[LintResult]:
@@ -69,34 +68,42 @@ class UnquotedVariableRule(BaseRule):
                 continue
             
             if in_task:
-                # Check high-risk variables specifically
+                # Check high-risk variables - ONLY flag $VAR (shell variable), NOT ${VAR} (BitBake)
                 for var in self.HIGH_RISK_VARS:
-                    # Look for ${VAR} or $VAR not in quotes
-                    pattern = re.compile(rf'(\$\{{{var}\}}|\${var}\b)(?!["\'])')
-                    if pattern.search(stripped):
+                    # Pattern matches $VAR but NOT ${VAR}
+                    # $VAR is a shell variable and needs quoting
+                    # ${VAR} is BitBake expansion, which is safe (expanded before shell)
+                    pattern = re.compile(rf'\${var}\b(?!\}})')
+                    matches = pattern.finditer(stripped)
+                    for match in matches:
+                        # Verify this is truly $VAR and not part of ${VAR}
+                        pos = match.start()
+                        # Check if preceded by { (which would make it ${VAR})
+                        if pos > 0 and stripped[pos-1] == '{':
+                            continue  # This is ${VAR}, BitBake expansion, skip
+                        
                         # Check if it's actually unquoted
-                        if not self._is_properly_quoted(stripped, var):
+                        if not self._is_properly_quoted(stripped, var, pos):
                             results.append(self.create_result(
                                 file=context.path,
                                 line=line_num,
-                                message=f"High-risk variable ${var} may be unquoted",
+                                message=f"Shell variable ${var} should be quoted (use \"${var}\" or \"${{{var}}}\")",
                                 context=stripped[:60],
-                                hint=f'Use "${{{var}}}" to handle paths with spaces',
+                                hint=f'Quote shell variables: "${var}" or use BitBake expansion "${{{{var}}}}"',
                             ))
         
         return results
     
-    def _is_properly_quoted(self, line: str, var: str) -> bool:
-        """Check if a variable is properly quoted in the line."""
-        # Simple heuristic: look for the variable inside double quotes
-        pattern = rf'"[^"]*\$\{{{var}\}}[^"]*"'
-        if re.search(pattern, line):
-            return True
-        # Also check for single-quoted (though variable won't expand)
-        pattern = rf"'[^']*\$\{{{var}\}}[^']*'"
-        if re.search(pattern, line):
-            return True
-        return False
+    def _is_properly_quoted(self, line: str, var: str, pos: int) -> bool:
+        """Check if a variable at position is properly quoted in the line."""
+        # Find if position is inside double quotes
+        in_quotes = False
+        i = 0
+        while i < pos:
+            if line[i] == '"' and (i == 0 or line[i-1] != '\\'):
+                in_quotes = not in_quotes
+            i += 1
+        return in_quotes
 
 
 class SudoUsageRule(BaseRule):
