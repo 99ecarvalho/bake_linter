@@ -484,6 +484,39 @@ LICENSE = "MIT"
         # Should NOT flag /etc or /var in DESCRIPTION - it's documentation
         assert len(results) == 0
 
+    def test_hardcoded_path_hint_contains_suggestion(self):
+        """Test that hardcoded path warnings include helpful variable suggestions."""
+        from bake_linter.rules.style import HardcodedPathsRule
+        
+        content = '''do_install() {
+    install -d ${D}/usr/share/myapp
+    install -d ${D}/usr/bin
+    install -d ${D}/var/lib/myapp
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Should have 3 warnings with proper suggestions
+        assert len(results) == 3
+        
+        # Check that hints contain the variable suggestions
+        datadir_result = [r for r in results if 'datadir' in r.message][0]
+        assert '${datadir}' in datadir_result.hint
+        
+        bindir_result = [r for r in results if 'bindir' in r.message][0]
+        assert '${bindir}' in bindir_result.hint
+        
+        sharedstatedir_result = [r for r in results if 'sharedstatedir' in r.message][0]
+        assert '${sharedstatedir}' in sharedstatedir_result.hint
+
     def test_install_dir_missing_trailing_slash(self):
         """Test that install to directory without trailing slash is flagged."""
         from bake_linter.rules.style import InstallDirectoryTrailingSlashRule

@@ -95,14 +95,27 @@ class HardcodedPathsRule(BaseRule):
     default_severity = Severity.WARNING
     groups = ["style", "portability"]
 
-    # Patterns for hardcoded paths and their suggested replacements
-    HARDCODED_PATTERNS = [
-        (re.compile(r'/usr/lib(?![a-z])'), "Use ${libdir} instead of /usr/lib"),
-        (re.compile(r'/usr/bin(?![a-z])'), "Use ${bindir} instead of /usr/bin"),
-        (re.compile(r'/usr/include(?![a-z])'), "Use ${includedir} instead of /usr/include"),
-        (re.compile(r'/usr/share(?![a-z])'), "Use ${datadir} instead of /usr/share"),
-        (re.compile(r'/etc(?![a-z])'), "Use ${sysconfdir} instead of /etc"),
-        (re.compile(r'/var(?![a-z])'), "Use ${localstatedir} instead of /var"),
+    # Comprehensive mapping of hardcoded paths to BitBake variables
+    # Order matters: more specific paths should come first
+    # Format: (regex_pattern, variable_name, example_path)
+    PATH_MAPPINGS = [
+        # /usr/share subdirectories (must come before /usr/share)
+        (re.compile(r'/usr/share/man(?![a-z])'), '${mandir}', '/usr/share/man'),
+        (re.compile(r'/usr/share/doc(?![a-z])'), '${docdir}', '/usr/share/doc'),
+        # /usr subdirectories
+        (re.compile(r'/usr/libexec(?![a-z])'), '${libexecdir}', '/usr/libexec'),
+        (re.compile(r'/usr/include(?![a-z])'), '${includedir}', '/usr/include'),
+        (re.compile(r'/usr/share(?![a-z])'), '${datadir}', '/usr/share'),
+        (re.compile(r'/usr/sbin(?![a-z])'), '${sbindir}', '/usr/sbin'),
+        (re.compile(r'/usr/bin(?![a-z])'), '${bindir}', '/usr/bin'),
+        (re.compile(r'/usr/lib64(?![a-z])'), '${libdir}', '/usr/lib64'),
+        (re.compile(r'/usr/lib(?![a-z])'), '${libdir}', '/usr/lib'),
+        # /var subdirectories (must come before /var)
+        (re.compile(r'/var/lib(?![a-z])'), '${sharedstatedir}', '/var/lib'),
+        # Root level directories
+        (re.compile(r'/etc(?![a-z])'), '${sysconfdir}', '/etc'),
+        (re.compile(r'/var(?![a-z])'), '${localstatedir}', '/var'),
+        (re.compile(r'/srv(?![a-z])'), '${servicedir}', '/srv'),
     ]
     
     # Documentation variables where literal paths are appropriate
@@ -134,13 +147,17 @@ class HardcodedPathsRule(BaseRule):
             if self.DOC_VAR_PATTERN.match(stripped):
                 continue
             
-            for pattern, message in self.HARDCODED_PATTERNS:
-                if pattern.search(line):
+            for pattern, var_name, example_path in self.PATH_MAPPINGS:
+                match = pattern.search(line)
+                if match:
+                    # Generate helpful suggestion showing the replacement
+                    matched_path = match.group(0)
                     results.append(self.create_result(
                         file=context.path,
                         line=line_num,
-                        message=message,
+                        message=f"Hardcoded path '{matched_path}' should use {var_name}",
                         context=stripped[:60],
+                        hint=f"Replace '{matched_path}' with '{var_name}' (e.g., {var_name}/myfile instead of {example_path}/myfile)",
                     ))
                     break  # One warning per line is enough
         
