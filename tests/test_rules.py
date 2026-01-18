@@ -1928,6 +1928,75 @@ class TestBestPracticeRules:
 class TestSecurityRulesExtended:
     """Extended tests for security rules."""
 
+    def test_hardcoded_credentials_license_not_flagged(self):
+        """Test that LICENSE with 'password' in package name is NOT flagged.
+        
+        Package names like passport-oauth2-client-password are legitimate
+        and should not trigger credential detection.
+        """
+        from bake_linter.rules.security import HardcodedCredentialsRule
+        
+        content = '''LICENSE:${PN}-passport = "MIT"
+LICENSE:${PN}-passport-http-bearer = "MIT"
+LICENSE:${PN}-passport-oauth2-client-password = "MIT"
+LICENSE:${PN}-passport-strategy = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedCredentialsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - these are package names in LICENSE variables
+        assert len(results) == 0
+
+    def test_hardcoded_credentials_summary_not_flagged(self):
+        """Test that SUMMARY/DESCRIPTION with credential words is NOT flagged."""
+        from bake_linter.rules.security import HardcodedCredentialsRule
+        
+        content = '''SUMMARY = "Password management tool for secure password storage"
+DESCRIPTION = "This tool helps manage api-key rotation and secret handling"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedCredentialsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - these are documentation variables
+        assert len(results) == 0
+
+    def test_hardcoded_credentials_placeholder_not_flagged(self):
+        """Test that placeholder patterns like @PASSWORD@ are NOT flagged."""
+        from bake_linter.rules.security import HardcodedCredentialsRule
+        
+        content = '''do_configure() {
+    sed -i 's/@PASSWORD@/${DB_PASSWORD}/' config.ini
+    echo "password = @PASSWORD@" > template.conf
+    echo "api_key = ${API_KEY}" > config.env
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedCredentialsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag - these are placeholder patterns
+        assert len(results) == 0
+
     def test_dangerous_rm_rf(self):
         """Test that dangerous rm -rf is flagged."""
         from bake_linter.rules.security import DangerousRmRfRule

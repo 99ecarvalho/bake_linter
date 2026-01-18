@@ -182,6 +182,14 @@ class InsecurePermissionsRule(BaseRule):
 class HardcodedCredentialsRule(BaseRule):
     """
     Check for potential hardcoded credentials or secrets.
+    
+    IMPORTANT: This rule skips contexts where credential-like words appear
+    but are not actual credentials:
+    - LICENSE variables (package names may contain 'password')
+    - SUMMARY/DESCRIPTION (documentation text)
+    - SRC_URI (package names in URLs)
+    - Comments
+    - Placeholder patterns (@PASSWORD@, ${PASSWORD}, etc.)
     """
     
     rule_id = "SECURITY004"
@@ -198,6 +206,50 @@ class HardcodedCredentialsRule(BaseRule):
         (re.compile(r'secret\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded secret"),
         (re.compile(r'token\s*=\s*["\'][a-zA-Z0-9]{20,}["\']', re.I), "Possible hardcoded token"),
     ]
+    
+    # Variables where credential-like words are expected/safe (metadata, not code)
+    SAFE_VARIABLE_PREFIXES = [
+        'LICENSE',      # Package names may contain 'password' (passport-oauth2-client-password)
+        'SUMMARY',      # Documentation text
+        'DESCRIPTION',  # Documentation text
+        'HOMEPAGE',     # URLs
+        'BUGTRACKER',   # URLs
+        'CVE_PRODUCT',  # Product names
+    ]
+    
+    # Placeholder patterns that indicate intentional variable substitution
+    PLACEHOLDER_PATTERNS = [
+        re.compile(r'@[A-Z_]+@'),          # @PASSWORD@, @API_KEY@
+        re.compile(r'\$\{[A-Z_]+\}'),      # ${PASSWORD}, ${API_KEY}
+        re.compile(r'\$[A-Z_]+'),          # $PASSWORD
+        re.compile(r'<[A-Z_]+>'),          # <PASSWORD>
+        re.compile(r'\[\[[A-Z_]+\]\]'),    # [[PASSWORD]]
+    ]
+
+    def _is_safe_context(self, line: str) -> bool:
+        """Check if the line is in a safe context where credential words are expected."""
+        stripped = line.strip()
+        
+        # Check for safe variable prefixes (LICENSE:${PN}-package-password = "MIT")
+        for prefix in self.SAFE_VARIABLE_PREFIXES:
+            if stripped.startswith(prefix):
+                return True
+            # Also check for override syntax: LICENSE:${PN}-foo
+            if re.match(rf'^{prefix}[_:]', stripped):
+                return True
+        
+        # Check for SRC_URI (package names in URLs may contain 'password')
+        if 'SRC_URI' in line:
+            return True
+        
+        return False
+
+    def _contains_placeholder(self, line: str) -> bool:
+        """Check if the line contains placeholder patterns."""
+        for pattern in self.PLACEHOLDER_PATTERNS:
+            if pattern.search(line):
+                return True
+        return False
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -207,6 +259,14 @@ class HardcodedCredentialsRule(BaseRule):
             
             # Skip comments
             if stripped.startswith("#"):
+                continue
+            
+            # Skip safe contexts (LICENSE, SUMMARY, DESCRIPTION, SRC_URI)
+            if self._is_safe_context(line):
+                continue
+            
+            # Skip lines with placeholder patterns
+            if self._contains_placeholder(line):
                 continue
             
             for pattern, message in self.CREDENTIAL_PATTERNS:
