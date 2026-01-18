@@ -78,6 +78,15 @@ class LongLineRule(BaseRule):
 class HardcodedPathsRule(BaseRule):
     """
     Check for hardcoded paths that should use variables.
+    
+    IMPORTANT: This rule skips documentation variables (SUMMARY, DESCRIPTION, etc.)
+    where literal paths like /etc/hosts are appropriate for human readability.
+    Users reading package descriptions need to see actual paths, not variables.
+    
+    Only flags hardcoded paths in actual code contexts:
+    - Shell task implementations (do_install, do_configure, etc.)
+    - FILES variable assignments
+    - Other operational variables
     """
     
     rule_id = "STYLE003"
@@ -95,6 +104,16 @@ class HardcodedPathsRule(BaseRule):
         (re.compile(r'/etc(?![a-z])'), "Use ${sysconfdir} instead of /etc"),
         (re.compile(r'/var(?![a-z])'), "Use ${localstatedir} instead of /var"),
     ]
+    
+    # Documentation variables where literal paths are appropriate
+    # These describe what software does, not how to build it
+    DOCUMENTATION_VARS = [
+        'SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER',
+        'AUTHOR', 'MAINTAINER', 'SECTION', 'CVE_PRODUCT',
+    ]
+    
+    # Pattern to detect documentation variable assignment
+    DOC_VAR_PATTERN = re.compile(r'^(' + '|'.join(DOCUMENTATION_VARS) + r')\s*[+:]?=')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -108,6 +127,11 @@ class HardcodedPathsRule(BaseRule):
             
             # Skip SRC_URI lines (URLs legitimately contain paths)
             if "SRC_URI" in line:
+                continue
+            
+            # Skip documentation variables (SUMMARY, DESCRIPTION, etc.)
+            # Literal paths are appropriate for human-readable documentation
+            if self.DOC_VAR_PATTERN.match(stripped):
                 continue
             
             for pattern, message in self.HARDCODED_PATTERNS:

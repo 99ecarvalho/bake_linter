@@ -417,6 +417,73 @@ SYSTEMD_AUTO_ENABLE:${PN} = "enable"
         
         assert len(results) == 0
 
+    def test_hardcoded_path_in_code_flagged(self):
+        """Test that hardcoded paths in actual code are flagged."""
+        from bake_linter.rules.style import HardcodedPathsRule
+        
+        content = '''do_install() {
+    install -d ${D}/etc/myapp
+    install -m 0644 ${WORKDIR}/config ${D}/etc/myapp/
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Should flag hardcoded /etc paths in code
+        assert any(r.rule_id == "STYLE003" for r in results)
+        assert any("sysconfdir" in r.message for r in results)
+
+    def test_hardcoded_path_in_summary_not_flagged(self):
+        """Test that hardcoded paths in SUMMARY are NOT flagged.
+        
+        Documentation variables should use literal paths for human readability.
+        Users reading package descriptions need to see /etc/hosts, not ${sysconfdir}/hosts.
+        """
+        from bake_linter.rules.style import HardcodedPathsRule
+        
+        content = '''SUMMARY = "Update /etc/hosts with entries from /etc/hosts.d"
+LICENSE = "CLOSED"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag /etc in SUMMARY - it's documentation
+        assert len(results) == 0
+
+    def test_hardcoded_path_in_description_not_flagged(self):
+        """Test that hardcoded paths in DESCRIPTION are NOT flagged."""
+        from bake_linter.rules.style import HardcodedPathsRule
+        
+        content = '''DESCRIPTION = "This tool reads configuration from /etc/myapp.conf and writes logs to /var/log/myapp.log"
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedPathsRule()
+        results = rule.check(context)
+        
+        # Should NOT flag /etc or /var in DESCRIPTION - it's documentation
+        assert len(results) == 0
+
     def test_install_dir_missing_trailing_slash(self):
         """Test that install to directory without trailing slash is flagged."""
         from bake_linter.rules.style import InstallDirectoryTrailingSlashRule
