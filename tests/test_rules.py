@@ -746,6 +746,77 @@ FILES:${PN} += "/custom/location/custom.service"
         # Has explicit FILES entry, no flag
         assert len(results) == 0
 
+    def test_hardcoded_systemd_path_in_files_flagged(self):
+        """Test that hardcoded systemd paths in FILES are flagged with INFO level."""
+        from bake_linter.rules.style import HardcodedSystemdPathInFilesRule
+        
+        content = '''FILES:${PN} += "\\
+    /usr/lib/systemd/system/max-ps-ssh-tunnel-restart.path \\
+    /usr/lib/systemd/system/multi-user.target.wants/max-ps-ssh-tunnel-restart.path \\
+    /usr/lib/systemd/system/max-ps-ssh-tunnel-restart.service \\
+    /usr/lib/systemd/system/max-ps-ssh-tunnel.service \\
+    /usr/lib/systemd/system/sshd.socket.d/sshd-listen-localhost.conf \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedSystemdPathInFilesRule()
+        results = rule.check(context)
+        
+        # Should flag with INFO severity (style concern, not error)
+        assert len(results) == 5
+        assert all(r.rule_id == "STYLE011" for r in results)
+        assert all(r.severity == Severity.INFO for r in results)
+        assert all("${systemd_system_unitdir}" in r.hint for r in results)
+
+    def test_hardcoded_systemd_path_in_files_single_line(self):
+        """Test single-line FILES with systemd path is flagged by STYLE011."""
+        from bake_linter.rules.style import HardcodedSystemdPathInFilesRule
+        
+        content = '''FILES:${PN} += "/usr/lib/systemd/system/*.service"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedSystemdPathInFilesRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE011"
+        assert results[0].severity == Severity.INFO
+        assert "consistency" in results[0].hint.lower()
+
+    def test_files_with_systemd_variable_not_flagged(self):
+        """Test that FILES with proper systemd variables is NOT flagged."""
+        from bake_linter.rules.style import HardcodedSystemdPathInFilesRule
+        
+        content = '''FILES:${PN} += "\\
+    ${systemd_system_unitdir}/my-service.service \\
+    ${systemd_system_unitdir}/multi-user.target.wants/my-service.service \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = HardcodedSystemdPathInFilesRule()
+        results = rule.check(context)
+        
+        # Using proper variables - no issues
+        assert len(results) == 0
+
 class TestSecurityRules:
     """Tests for security rules."""
 
@@ -930,6 +1001,53 @@ do_install() {
         # Hardcoded destination paths should BE flagged
         assert len(results) >= 1
         assert all(r.rule_id == "SYSTEMD003" for r in results)
+
+    def test_systemd_files_variable_not_flagged(self):
+        """Test that hardcoded systemd paths in FILES are NOT flagged by SYSTEMD003.
+        
+        FILES paths are style concerns (STYLE011), not errors.
+        """
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''FILES:${PN} += "\\
+    /usr/lib/systemd/system/max-ps-ssh-tunnel-restart.path \\
+    /usr/lib/systemd/system/multi-user.target.wants/max-ps-ssh-tunnel-restart.path \\
+    /usr/lib/systemd/system/max-ps-ssh-tunnel-restart.service \\
+    /usr/lib/systemd/system/max-ps-ssh-tunnel.service \\
+    /usr/lib/systemd/system/sshd.socket.d/sshd-listen-localhost.conf \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # FILES paths should NOT be flagged by SYSTEMD003 (handled by STYLE011)
+        assert len(results) == 0
+
+    def test_systemd_files_single_line_not_flagged(self):
+        """Test that single-line FILES with systemd path is NOT flagged by SYSTEMD003."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''FILES:${PN} += "/usr/lib/systemd/system/*.service"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # FILES paths should NOT be flagged by SYSTEMD003
+        assert len(results) == 0
 
 
 class TestInstallRules:

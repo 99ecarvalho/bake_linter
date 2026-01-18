@@ -688,3 +688,74 @@ class SystemdRedundantFilesRule(BaseRule):
                 ))
         
         return results
+
+class HardcodedSystemdPathInFilesRule(BaseRule):
+    """
+    Check for hardcoded systemd paths in FILES variable.
+    
+    While hardcoded paths in FILES work correctly (they describe actual runtime
+    target filesystem paths), using variables like ${systemd_system_unitdir}
+    is preferred for:
+    - Consistency with do_install patterns
+    - Portability across different distributions
+    - Better maintainability
+    
+    This is a STYLE issue (INFO level), not an error. The code functions
+    correctly either way.
+    """
+    
+    rule_id = "STYLE011"
+    name = "Hardcoded Systemd Paths in FILES"
+    description = "Suggests using systemd variables in FILES for consistency"
+    default_severity = Severity.INFO
+    groups = ["style", "systemd", "portability"]
+
+    # Hardcoded paths and their variable replacements
+    HARDCODED_PATHS = [
+        (re.compile(r'/lib/systemd/system(?![a-z])'), "${systemd_system_unitdir}"),
+        (re.compile(r'/usr/lib/systemd/system(?![a-z])'), "${systemd_system_unitdir}"),
+        (re.compile(r'/etc/systemd/system(?![a-z])'), "${sysconfdir}/systemd/system"),
+        (re.compile(r'/lib/systemd/user(?![a-z])'), "${systemd_user_unitdir}"),
+        (re.compile(r'/usr/lib/systemd/user(?![a-z])'), "${systemd_user_unitdir}"),
+        (re.compile(r'/lib/systemd(?![a-z/])'), "${systemd_unitdir}"),
+        (re.compile(r'/usr/lib/systemd(?![a-z/])'), "${systemd_unitdir}"),
+    ]
+
+    # Patterns to detect FILES variable contexts
+    FILES_START_PATTERN = re.compile(r'^\s*FILES[_:]')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        # Track if we're inside a multi-line FILES variable
+        in_files_var = False
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments
+            if stripped.startswith("#"):
+                continue
+            
+            # Track FILES variable blocks
+            if self.FILES_START_PATTERN.match(line):
+                in_files_var = True
+            
+            if in_files_var:
+                # Check for hardcoded paths
+                for pattern, replacement in self.HARDCODED_PATHS:
+                    if pattern.search(line):
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message="Hardcoded systemd path in FILES variable",
+                            context=stripped[:70],
+                            hint=f"Consider using {replacement} for consistency with do_install",
+                        ))
+                        break  # One info per line
+                
+                # End of FILES block when line ends with closing quote
+                if not stripped.endswith('\\') and (stripped.endswith('"') or stripped.endswith("'")):
+                    in_files_var = False
+        
+        return results

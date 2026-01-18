@@ -196,6 +196,12 @@ class SystemdHardcodedPathsRule(BaseRule):
         re.compile(r'\$\{UNPACKDIR\}/.*/systemd/'),    # ${UNPACKDIR}/path - source location
     ]
 
+    # Patterns for FILES variable contexts (handled by STYLE011 instead)
+    FILES_PATTERNS = [
+        re.compile(r'^\s*FILES[_:]'),                   # FILES:${PN} = or FILES_${PN} =
+        re.compile(r'^\s*FILES\s*[+?]?='),             # FILES = or FILES +=
+    ]
+
     # Pattern to detect install commands with proper destination
     # e.g., "install ... ${WORKDIR}/path/file ${D}${systemd_system_unitdir}"
     INSTALL_WITH_PROPER_DEST = re.compile(
@@ -212,6 +218,17 @@ class SystemdHardcodedPathsRule(BaseRule):
         if self.INSTALL_WITH_PROPER_DEST.search(line):
             return True
         
+        return False
+
+    def _is_files_variable_context(self, line: str) -> bool:
+        """Check if the line is a FILES variable assignment.
+        
+        FILES variable contexts are handled by STYLE011 with INFO severity
+        since hardcoded paths in FILES work correctly but are not ideal style.
+        """
+        for pattern in self.FILES_PATTERNS:
+            if pattern.search(line):
+                return True
         return False
 
     def _is_hardcoded_destination(self, line: str) -> bool:
@@ -235,8 +252,9 @@ class SystemdHardcodedPathsRule(BaseRule):
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
-        # Track if we're inside a multi-line SRC_URI
+        # Track if we're inside a multi-line SRC_URI or FILES variable
         in_src_uri = False
+        in_files_var = False
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -253,6 +271,16 @@ class SystemdHardcodedPathsRule(BaseRule):
                 if not stripped.endswith('\\') and (stripped.endswith('"') or stripped.endswith("'")):
                     in_src_uri = False
                 # Skip - SRC_URI paths are source file locations
+                continue
+            
+            # Track multi-line FILES variable blocks (handled by STYLE011)
+            if self._is_files_variable_context(line):
+                in_files_var = True
+            if in_files_var:
+                # FILES continues if line ends with \ or we're in a quoted string
+                if not stripped.endswith('\\') and (stripped.endswith('"') or stripped.endswith("'")):
+                    in_files_var = False
+                # Skip - FILES paths are style concerns, not errors (STYLE011)
                 continue
             
             # Skip source path contexts (file://, ${WORKDIR}, etc.)
