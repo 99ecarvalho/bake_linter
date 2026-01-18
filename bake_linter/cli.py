@@ -10,9 +10,10 @@ Usage:
     
 Examples:
     bake-linter recipes/
-    bake-linter --format json meta-layer/
+    bake-linter --output json,results.json meta-layer/
+    bake-linter --output html,report.html --output json,results.json .
     bake-linter --enable LICENSE001,MANDATORY001 --disable STYLE001 .
-    bake-linter --ci --output report.json recipes/
+    bake-linter --ci --output json,report.json --output html,report.html recipes/
 
 (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
 All rights reserved.
@@ -23,7 +24,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional, TextIO
+from typing import List, Optional, TextIO, Tuple
 
 from bake_linter import __version__
 from bake_linter.config import LinterConfig
@@ -33,6 +34,45 @@ from bake_linter.core.registry import get_registry
 from bake_linter.output.text import TextFormatter, CompactTextFormatter
 from bake_linter.output.json_output import JsonFormatter, JsonLinesFormatter
 from bake_linter.output.html import HtmlFormatter
+
+
+VALID_FORMATS = ["text", "compact", "json", "jsonl", "html"]
+
+
+def parse_output_spec(spec: str) -> Tuple[str, str]:
+    """
+    Parse an output specification in the format 'format,filename'.
+    
+    Args:
+        spec: Output specification string like 'json,/tmp/report.json'
+        
+    Returns:
+        Tuple of (format, filename)
+        
+    Raises:
+        argparse.ArgumentTypeError: If format is invalid or spec is malformed
+    """
+    parts = spec.split(',', 1)
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError(
+            f"Invalid output specification '{spec}'. "
+            f"Expected format: 'format,filename' (e.g., 'json,report.json')"
+        )
+    
+    fmt, filename = parts
+    fmt = fmt.strip().lower()
+    filename = filename.strip()
+    
+    if not fmt:
+        raise argparse.ArgumentTypeError("Format cannot be empty")
+    if not filename:
+        raise argparse.ArgumentTypeError("Filename cannot be empty")
+    if fmt not in VALID_FORMATS:
+        raise argparse.ArgumentTypeError(
+            f"Invalid format '{fmt}'. Valid formats: {', '.join(VALID_FORMATS)}"
+        )
+    
+    return (fmt, filename)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -98,21 +138,21 @@ def create_parser() -> argparse.ArgumentParser:
     output_group = parser.add_argument_group("output options")
     output_group.add_argument(
         "--format", "-f",
-        choices=["text", "compact", "json", "jsonl", "html"],
+        choices=VALID_FORMATS,
         default="text",
-        help="Output format (default: text)",
+        help="Output format for stdout (default: text)",
     )
     output_group.add_argument(
         "--output", "-o",
-        type=Path,
-        metavar="FILE",
-        help="Write output to file instead of stdout",
-    )
-    output_group.add_argument(
-        "--html-report",
-        type=Path,
-        metavar="FILE",
-        help="Generate HTML report to file (in addition to primary output)",
+        type=parse_output_spec,
+        action="append",
+        dest="outputs",
+        metavar="FORMAT,FILE",
+        help=(
+            "Write output to file in specified format. Can be used multiple times. "
+            f"Format: 'format,filename'. Valid formats: {', '.join(VALID_FORMATS)}. "
+            "Example: --output json,report.json --output html,report.html"
+        ),
     )
     
     # Verbosity
@@ -257,7 +297,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         enable_groups=args.enable_group,
         disable_groups=args.disable_group,
         output_format=args.format,
-        output_file=str(args.output) if args.output else None,
+        output_file=None,  # No longer using single output file
         verbose=args.verbose,
         quiet=args.quiet,
         color=not args.no_color,
@@ -299,35 +339,39 @@ def main(argv: Optional[List[str]] = None) -> int:
     
     summary = engine.get_summary()
     
-    # Determine output destination
-    output_file: Optional[TextIO] = None
-    if args.output:
-        output_file = open(args.output, "w", encoding="utf-8")
+    # Output to stdout using the primary format
+    use_color = config.color and not args.ci and sys.stdout.isatty()
+    if not config.quiet:
+        formatter = get_formatter(
+            args.format,
+            color=use_color,
+            verbose=args.verbose,
+            output=sys.stdout,
+        )
+        formatter.write(results, summary)
     
-    try:
-        output_stream = output_file or sys.stdout
-        use_color = config.color and not args.ci and output_stream.isatty()
-        
-        # Format and output results
-        if not config.quiet:
-            formatter = get_formatter(
-                args.format,
-                color=use_color,
-                verbose=args.verbose,
-                output=output_stream,
-            )
-            formatter.write(results, summary)
-        
-        # Generate HTML report if requested
-        if args.html_report:
-            html_formatter = HtmlFormatter(verbose=args.verbose)
-            html_formatter.write_to_file(results, summary, args.html_report)
-            if not config.quiet:
-                print(f"\nHTML report written to: {args.html_report}", file=sys.stderr)
-    
-    finally:
-        if output_file:
-            output_file.close()
+    # Generate additional output files if specified
+    if args.outputs:
+        for fmt, filename in args.outputs:
+            try:
+                filepath = Path(filename)
+                # Create parent directories if needed
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                
+                with open(filepath, "w", encoding="utf-8") as f:
+                    file_formatter = get_formatter(
+                        fmt,
+                        color=False,  # No color for file outputs
+                        verbose=args.verbose,
+                        output=f,
+                    )
+                    file_formatter.write(results, summary)
+                
+                if not config.quiet:
+                    print(f"\n{fmt.upper()} report written to: {filepath}", file=sys.stderr)
+            except IOError as e:
+                print(f"Error writing {fmt} output to {filename}: {e}", file=sys.stderr)
+                return ExitCode.RUNTIME_ERROR
     
     # Determine exit code
     exit_code = summary.get_exit_code()

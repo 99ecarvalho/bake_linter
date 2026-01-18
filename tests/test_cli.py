@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from io import StringIO
 
-from bake_linter.cli import main, create_parser
+from bake_linter.cli import main, create_parser, parse_output_spec
 from bake_linter.core.models import ExitCode
 
 
@@ -57,11 +57,71 @@ class TestCLIParser:
         args = parser.parse_args(["--ci", "."])
         assert args.ci is True
 
-    def test_output_file(self):
-        """Test output file option."""
+    def test_output_spec_single(self):
+        """Test single output specification."""
         parser = create_parser()
-        args = parser.parse_args(["--output", "report.txt", "."])
-        assert args.output == Path("report.txt")
+        args = parser.parse_args(["--output", "json,report.json", "."])
+        assert args.outputs == [("json", "report.json")]
+
+    def test_output_spec_multiple(self):
+        """Test multiple output specifications."""
+        parser = create_parser()
+        args = parser.parse_args([
+            "--output", "json,report.json",
+            "--output", "html,report.html",
+            "."
+        ])
+        assert args.outputs == [("json", "report.json"), ("html", "report.html")]
+
+    def test_output_spec_with_path(self):
+        """Test output specification with full path."""
+        parser = create_parser()
+        args = parser.parse_args(["--output", "html,/tmp/reports/output.html", "."])
+        assert args.outputs == [("html", "/tmp/reports/output.html")]
+
+
+class TestOutputSpecParser:
+    """Tests for output specification parser."""
+
+    def test_parse_valid_spec(self):
+        """Test parsing valid output specifications."""
+        assert parse_output_spec("json,report.json") == ("json", "report.json")
+        assert parse_output_spec("html,/tmp/report.html") == ("html", "/tmp/report.html")
+        assert parse_output_spec("text,output.txt") == ("text", "output.txt")
+        assert parse_output_spec("compact,log.txt") == ("compact", "log.txt")
+        assert parse_output_spec("jsonl,results.jsonl") == ("jsonl", "results.jsonl")
+
+    def test_parse_spec_with_spaces(self):
+        """Test parsing specifications with spaces."""
+        assert parse_output_spec(" json , report.json ") == ("json", "report.json")
+
+    def test_parse_invalid_format(self):
+        """Test parsing with invalid format."""
+        import argparse
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            parse_output_spec("invalid,report.txt")
+        assert "Invalid format" in str(exc_info.value)
+
+    def test_parse_missing_comma(self):
+        """Test parsing without comma separator."""
+        import argparse
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            parse_output_spec("jsonreport.json")
+        assert "Expected format" in str(exc_info.value)
+
+    def test_parse_empty_format(self):
+        """Test parsing with empty format."""
+        import argparse
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            parse_output_spec(",report.json")
+        assert "empty" in str(exc_info.value).lower()
+
+    def test_parse_empty_filename(self):
+        """Test parsing with empty filename."""
+        import argparse
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            parse_output_spec("json,")
+        assert "empty" in str(exc_info.value).lower()
 
 
 class TestCLIExecution:

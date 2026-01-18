@@ -39,14 +39,20 @@ bake-linter .
 # Lint specific files or directories
 bake-linter meta-layer/recipes-core/
 
-# Generate JSON output for CI
-bake-linter --format json --output output/results.json .
+# Generate JSON output file
+bake-linter --output json,results.json .
 
 # Generate HTML report
-bake-linter --html-report output/report.html .
+bake-linter --output html,report.html .
 
-# Generate HTML report for CI
-bake-linter --format html --output output/report.html .
+# Generate multiple output formats (JSON + HTML)
+bake-linter --output json,results.json --output html,report.html .
+
+# CI mode with multiple outputs
+bake-linter --ci --output json,report.json --output html,report.html recipes/
+
+# Change stdout format (default is text)
+bake-linter --format compact .
 
 # CI mode (no colors, strict exit codes)
 bake-linter --ci .
