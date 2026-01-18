@@ -1049,6 +1049,84 @@ do_install() {
         # FILES paths should NOT be flagged by SYSTEMD003
         assert len(results) == 0
 
+    def test_systemd_image_rootfs_inspection_not_flagged(self):
+        """Test that systemd paths in IMAGE_ROOTFS inspection are NOT flagged.
+        
+        Image inspection code (ROOTFS_POSTPROCESS_COMMAND, QA checks) scans
+        already-built images and needs literal paths to find/grep files.
+        """
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''check_services() {
+    global_status=0
+    # Find all .service files in systemd directories only (not symlinks)
+    for service in $(find ${IMAGE_ROOTFS}/etc/systemd/system ${IMAGE_ROOTFS}/usr/lib/systemd/system -name "*.service" -type f 2>/dev/null); do
+        service_name=$(basename "$service")
+        # Check if service is in exclusion list
+        skip_service=false
+    done
+}
+'''
+        context = FileContext(
+            path=Path("test-image.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # IMAGE_ROOTFS inspection should NOT be flagged - scanning built image
+        assert len(results) == 0
+
+    def test_systemd_image_rootfs_grep_not_flagged(self):
+        """Test that grep commands with IMAGE_ROOTFS are NOT flagged."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''validate_systemd() {
+    # Check for enabled services
+    grep -r "WantedBy" ${IMAGE_ROOTFS}/usr/lib/systemd/system/*.service
+    
+    # List all timers
+    ls ${IMAGE_ROOTFS}/usr/lib/systemd/system/*.timer 2>/dev/null || true
+}
+'''
+        context = FileContext(
+            path=Path("test-image.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # IMAGE_ROOTFS with grep/ls is inspection code - NOT flagged
+        assert len(results) == 0
+
+    def test_systemd_deploy_dir_inspection_not_flagged(self):
+        """Test that systemd paths with DEPLOY_DIR are NOT flagged."""
+        from bake_linter.rules.systemd import SystemdHardcodedPathsRule
+        
+        content = '''check_deployed_services() {
+    # Inspect deployed image
+    find ${DEPLOY_DIR_IMAGE}/rootfs/usr/lib/systemd/system -name "*.service"
+}
+'''
+        context = FileContext(
+            path=Path("test-image.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdHardcodedPathsRule()
+        results = rule.check(context)
+        
+        # DEPLOY_DIR inspection should NOT be flagged
+        assert len(results) == 0
+
 
 class TestInstallRules:
     """Tests for install-related rules."""

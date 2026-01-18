@@ -202,6 +202,19 @@ class SystemdHardcodedPathsRule(BaseRule):
         re.compile(r'^\s*FILES\s*[+?]?='),             # FILES = or FILES +=
     ]
 
+    # Patterns for image inspection contexts (validation/QA code, not installation)
+    # These scan already-built images and need literal paths
+    IMAGE_INSPECTION_PATTERNS = [
+        re.compile(r'\$\{IMAGE_ROOTFS\}'),             # Inspecting built image
+        re.compile(r'\$\{DEPLOY_DIR'),                 # Inspecting deploy directory
+        re.compile(r'\$\{IMGDEPLOYDIR\}'),             # Image deploy directory
+    ]
+
+    # Commands used for inspection/validation (not installation)
+    INSPECTION_COMMANDS = re.compile(
+        r'\b(find|grep|ls|cat|test|check|validate|scan|inspect|read|stat|file)\b'
+    )
+
     # Pattern to detect install commands with proper destination
     # e.g., "install ... ${WORKDIR}/path/file ${D}${systemd_system_unitdir}"
     INSTALL_WITH_PROPER_DEST = re.compile(
@@ -229,6 +242,27 @@ class SystemdHardcodedPathsRule(BaseRule):
         for pattern in self.FILES_PATTERNS:
             if pattern.search(line):
                 return True
+        return False
+
+    def _is_image_inspection_context(self, line: str) -> bool:
+        """Check if the line is inspecting an already-built image.
+        
+        Image inspection code (ROOTFS_POSTPROCESS_COMMAND, QA checks, etc.)
+        needs to scan actual filesystem paths in the built image. Using
+        literal paths is appropriate here since:
+        - The image is already built
+        - Files are in their final locations
+        - We need literal paths to find/grep/inspect them
+        
+        Examples:
+            find ${IMAGE_ROOTFS}/usr/lib/systemd/system -name "*.service"
+            grep -r "something" ${IMAGE_ROOTFS}/etc/systemd/system
+        """
+        # Check for image rootfs variables
+        for pattern in self.IMAGE_INSPECTION_PATTERNS:
+            if pattern.search(line):
+                return True
+        
         return False
 
     def _is_hardcoded_destination(self, line: str) -> bool:
@@ -285,6 +319,11 @@ class SystemdHardcodedPathsRule(BaseRule):
             
             # Skip source path contexts (file://, ${WORKDIR}, etc.)
             if self._is_source_path_context(line):
+                continue
+            
+            # Skip image inspection contexts (${IMAGE_ROOTFS}, find/grep commands)
+            # These scan already-built images and need literal paths
+            if self._is_image_inspection_context(line):
                 continue
             
             # Check for hardcoded paths
