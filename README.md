@@ -106,6 +106,15 @@ exclude:
   - "tmp/*"
 ```
 
+### Configuration File Search Order
+
+When no explicit config file is provided via `--config`, the linter searches for configuration files in this order:
+
+1. **Current working directory** - looks for `.bake-linter.yaml`, `.bake-linter.yml`, `.bake-linter.json`, `bake-linter.yaml`, `bake-linter.yml`, or `bake-linter.json`
+2. **Tool's config/ directory** - falls back to `tools/bake_linter/config/` for the default configuration
+
+The linter prints which config file is being used (or indicates if none was found) at startup.
+
 ### Configuration Precedence
 
 1. CLI arguments (highest priority)

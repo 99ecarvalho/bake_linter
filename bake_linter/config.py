@@ -92,6 +92,30 @@ class LinterConfig:
         self.config_file: Optional[Path] = None
 
     @classmethod
+    def get_default_search_paths(cls) -> List[Path]:
+        """
+        Get the default search paths for config files.
+        
+        Search order:
+        1. Current working directory
+        2. config/ directory relative to the bake_linter package
+        
+        Returns:
+            List of paths to search for config files
+        """
+        paths = [Path.cwd()]
+        
+        # Add the config/ directory relative to this module
+        # This is: bake_linter/../config/ = tools/bake_linter/config/
+        module_dir = Path(__file__).parent  # bake_linter/
+        tool_root = module_dir.parent  # tools/bake_linter/
+        config_dir = tool_root / "config"
+        if config_dir.is_dir():
+            paths.append(config_dir)
+        
+        return paths
+
+    @classmethod
     def load(cls, config_path: Optional[Path] = None, 
              search_paths: Optional[List[Path]] = None) -> "LinterConfig":
         """
@@ -115,8 +139,8 @@ class LinterConfig:
             else:
                 raise FileNotFoundError(f"Config file not found: {config_path}")
         else:
-            # Search for config file
-            search_dirs = search_paths or [Path.cwd()]
+            # Search for config file in default locations
+            search_dirs = search_paths or cls.get_default_search_paths()
             for search_dir in search_dirs:
                 for filename in CONFIG_FILENAMES:
                     candidate = search_dir / filename

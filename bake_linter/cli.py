@@ -301,6 +301,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Configuration error: {e}", file=sys.stderr)
         return ExitCode.RUNTIME_ERROR
     
+    # Report config file status (unless quiet mode)
+    if not args.quiet:
+        if config.config_file:
+            print(f"Using config: {config.config_file}")
+        else:
+            print("No config file found, using defaults.")
+    
     # Merge CLI arguments
     config.merge_cli_args(
         enable=args.enable,
