@@ -1057,6 +1057,78 @@ class TestInstallRules:
         # None of these should be flagged - they all have explicit modes
         assert len(results) == 0
 
+    def test_non_fhs_path_with_variable_not_flagged(self):
+        """Test that ${D}/${bindir} is NOT flagged (FHS variable with extra slash)."""
+        from bake_linter.rules.install import NonFHSPathRule
+        
+        content = '''do_install() {
+    install -d ${D}/${bindir}
+    install -m 0755 mybin ${D}/${bindir}/mybin
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = NonFHSPathRule()
+        results = rule.check(context)
+        
+        # ${bindir} is FHS-compliant, extra slash is harmless
+        assert len(results) == 0
+
+    def test_non_fhs_path_various_variables_not_flagged(self):
+        """Test that various FHS variable patterns are NOT flagged."""
+        from bake_linter.rules.install import NonFHSPathRule
+        
+        content = '''do_install() {
+    install -d ${D}/${bindir}
+    install -d ${D}/${libdir}
+    install -d ${D}/${sysconfdir}/myapp
+    install -d ${D}/${datadir}/myapp
+    install -d ${D}/${systemd_system_unitdir}
+    install -d ${D}${bindir}
+    install -d ${D}${libdir}/mylib
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = NonFHSPathRule()
+        results = rule.check(context)
+        
+        # All FHS variables should be recognized as compliant
+        assert len(results) == 0
+
+    def test_non_fhs_path_literal_paths_not_flagged(self):
+        """Test that literal FHS paths like /usr/bin are NOT flagged."""
+        from bake_linter.rules.install import NonFHSPathRule
+        
+        content = '''do_install() {
+    install -d ${D}/usr/bin
+    install -d ${D}/etc/myapp
+    install -d ${D}/var/lib/myapp
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = NonFHSPathRule()
+        results = rule.check(context)
+        
+        # Literal FHS paths should be OK
+        assert len(results) == 0
+
 
 class TestBbappendRules:
     """Tests for bbappend-related rules."""

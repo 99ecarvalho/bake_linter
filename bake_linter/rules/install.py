@@ -284,6 +284,9 @@ class NonFHSPathRule(BaseRule):
     - Package management issues
     - Portability problems
     - Maintenance difficulties
+    
+    Note: Recognizes BitBake variables like ${bindir}, ${libdir} as FHS-compliant.
+    Paths like ${D}/${bindir} or ${D}${bindir} are both valid and compliant.
     """
     
     rule_id = "INSTALL005"
@@ -292,6 +295,16 @@ class NonFHSPathRule(BaseRule):
     default_severity = Severity.INFO
     groups = ["install", "portability"]
     hint = "Use standard paths: ${bindir}, ${libdir}, ${datadir}, ${sysconfdir}"
+
+    # FHS-compliant BitBake variables - these are always valid destinations
+    FHS_VARIABLES = [
+        'bindir', 'sbindir', 'libdir', 'libexecdir', 'datadir',
+        'sysconfdir', 'localstatedir', 'includedir', 'docdir',
+        'mandir', 'infodir', 'sharedstatedir', 'servicedir',
+        'systemd_system_unitdir', 'systemd_user_unitdir', 'systemd_unitdir',
+        'base_bindir', 'base_sbindir', 'base_libdir',
+        'nonarch_libdir', 'nonarch_base_libdir',
+    ]
 
     # Standard FHS paths (as variables or literals)
     STANDARD_PATHS = [
@@ -322,6 +335,24 @@ class NonFHSPathRule(BaseRule):
     INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
     INSTALL_PATTERN = re.compile(r'^\s*install\s+.*\$\{D\}(/\S+)')
 
+    def _uses_fhs_variable(self, path: str) -> bool:
+        """Check if the path uses any FHS-compliant BitBake variable."""
+        for var in self.FHS_VARIABLES:
+            # Match ${var} or ${var}/subpath patterns
+            if f'${{{var}}}' in path or f'${{{var}/' in path:
+                return True
+        return False
+
+    def _is_fhs_compliant(self, path: str) -> bool:
+        """Check if the path is FHS-compliant (variable or literal)."""
+        # If it uses an FHS variable, it's compliant
+        if self._uses_fhs_variable(path):
+            return True
+        
+        # Check for standard literal paths
+        fhs_roots = ['/usr', '/etc', '/var', '/opt', '/lib', '/run', '/srv', '/home', '/boot']
+        return any(path.startswith(root) or f'/{root[1:]}' in path for root in fhs_roots)
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         in_do_install = False
@@ -348,7 +379,7 @@ class NonFHSPathRule(BaseRule):
                 
                 # Check for install commands with non-standard destinations
                 if 'install ' in stripped and '${D}' in stripped:
-                    # Skip if using standard paths
+                    # Skip if using standard paths (legacy pattern check)
                     if self.STANDARD_PATTERN.search(stripped):
                         continue
                     
@@ -356,8 +387,9 @@ class NonFHSPathRule(BaseRule):
                     match = self.INSTALL_PATTERN.search(stripped)
                     if match:
                         dest_path = match.group(1)
-                        # Only flag truly unusual paths
-                        if not any(p in dest_path for p in ['/usr', '/etc', '/var', '/opt', '/lib', '/run']):
+                        
+                        # Check if it's FHS-compliant (variable or literal)
+                        if not self._is_fhs_compliant(dest_path):
                             results.append(self.create_result(
                                 file=context.path,
                                 line=line_num,
