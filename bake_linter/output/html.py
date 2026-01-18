@@ -2150,18 +2150,10 @@ class HtmlFormatter(BaseFormatter):
                     rulesTriggered.set(ruleId, { name: ruleName, errors: 0, warnings: 0, infos: 0 });
                 }
                 
-                // Determine category from rule ID prefix
-                let category = 'OTHER';
-                if (ruleId.startsWith('BESTPRACTICE')) category = 'BESTPRACTICE';
-                else if (ruleId.startsWith('METADATA')) category = 'METADATA';
-                else if (ruleId.startsWith('NAMING')) category = 'NAMING';
-                else if (ruleId.startsWith('TASK')) category = 'TASK';
-                else if (ruleId.startsWith('VAR')) category = 'VARIABLES';
-                else if (ruleId.startsWith('LIFECYCLE')) category = 'LIFECYCLE';
-                else if (ruleId.startsWith('URI')) category = 'URI';
-                else if (ruleId.startsWith('PYTHON')) category = 'PYTHON';
-                else if (ruleId.startsWith('SYSTEMD')) category = 'SYSTEMD';
-                else if (ruleId.startsWith('STYLE')) category = 'STYLE';
+                // Determine category from rule ID prefix (extract letters before numbers)
+                // This dynamically supports all rule prefixes without hardcoding
+                const prefixMatch = ruleId.match(/^([A-Z]+)/);
+                const category = prefixMatch ? prefixMatch[1] : 'OTHER';
                 
                 if (!categoriesAffected.has(category)) {
                     categoriesAffected.set(category, { errors: 0, warnings: 0, infos: 0 });
