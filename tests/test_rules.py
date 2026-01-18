@@ -2525,6 +2525,71 @@ RRECOMMENDS:${PN}-utils += "extra-tools"
         assert len(results) == 1
         assert results[0].rule_id == "PKG006"
 
+    def test_files_with_package_before_pn_not_flagged(self):
+        """Test that FILES with PACKAGE_BEFORE_PN is NOT flagged.
+        
+        PACKAGE_BEFORE_PN automatically adds packages to PACKAGES before ${PN}.
+        This is a valid and common pattern in Yocto recipes.
+        """
+        from bake_linter.rules.package import FilesPackagesConsistencyRule
+        
+        content = '''PACKAGE_BEFORE_PN += "${PN}-examples"
+ALLOW_EMPTY:${PN}-examples = "1"
+FILES:${PN}-examples = "${bindir}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = FilesPackagesConsistencyRule()
+        results = rule.check(context)
+        
+        # Should NOT flag ${PN}-examples - it's added via PACKAGE_BEFORE_PN
+        assert len(results) == 0
+
+    def test_rdepends_with_package_before_pn_not_flagged(self):
+        """Test that RDEPENDS with PACKAGE_BEFORE_PN is NOT flagged."""
+        from bake_linter.rules.package import RdependsPackageExistenceRule
+        
+        content = '''PACKAGE_BEFORE_PN += "${PN}-tools"
+RDEPENDS:${PN}-tools += "bash"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RdependsPackageExistenceRule()
+        results = rule.check(context)
+        
+        # Should NOT flag ${PN}-tools - it's added via PACKAGE_BEFORE_PN
+        assert len(results) == 0
+
+    def test_files_with_packages_prepend_not_flagged(self):
+        """Test that FILES with PACKAGES =+ (prepend) is NOT flagged."""
+        from bake_linter.rules.package import FilesPackagesConsistencyRule
+        
+        content = '''PACKAGES =+ "${PN}-extra"
+FILES:${PN}-extra = "${datadir}/extra/*"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = FilesPackagesConsistencyRule()
+        results = rule.check(context)
+        
+        # Should NOT flag ${PN}-extra - it's added via PACKAGES =+
+        assert len(results) == 0
+
 
 class TestVariablesRulesExtended:
     """Tests for extended variable rules."""

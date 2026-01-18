@@ -221,6 +221,11 @@ class FilesPackagesConsistencyRule(BaseRule):
     Check that FILES entries correspond to packages in PACKAGES.
     
     Each FILES:${PN}-foo must have corresponding ${PN}-foo in PACKAGES.
+    
+    IMPORTANT: This rule recognizes multiple ways to add packages:
+    - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
+    - PACKAGE_BEFORE_PN += "..." (auto-adds to PACKAGES before ${PN})
+    - PACKAGES_DYNAMIC = "..." (dynamic package generation)
     """
     
     rule_id = "PKG004"
@@ -231,7 +236,9 @@ class FilesPackagesConsistencyRule(BaseRule):
     hint = "Add missing package to PACKAGES or remove orphaned FILES"
 
     FILES_PATTERN = re.compile(r'^FILES[_:]([\w${}-]+)')
-    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+:]?=')
+    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
+    PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
+    PACKAGES_DYNAMIC_PATTERN = re.compile(r'^PACKAGES_DYNAMIC\s*[+=:]+')
     
     # Standard auto-generated packages
     STANDARD_PACKAGES = [
@@ -244,6 +251,7 @@ class FilesPackagesConsistencyRule(BaseRule):
         
         files_packages: List[tuple] = []  # (line_num, package_name)
         packages_list: List[str] = []
+        dynamic_patterns: List[str] = []
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -257,11 +265,22 @@ class FilesPackagesConsistencyRule(BaseRule):
                 pkg_name = match.group(1)
                 files_packages.append((line_num, pkg_name))
             
-            # Collect PACKAGES entries
+            # Collect PACKAGES entries (=, +=, =+, :=)
             if self.PACKAGES_PATTERN.match(stripped):
                 # Extract package names
                 value = stripped.split('=', 1)[1] if '=' in stripped else ''
                 packages_list.extend(re.findall(r'[\w${}-]+', value))
+            
+            # Collect PACKAGE_BEFORE_PN entries (auto-adds to PACKAGES)
+            if self.PACKAGE_BEFORE_PN_PATTERN.match(stripped):
+                value = stripped.split('=', 1)[1] if '=' in stripped else ''
+                packages_list.extend(re.findall(r'[\w${}-]+', value))
+            
+            # Collect PACKAGES_DYNAMIC patterns
+            if self.PACKAGES_DYNAMIC_PATTERN.match(stripped):
+                value = stripped.split('=', 1)[1] if '=' in stripped else ''
+                # Extract patterns (may be regex-like)
+                dynamic_patterns.extend(re.findall(r'[\w${}\-.*^]+', value))
         
         # Check each FILES entry
         for line_num, pkg_name in files_packages:
@@ -269,16 +288,36 @@ class FilesPackagesConsistencyRule(BaseRule):
             if pkg_name in self.STANDARD_PACKAGES:
                 continue
             
-            # Check if package is in PACKAGES
-            if pkg_name not in packages_list:
-                # Also check if ${PN}-something pattern
-                if not any(pkg_name in p for p in packages_list):
-                    results.append(self.create_result(
-                        file=context.path,
-                        line=line_num,
-                        message=f"FILES:{pkg_name} defined but '{pkg_name}' not in PACKAGES",
-                        hint=f'Add: PACKAGES += "{pkg_name}"',
-                    ))
+            # Check if package is in PACKAGES or PACKAGE_BEFORE_PN
+            if pkg_name in packages_list:
+                continue
+            
+            # Check if any pattern contains package name
+            if any(pkg_name in p for p in packages_list):
+                continue
+            
+            # Check if matched by PACKAGES_DYNAMIC pattern
+            is_dynamic = False
+            for dyn_pattern in dynamic_patterns:
+                # Convert BitBake dynamic pattern to regex
+                # e.g., "${PN}-locale-.*" or "lib.*"
+                regex_pattern = dyn_pattern.replace('${PN}', r'.*').replace('.', r'\.').replace('*', '.*')
+                try:
+                    if re.match(regex_pattern, pkg_name):
+                        is_dynamic = True
+                        break
+                except re.error:
+                    pass  # Invalid regex, skip
+            
+            if is_dynamic:
+                continue
+            
+            results.append(self.create_result(
+                file=context.path,
+                line=line_num,
+                message=f"FILES:{pkg_name} defined but '{pkg_name}' not in PACKAGES",
+                hint=f'Add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
+            ))
         
         return results
 
@@ -288,6 +327,10 @@ class RdependsPackageExistenceRule(BaseRule):
     Check that packages in RDEPENDS:pkg are defined in PACKAGES.
     
     RDEPENDS:${PN}-foo requires ${PN}-foo to exist in PACKAGES.
+    
+    Recognizes packages added via:
+    - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
+    - PACKAGE_BEFORE_PN += "..."
     """
     
     rule_id = "PKG005"
@@ -298,7 +341,8 @@ class RdependsPackageExistenceRule(BaseRule):
     hint = "Add package to PACKAGES or fix package name"
 
     RDEPENDS_PKG_PATTERN = re.compile(r'^RDEPENDS[_:]([\w${}-]+)')
-    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+:]?=')
+    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
+    PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
     
     STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc']
 
@@ -320,8 +364,13 @@ class RdependsPackageExistenceRule(BaseRule):
                 pkg_name = match.group(1)
                 rdepends_packages.append((line_num, pkg_name))
             
-            # Collect PACKAGES entries
+            # Collect PACKAGES entries (=, +=, =+, :=)
             if self.PACKAGES_PATTERN.match(stripped):
+                value = stripped.split('=', 1)[1] if '=' in stripped else ''
+                packages_list.extend(re.findall(r'[\w${}-]+', value))
+            
+            # Collect PACKAGE_BEFORE_PN entries (auto-adds to PACKAGES)
+            if self.PACKAGE_BEFORE_PN_PATTERN.match(stripped):
                 value = stripped.split('=', 1)[1] if '=' in stripped else ''
                 packages_list.extend(re.findall(r'[\w${}-]+', value))
         
@@ -334,7 +383,7 @@ class RdependsPackageExistenceRule(BaseRule):
                     file=context.path,
                     line=line_num,
                     message=f"RDEPENDS:{pkg_name} but '{pkg_name}' not defined in PACKAGES",
-                    hint=f'Add: PACKAGES += "{pkg_name}"',
+                    hint=f'Add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
                 ))
         
         return results
@@ -345,6 +394,10 @@ class RrecommendsPackageValidityRule(BaseRule):
     Check that packages in RRECOMMENDS:pkg are defined in PACKAGES.
     
     Similar to PKG005 but for RRECOMMENDS (lower severity).
+    
+    Recognizes packages added via:
+    - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
+    - PACKAGE_BEFORE_PN += "..."
     """
     
     rule_id = "PKG006"
@@ -355,7 +408,8 @@ class RrecommendsPackageValidityRule(BaseRule):
     hint = "Add package to PACKAGES or fix package name"
 
     RRECOMMENDS_PKG_PATTERN = re.compile(r'^RRECOMMENDS[_:]([\w${}-]+)')
-    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+:]?=')
+    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
+    PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
     
     STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc']
 
@@ -376,8 +430,14 @@ class RrecommendsPackageValidityRule(BaseRule):
                 pkg_name = match.group(1)
                 rrecommends_packages.append((line_num, pkg_name))
             
-            if 'PACKAGES' in stripped and '=' in stripped:
+            # Collect PACKAGES entries (=, +=, =+, :=)
+            if self.PACKAGES_PATTERN.match(stripped):
                 value = stripped.split('=', 1)[1]
+                packages_list.extend(re.findall(r'[\w${}-]+', value))
+            
+            # Collect PACKAGE_BEFORE_PN entries (auto-adds to PACKAGES)
+            if self.PACKAGE_BEFORE_PN_PATTERN.match(stripped):
+                value = stripped.split('=', 1)[1] if '=' in stripped else ''
                 packages_list.extend(re.findall(r'[\w${}-]+', value))
         
         for line_num, pkg_name in rrecommends_packages:
@@ -389,7 +449,7 @@ class RrecommendsPackageValidityRule(BaseRule):
                     file=context.path,
                     line=line_num,
                     message=f"RRECOMMENDS:{pkg_name} but '{pkg_name}' not in PACKAGES",
-                    hint=f'Verify package name or add: PACKAGES += "{pkg_name}"',
+                    hint=f'Verify package name or add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
                 ))
         
         return results
