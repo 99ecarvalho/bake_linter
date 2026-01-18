@@ -62,8 +62,9 @@ class UnmatchedQuotesRule(BaseRule):
                     quote_count = value.count(first)
                     # Allow single quotes inside double-quoted strings and vice versa
                     if quote_count % 2 != 0:
-                        msg = f"Unmatched {'double' if first == '"' else 'single'} quote in variable assignment"
-                        hint = f"Add missing closing {'double' if first == '"' else 'single'} quote"
+                        quote_type = "double" if first == '"' else "single"
+                        msg = f"Unmatched {quote_type} quote in variable assignment"
+                        hint = f"Add missing closing {quote_type} quote"
                         results.append(self.create_result(
                             file=context.path,
                             line=line_num,

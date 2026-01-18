@@ -291,7 +291,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         results = engine.lint_files(args.paths)
     except Exception as e:
+        import traceback
         print(f"Lint error: {e}", file=sys.stderr)
+        if args.verbose:
+            traceback.print_exc()
         return ExitCode.RUNTIME_ERROR
     
     summary = engine.get_summary()
