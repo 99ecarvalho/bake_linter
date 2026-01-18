@@ -891,6 +891,83 @@ class TestInstallRules:
         
         assert len(results) == 1
         assert results[0].rule_id == "INSTALL001"
+        # Non-recursive cp should suggest install -m MODE
+        assert "install -d" in results[0].hint
+
+    def test_cp_recursive_suggests_find_install(self):
+        """Test that cp -r suggests find + install pattern."""
+        from bake_linter.rules.install import CpInsteadOfInstallRule
+        
+        content = '''do_install() {
+    install -m 0755 -d ${D}/etc/max
+    cp -r ${WORKDIR}/git/www ${D}/etc/max
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = CpInsteadOfInstallRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "INSTALL001"
+        # Recursive cp should suggest find + install
+        assert "find" in results[0].hint
+        assert "install" in results[0].hint
+
+    def test_cp_recursive_variants(self):
+        """Test that various recursive cp flags are detected."""
+        from bake_linter.rules.install import CpInsteadOfInstallRule
+        
+        # Test -R flag
+        content = '''do_install() {
+    cp -R src ${D}/dest
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        rule = CpInsteadOfInstallRule()
+        results = rule.check(context)
+        assert len(results) == 1
+        assert "find" in results[0].hint
+        
+        # Test -a flag (implies -r)
+        content = '''do_install() {
+    cp -a src ${D}/dest
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        results = rule.check(context)
+        assert len(results) == 1
+        assert "find" in results[0].hint
+        
+        # Test combined flags -rf
+        content = '''do_install() {
+    cp -rf src ${D}/dest
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        results = rule.check(context)
+        assert len(results) == 1
+        assert "find" in results[0].hint
 
     def test_install_without_mode(self):
         """Test that install without -m is flagged."""

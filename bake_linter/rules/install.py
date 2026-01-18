@@ -26,6 +26,8 @@ class CpInsteadOfInstallRule(BaseRule):
     - install can create directories
     - install strips binaries when requested
     - Makes permission expectations explicit
+    
+    For recursive copies (cp -r), suggests using find + install pattern.
     """
     
     rule_id = "INSTALL001"
@@ -37,6 +39,9 @@ class CpInsteadOfInstallRule(BaseRule):
 
     # Pattern to detect cp commands (but not in comments or strings that are clearly not commands)
     CP_PATTERN = re.compile(r'^\s*cp\s+(?:-[a-zA-Z]+\s+)*')
+    
+    # Pattern to detect recursive cp (-r, -R, --recursive, or -a which implies -r)
+    CP_RECURSIVE_PATTERN = re.compile(r'^\s*cp\s+.*(?:-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive)\s+')
     
     # Pattern to detect we're in a do_install task
     INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
@@ -70,12 +75,22 @@ class CpInsteadOfInstallRule(BaseRule):
                 
                 # Check for cp command
                 if self.CP_PATTERN.match(stripped):
+                    # Check if it's a recursive copy
+                    if self.CP_RECURSIVE_PATTERN.match(stripped):
+                        hint = (
+                            "For recursive copy, use find + install: "
+                            "find src -type d -exec install -d dest/{} \\; && "
+                            "find src -type f -exec install -m 0644 {} dest/{} \\;"
+                        )
+                    else:
+                        hint = "Use 'install -d' for dirs, 'install -m MODE' for files"
+                    
                     results.append(self.create_result(
                         file=context.path,
                         line=line_num,
                         message="Using 'cp' instead of 'install' command",
                         context=stripped[:60],
-                        hint="Use 'install -d' for dirs, 'install -m MODE' for files",
+                        hint=hint,
                     ))
         
         return results
