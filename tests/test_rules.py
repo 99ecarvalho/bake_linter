@@ -912,6 +912,62 @@ do_install() {
         
         assert len(results) == 0
 
+    def test_systemd_bbappend_not_flagged(self):
+        """Test that .bbappend files using systemd are NOT flagged.
+        
+        .bbappend files inherit from their base recipe, so they don't
+        need to explicitly add 'inherit systemd'.
+        """
+        from bake_linter.rules.systemd import SystemdWithoutInheritRule
+        
+        content = '''FILESEXTRAPATHS:prepend:fusion := "${THISDIR}/files:"
+SRC_URI:append = " \\
+    file://99-no-restrictsuid.conf \\
+    "
+do_install:append:fusion() {
+    install -d ${D}${systemd_system_unitdir}
+    install -d ${D}${systemd_system_unitdir}/data-defaults.service.d
+    install -m 644 ${WORKDIR}/99-no-restrictsuid.conf ${D}${systemd_system_unitdir}/data-defaults.service.d
+}
+'''
+        context = FileContext(
+            path=Path("systemd_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdWithoutInheritRule()
+        results = rule.check(context)
+        
+        # .bbappend files inherit from base recipe - should NOT be flagged
+        assert len(results) == 0
+
+    def test_systemd_inc_file_not_flagged(self):
+        """Test that .inc files using systemd are NOT flagged.
+        
+        .inc files are included by recipes that handle the inherit.
+        """
+        from bake_linter.rules.systemd import SystemdWithoutInheritRule
+        
+        content = '''do_install() {
+    install -d ${D}${systemd_system_unitdir}
+    install -m 644 ${WORKDIR}/foo.service ${D}${systemd_system_unitdir}/
+}
+'''
+        context = FileContext(
+            path=Path("systemd-common.inc"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SystemdWithoutInheritRule()
+        results = rule.check(context)
+        
+        # .inc files are included by others - should NOT be flagged
+        assert len(results) == 0
+
     def test_systemd_hardcoded_paths(self):
         """Test that hardcoded systemd paths are flagged."""
         from bake_linter.rules.systemd import SystemdHardcodedPathsRule

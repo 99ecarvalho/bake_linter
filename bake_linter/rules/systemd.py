@@ -23,6 +23,9 @@ class SystemdWithoutInheritRule(BaseRule):
     
     Using systemd variables or paths without inheriting the systemd class
     will cause build failures or unexpected behavior.
+    
+    Note: This rule only applies to .bb files. .bbappend files inherit
+    everything from their base recipe, including inherit statements.
     """
     
     rule_id = "SYSTEMD001"
@@ -44,6 +47,17 @@ class SystemdWithoutInheritRule(BaseRule):
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
+        
+        # Skip .bbappend files - they inherit from their base recipe
+        # The base recipe is responsible for 'inherit systemd'
+        file_path = str(context.path)
+        if file_path.endswith('.bbappend'):
+            return results
+        
+        # Skip .inc files - they are included by other recipes
+        # which handle the inherit statement
+        if file_path.endswith('.inc'):
+            return results
         
         # Check if recipe inherits systemd
         inherits_systemd = False
