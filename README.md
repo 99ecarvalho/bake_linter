@@ -166,6 +166,11 @@ The linter prints which config file is being used (or indicates if none was foun
 | STYLE008 | SYSTEMD_AUTO_ENABLE Suffix | Warning | Yes | Check SYSTEMD_AUTO_ENABLE uses :${PN} |
 | STYLE009 | Install Directory Trailing Slash | Info | Yes | Check install commands use trailing / for directories |
 | STYLE010 | Service Files Not in FILES | Warning | Yes | Detect service files installed but not in FILES:${PN} |
+| STYLE011 | Hardcoded Systemd Paths in FILES | Info | Yes | Suggests using systemd variables in FILES for consistency |
+| STYLE012 | Variable Assignment Spacing | Info | Yes | Check for proper spacing around assignment operators |
+| STYLE013 | Single Quote Usage | Info | Yes | Check for single quotes in variable assignments (should use double quotes) |
+| STYLE014 | Tab in Variable Definition | Warning | Yes | Check for tab characters in variable definitions (should use spaces) |
+| STYLE015 | Multiline Continuation Alignment | Info | Yes | Check alignment of continuation lines in multiline variable assignments |
 
 ### Security Rules
 | Rule ID | Name | Default Severity | Description |

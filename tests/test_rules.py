@@ -903,6 +903,380 @@ FILES:${PN} += "/custom/location/custom.service"
         # Using proper variables - no issues
         assert len(results) == 0
 
+    def test_variable_assignment_no_spaces_flagged(self):
+        """Test that variable assignments without spaces are flagged."""
+        from bake_linter.rules.style import VariableAssignmentSpacingRule
+        
+        content = '''FOO="bar"
+MY_VAR+="value"
+ANOTHER:=test
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VariableAssignmentSpacingRule()
+        results = rule.check(context)
+        
+        # All three should be flagged for missing spaces
+        assert len(results) == 3
+        assert all(r.rule_id == "STYLE012" for r in results)
+        assert all("space" in r.message.lower() for r in results)
+
+    def test_variable_assignment_proper_spacing_ok(self):
+        """Test that properly spaced variable assignments pass."""
+        from bake_linter.rules.style import VariableAssignmentSpacingRule
+        
+        content = '''FOO = "bar"
+MY_VAR += "value"
+ANOTHER := "test"
+OPTIONAL ?= "maybe"
+WEAK ??= "default"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VariableAssignmentSpacingRule()
+        results = rule.check(context)
+        
+        # All have proper spacing
+        assert len(results) == 0
+
+    def test_variable_assignment_spacing_skips_functions(self):
+        """Test that variable assignment rule skips shell/Python functions."""
+        from bake_linter.rules.style import VariableAssignmentSpacingRule
+        
+        content = '''FOO = "bar"
+
+do_install() {
+    VAR="value"
+    ANOTHER="test"
+}
+
+python do_configure() {
+    VAR="value"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VariableAssignmentSpacingRule()
+        results = rule.check(context)
+        
+        # Should not flag variables inside functions
+        assert len(results) == 0
+
+    def test_variable_assignment_missing_space_before_only(self):
+        """Test that missing space before operator is flagged."""
+        from bake_linter.rules.style import VariableAssignmentSpacingRule
+        
+        content = '''FOO= "bar"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VariableAssignmentSpacingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert "before" in results[0].message.lower()
+
+    def test_variable_assignment_missing_space_after_only(self):
+        """Test that missing space after operator is flagged."""
+        from bake_linter.rules.style import VariableAssignmentSpacingRule
+        
+        content = '''FOO ="bar"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = VariableAssignmentSpacingRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert "after" in results[0].message.lower()
+
+    def test_single_quote_in_assignment_flagged(self):
+        """Test that single quotes in variable assignments are flagged."""
+        from bake_linter.rules.style import SingleQuoteUsageRule
+        
+        content = '''FOO = 'bar'
+MY_VAR = 'some value'
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SingleQuoteUsageRule()
+        results = rule.check(context)
+        
+        # Both should be flagged
+        assert len(results) == 2
+        assert all(r.rule_id == "STYLE013" for r in results)
+        assert all("single quote" in r.message.lower() for r in results)
+
+    def test_double_quote_in_assignment_ok(self):
+        """Test that double quotes in variable assignments pass."""
+        from bake_linter.rules.style import SingleQuoteUsageRule
+        
+        content = '''FOO = "bar"
+MY_VAR = "some value"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SingleQuoteUsageRule()
+        results = rule.check(context)
+        
+        # Double quotes are correct
+        assert len(results) == 0
+
+    def test_single_quote_skips_shell_functions(self):
+        """Test that single quotes inside shell functions are not flagged."""
+        from bake_linter.rules.style import SingleQuoteUsageRule
+        
+        content = '''FOO = "bar"
+
+do_install() {
+    echo 'Hello'
+    MY_VAR='test'
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SingleQuoteUsageRule()
+        results = rule.check(context)
+        
+        # Should not flag quotes inside functions
+        assert len(results) == 0
+
+    def test_tab_in_variable_definition_flagged(self):
+        """Test that tabs in variable definitions are flagged."""
+        from bake_linter.rules.style import TabInVariableDefinitionRule
+        
+        content = '''FOO = "value \\
+\tcontinuation"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TabInVariableDefinitionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE014"
+        assert "tab" in results[0].message.lower()
+
+    def test_tab_in_variable_single_line_flagged(self):
+        """Test that tabs in single-line variable definitions are flagged."""
+        from bake_linter.rules.style import TabInVariableDefinitionRule
+        
+        content = '''FOO = "value\twith tab"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TabInVariableDefinitionRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE014"
+
+    def test_spaces_in_variable_definition_ok(self):
+        """Test that spaces in variable definitions pass."""
+        from bake_linter.rules.style import TabInVariableDefinitionRule
+        
+        content = '''FOO = "value \\
+    continuation"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TabInVariableDefinitionRule()
+        results = rule.check(context)
+        
+        # No tabs, should pass
+        assert len(results) == 0
+
+    def test_tab_skips_shell_functions(self):
+        """Test that tabs inside shell functions are not flagged."""
+        from bake_linter.rules.style import TabInVariableDefinitionRule
+        
+        content = '''FOO = "bar"
+
+do_install() {
+\techo "Hello"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TabInVariableDefinitionRule()
+        results = rule.check(context)
+        
+        # Should not flag tabs inside functions
+        assert len(results) == 0
+
+    def test_multiline_inconsistent_indentation_flagged(self):
+        """Test that inconsistent continuation indentation is flagged."""
+        from bake_linter.rules.style import MultilineContinuationAlignmentRule
+        
+        content = '''FOO = "value \\
+    continuation1 \\
+  continuation2 \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MultilineContinuationAlignmentRule()
+        results = rule.check(context)
+        
+        # Third line has different indentation
+        assert len(results) >= 1
+        assert results[0].rule_id == "STYLE015"
+        assert "inconsistent" in results[0].message.lower()
+
+    def test_multiline_consistent_indentation_ok(self):
+        """Test that consistent continuation indentation passes."""
+        from bake_linter.rules.style import MultilineContinuationAlignmentRule
+        
+        content = '''FOO = "value \\
+    continuation1 \\
+    continuation2 \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MultilineContinuationAlignmentRule()
+        results = rule.check(context)
+        
+        # Consistent indentation
+        assert len(results) == 0
+
+    def test_multiline_insufficient_indentation_flagged(self):
+        """Test that insufficient continuation indentation is flagged."""
+        from bake_linter.rules.style import MultilineContinuationAlignmentRule
+        
+        content = '''FOO = "value \\
+  x \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MultilineContinuationAlignmentRule()
+        results = rule.check(context)
+        
+        # Only 2 spaces indentation, should be flagged
+        assert len(results) >= 1
+        assert "insufficient" in results[0].message.lower() or "indentation" in results[0].message.lower()
+
+    def test_multiline_skips_shell_functions(self):
+        """Test that multiline rule skips shell functions."""
+        from bake_linter.rules.style import MultilineContinuationAlignmentRule
+        
+        content = '''do_install() {
+    FOO="value \\
+  continuation"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MultilineContinuationAlignmentRule()
+        results = rule.check(context)
+        
+        # Should not flag inside functions
+        assert len(results) == 0
+
+    def test_src_uri_multiline_proper_format(self):
+        """Test that SRC_URI with proper multiline format passes."""
+        from bake_linter.rules.style import MultilineContinuationAlignmentRule
+        
+        content = '''SRC_URI = "\\
+    file://patch1.patch \\
+    file://patch2.patch \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MultilineContinuationAlignmentRule()
+        results = rule.check(context)
+        
+        # Proper SRC_URI format
+        assert len(results) == 0
+
+
 class TestSecurityRules:
     """Tests for security rules."""
 

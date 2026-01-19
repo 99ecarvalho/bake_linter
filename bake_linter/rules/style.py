@@ -759,3 +759,449 @@ class HardcodedSystemdPathInFilesRule(BaseRule):
                     in_files_var = False
         
         return results
+
+
+class VariableAssignmentSpacingRule(BaseRule):
+    """
+    Check for proper spacing around assignment operators in BitBake variables.
+    
+    BitBake style guide recommends spaces around assignment operators:
+    - GOOD: FOO = "bar"
+    - BAD:  FOO="bar"
+    
+    This applies to all assignment operators: =, +=, =+, :=, ?=, ??=
+    
+    Context-aware: Skips shell function bodies and Python function bodies.
+    """
+    
+    rule_id = "STYLE012"
+    name = "Variable Assignment Spacing"
+    description = "Check for proper spacing around assignment operators"
+    default_severity = Severity.INFO
+    groups = ["style", "formatting"]
+    hint = "Add spaces around the assignment operator"
+
+    # Pattern to match BitBake variable assignments
+    # Captures: variable name, operator, optional space, rest of line
+    # This pattern detects MISSING spaces around operators
+    ASSIGNMENT_NO_SPACE_PATTERN = re.compile(
+        r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name with optional overrides
+        r'(\+?=|:=|\?\??=|=\+)'                    # Assignment operator
+        r'(?!\s)',                                  # NOT followed by space (captures missing space after)
+    )
+    
+    # Pattern to detect missing space BEFORE operator
+    MISSING_SPACE_BEFORE_PATTERN = re.compile(
+        r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name with optional overrides
+        r'(?<!\s)'                                  # No space before
+        r'(\+?=|:=|\?\??=|=\+)'                    # Assignment operator
+    )
+    
+    # Full pattern to check for proper spacing (space before and after operator)
+    PROPER_SPACING_PATTERN = re.compile(
+        r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name with optional overrides
+        r'\s+'                                      # Space(s) before operator
+        r'(\+?=|:=|\?\??=|=\+)'                    # Assignment operator  
+        r'\s+',                                     # Space(s) after operator
+    )
+    
+    # Pattern for variable assignment without proper spacing
+    BAD_SPACING_PATTERN = re.compile(
+        r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name
+        r'(\s*)'                                    # Optional space before operator
+        r'(\+?=|:=|\?\??=|=\+)'                    # Operator
+        r'(\s*)'                                    # Optional space after operator
+        r'(.*)$'                                    # Rest of line
+    )
+    
+    # Patterns to detect function contexts (to skip)
+    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
+    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_function = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith("#"):
+                continue
+            
+            # Track entering shell/python functions
+            if (self.SHELL_FUNC_START.match(stripped) or 
+                self.PYTHON_FUNC_START.match(stripped) or
+                self.ANON_PYTHON_START.match(stripped) or
+                self.TASK_OVERRIDE.match(stripped)):
+                in_function = True
+                brace_depth = stripped.count('{') - stripped.count('}')
+                continue
+            
+            # Track brace depth inside functions
+            if in_function:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_function = False
+                continue
+            
+            # Skip require/include statements
+            if stripped.startswith(("require", "include", "inherit")):
+                continue
+            
+            # Check for variable assignment with improper spacing
+            match = self.BAD_SPACING_PATTERN.match(stripped)
+            if match:
+                var_name = match.group(1)
+                space_before = match.group(2)
+                operator = match.group(3)
+                space_after = match.group(4)
+                
+                # Check if spacing is correct (should have space before and after)
+                has_space_before = len(space_before) > 0
+                has_space_after = len(space_after) > 0
+                
+                if not has_space_before or not has_space_after:
+                    issues = []
+                    if not has_space_before:
+                        issues.append("before")
+                    if not has_space_after:
+                        issues.append("after")
+                    
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"Missing space {' and '.join(issues)} '{operator}' operator in assignment",
+                        context=stripped[:60],
+                        hint=f"Use: {var_name} {operator} \"...\" (with spaces around {operator})",
+                    ))
+        
+        return results
+
+
+class SingleQuoteUsageRule(BaseRule):
+    """
+    Check for single quote usage in BitBake variable assignments.
+    
+    BitBake style guide recommends double quotes for variable assignments:
+    - GOOD: FOO = "bar"
+    - BAD:  FOO = 'bar'
+    
+    Single quotes are acceptable in shell code within tasks.
+    
+    Context-aware: Skips shell function bodies and Python function bodies.
+    """
+    
+    rule_id = "STYLE013"
+    name = "Single Quote Usage"
+    description = "Check for single quotes in variable assignments (should use double quotes)"
+    default_severity = Severity.INFO
+    groups = ["style", "formatting"]
+    hint = "Use double quotes for BitBake variable assignments"
+
+    # Pattern to detect BitBake variable assignment with single quotes
+    SINGLE_QUOTE_ASSIGNMENT = re.compile(
+        r"^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)"  # Variable name with optional overrides
+        r"\s*"                                      # Optional space
+        r"(\+?=|:=|\?\??=|=\+)"                    # Assignment operator
+        r"\s*"                                      # Optional space
+        r"'([^']*)'"                               # Single-quoted value
+        r"\s*$"                                     # End of line (simple single-line case)
+    )
+    
+    # Simpler pattern: variable assignment followed by single quote
+    VAR_WITH_SINGLE_QUOTE = re.compile(
+        r"^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)"  # Variable name
+        r"\s*"                                      # Optional space
+        r"(\+?=|:=|\?\??=|=\+)"                    # Assignment operator
+        r"\s*"                                      # Optional space
+        r"'"                                        # Single quote
+    )
+    
+    # Patterns to detect function contexts (to skip)
+    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
+    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_function = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith("#"):
+                continue
+            
+            # Track entering shell/python functions
+            if (self.SHELL_FUNC_START.match(stripped) or 
+                self.PYTHON_FUNC_START.match(stripped) or
+                self.ANON_PYTHON_START.match(stripped) or
+                self.TASK_OVERRIDE.match(stripped)):
+                in_function = True
+                brace_depth = stripped.count('{') - stripped.count('}')
+                continue
+            
+            # Track brace depth inside functions
+            if in_function:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_function = False
+                continue
+            
+            # Skip require/include statements
+            if stripped.startswith(("require", "include", "inherit")):
+                continue
+            
+            # Check for variable assignment with single quotes
+            if self.VAR_WITH_SINGLE_QUOTE.match(stripped):
+                match = self.VAR_WITH_SINGLE_QUOTE.match(stripped)
+                var_name = match.group(1)
+                operator = match.group(2)
+                
+                results.append(self.create_result(
+                    file=context.path,
+                    line=line_num,
+                    message=f"Single quotes used in '{var_name}' assignment",
+                    context=stripped[:60],
+                    hint=f"Use double quotes: {var_name} {operator} \"...\"",
+                ))
+        
+        return results
+
+
+class TabInVariableDefinitionRule(BaseRule):
+    """
+    Check for tab characters in variable definitions.
+    
+    BitBake style guide recommends using spaces (typically 4) for indentation:
+    - GOOD: FOO = "value \\
+                continuation"
+    - BAD:  FOO = "value \\
+    	continuation"  (tab used)
+    
+    Tabs can cause parsing issues and inconsistent display.
+    """
+    
+    rule_id = "STYLE014"
+    name = "Tab in Variable Definition"
+    description = "Check for tab characters in variable definitions (should use spaces)"
+    default_severity = Severity.WARNING
+    groups = ["style", "formatting"]
+    hint = "Replace tabs with 4 spaces per indentation level"
+
+    # Pattern to detect BitBake variable assignment start
+    VAR_ASSIGNMENT_START = re.compile(
+        r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)\s*(\+?=|:=|\?\??=|=\+)'
+    )
+    
+    # Patterns to detect function contexts (to skip)
+    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
+    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_function = False
+        in_multiline_var = False
+        brace_depth = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith("#"):
+                continue
+            
+            # Track entering shell/python functions
+            if (self.SHELL_FUNC_START.match(stripped) or 
+                self.PYTHON_FUNC_START.match(stripped) or
+                self.ANON_PYTHON_START.match(stripped) or
+                self.TASK_OVERRIDE.match(stripped)):
+                in_function = True
+                brace_depth = stripped.count('{') - stripped.count('}')
+                continue
+            
+            # Track brace depth inside functions
+            if in_function:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_function = False
+                continue
+            
+            # Check if this is a variable assignment
+            is_var_start = self.VAR_ASSIGNMENT_START.match(stripped)
+            
+            # Check for tabs BEFORE updating multiline state
+            # This allows checking both the start line and continuation lines
+            should_check_tabs = is_var_start or in_multiline_var
+            
+            # Track multiline variable continuations
+            if is_var_start:
+                in_multiline_var = stripped.rstrip().endswith('\\')
+            elif in_multiline_var:
+                # We're in a continuation line, check if it continues further
+                in_multiline_var = stripped.rstrip().endswith('\\')
+            
+            # Check for tabs in variable assignments or continuations
+            if should_check_tabs:
+                if '\t' in line:
+                    # Count tabs for reporting
+                    tab_count = line.count('\t')
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"Tab character(s) found in variable definition ({tab_count} tab{'s' if tab_count > 1 else ''})",
+                        context=stripped[:60],
+                        hint="Replace tabs with 4 spaces per indentation level",
+                    ))
+        
+        return results
+
+
+class MultilineContinuationAlignmentRule(BaseRule):
+    """
+    Check for proper alignment of continuation lines in multiline variable assignments.
+    
+    Continuation lines should be consistently indented. Common patterns:
+    
+    1. Aligned with opening quote:
+       FOO = "this is \\
+             continuation"
+    
+    2. Consistent indentation from variable name (4 spaces):
+       SRC_URI = "\\
+           file://patch1.patch \\
+           file://patch2.patch \\
+       "
+    
+    The key is consistency within a single variable assignment.
+    """
+    
+    rule_id = "STYLE015"
+    name = "Multiline Continuation Alignment"
+    description = "Check alignment of continuation lines in multiline variable assignments"
+    default_severity = Severity.INFO
+    groups = ["style", "formatting"]
+    hint = "Align continuation lines consistently"
+
+    # Pattern to detect BitBake variable assignment start
+    VAR_ASSIGNMENT_START = re.compile(
+        r'^(\s*)([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)\s*(\+?=|:=|\?\??=|=\+)\s*"(.*)'
+    )
+    
+    # Patterns to detect function contexts (to skip)
+    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
+    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
+    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
+
+    # Minimum indentation expected for continuation lines (typically 4 spaces)
+    MIN_CONTINUATION_INDENT = 4
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_function = False
+        brace_depth = 0
+        
+        # Track multiline variable state
+        in_multiline_var = False
+        var_name = ""
+        first_line_num = 0
+        expected_indent = 0
+        first_continuation_indent = None
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith("#"):
+                continue
+            
+            # Track entering shell/python functions
+            if (self.SHELL_FUNC_START.match(stripped) or 
+                self.PYTHON_FUNC_START.match(stripped) or
+                self.ANON_PYTHON_START.match(stripped) or
+                self.TASK_OVERRIDE.match(stripped)):
+                in_function = True
+                brace_depth = stripped.count('{') - stripped.count('}')
+                continue
+            
+            # Track brace depth inside functions
+            if in_function:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0:
+                    in_function = False
+                continue
+            
+            # Check if this is a new variable assignment
+            match = self.VAR_ASSIGNMENT_START.match(line)
+            if match:
+                leading_space = match.group(1)
+                var_name = match.group(2)
+                operator = match.group(3)
+                
+                # Check if it's a multiline assignment
+                if stripped.rstrip().endswith('\\'):
+                    in_multiline_var = True
+                    first_line_num = line_num
+                    
+                    # Calculate expected indentation for continuation
+                    # Option 1: Indent from variable name position + MIN_CONTINUATION_INDENT
+                    # Option 2: Align with opening quote
+                    quote_pos = line.find('"')
+                    if quote_pos != -1:
+                        expected_indent = quote_pos + 1  # Position after opening quote
+                    else:
+                        expected_indent = len(leading_space) + self.MIN_CONTINUATION_INDENT
+                    
+                    first_continuation_indent = None  # Will be set on first continuation
+                else:
+                    in_multiline_var = False
+                    first_continuation_indent = None
+                continue
+            
+            # Check continuation lines
+            if in_multiline_var:
+                # Calculate actual indentation
+                actual_indent = len(line) - len(line.lstrip())
+                
+                # First continuation line sets the expected pattern
+                if first_continuation_indent is None:
+                    first_continuation_indent = actual_indent
+                    # Check if indent is too small (less than MIN_CONTINUATION_INDENT)
+                    if actual_indent < self.MIN_CONTINUATION_INDENT:
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message=f"Continuation line has insufficient indentation ({actual_indent} spaces)",
+                            context=stripped[:60],
+                            hint=f"Use at least {self.MIN_CONTINUATION_INDENT} spaces for continuation lines",
+                        ))
+                else:
+                    # Subsequent lines should match the first continuation's indentation
+                    # Allow closing quote line to have different indentation
+                    is_closing_line = stripped == '"' or stripped.rstrip('\\').strip() == '"'
+                    
+                    if not is_closing_line and actual_indent != first_continuation_indent:
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message=f"Inconsistent continuation indentation ({actual_indent} vs {first_continuation_indent} spaces)",
+                            context=stripped[:60],
+                            hint=f"Align with previous continuation lines ({first_continuation_indent} spaces)",
+                        ))
+                
+                # Check if multiline ends
+                if not stripped.rstrip().endswith('\\'):
+                    in_multiline_var = False
+                    first_continuation_indent = None
+        
+        return results
