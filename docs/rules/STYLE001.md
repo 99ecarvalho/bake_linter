@@ -15,8 +15,8 @@ Check for trailing whitespace
 ## Example of Bad Code
 
 ```bitbake
-SUMMARY = "Example with trailing whitespace"    
-LICENSE = "MIT" 
+SUMMARY = "Example with trailing whitespace"
+LICENSE = "MIT"
 ```
 
 ## Why This Is Bad

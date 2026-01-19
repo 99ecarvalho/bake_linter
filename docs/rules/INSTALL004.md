@@ -15,20 +15,26 @@ Detects installations to /usr/local which is non-standard for Yocto
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    install -d ${D}/usr/local/bin
+    install -m 0755 tool ${D}/usr/local/bin/tool
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`/usr/local` is for system admins to install software post-image. Packages should install into standard Yocto paths (`/usr/bin`, `/opt`, etc.) so they can be managed, updated, and distributed with the image.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+    install -d ${D}${bindir}
+    install -m 0755 tool ${D}${bindir}/tool
+}
 ```
 
-TODO: Explain how to fix the issue
+Use Yocto variables (`${bindir}`, `${libdir}`, `${sysconfdir}`, etc.) which expand to correct paths. For custom locations, use `${datadir}` or `${libexecdir}`.
 
 ## Inline Suppression
 

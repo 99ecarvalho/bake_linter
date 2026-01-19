@@ -15,20 +15,28 @@ Detects mkdir -p usage instead of install -d in do_install
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    mkdir -p ${D}${bindir}
+    mkdir -p ${D}${libdir}
+    mkdir -p ${D}${sysconfdir}
+    cp file1 ${D}${bindir}/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`mkdir -p` is repetitive and less portable across Yocto build conditions. `install -d` is clearer about intent and integrates with the install ecosystem.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+    install -d ${D}${bindir} ${D}${libdir} ${D}${sysconfdir}
+    install -m 0644 file1 ${D}${bindir}/
+}
 ```
 
-TODO: Explain how to fix the issue
+Use `install -d` to create directories; it's the standard Yocto pattern and supports creating multiple paths in one command.
 
 ## Inline Suppression
 

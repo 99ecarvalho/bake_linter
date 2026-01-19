@@ -15,20 +15,28 @@ Detects cp command usage instead of install in do_install
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    mkdir -p ${D}${bindir}
+    cp tool ${D}${bindir}/tool
+    cp -r scripts ${D}${bindir}/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Using `cp` requires separate `mkdir` calls, doesn't set explicit permissions, and doesn't support stripping binaries automatically.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+    install -d ${D}${bindir}
+    install -m 0755 tool ${D}${bindir}/tool
+    install -m 0644 scripts/* ${D}${bindir}/
+}
 ```
 
-TODO: Explain how to fix the issue
+Replace `cp` with `install -m MODE` to set permissions explicitly, create directories atomically, and allow automatic binary stripping.
 
 ## Inline Suppression
 

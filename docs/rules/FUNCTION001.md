@@ -15,20 +15,40 @@ Verifies standard task functions follow conventional order
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_configure() {
+    oe_runconf
+}
+
+do_compile() {
+    oe_runmake
+}
+
+do_fetch() {
+    # Fetch after configure and compile—wrong order!
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Non-standard task ordering confuses readers and breaks BitBake task dependencies. Tasks like `do_fetch` must run first; placing them later suggests a misunderstanding of the build process.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_fetch() {
+    # Fetch first
+}
+
+do_configure() {
+    oe_runconf
+}
+
+do_compile() {
+    oe_runmake
+}
 ```
 
-TODO: Explain how to fix the issue
+Rearrange tasks to follow the standard sequence: `do_fetch` → `do_patch` → `do_configure` → `do_compile` → `do_install` → `do_package`.
 
 ## Inline Suppression
 

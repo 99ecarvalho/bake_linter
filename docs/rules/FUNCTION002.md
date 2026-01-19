@@ -15,20 +15,36 @@ Detects inconsistent mixing of Python and shell for same task
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Recipe defines do_compile as shell
+do_compile() {
+    make
+}
+
+# Append overrides it as Python
+python do_compile() {
+    bb.plain('Building...')
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Mixing Python and shell implementations of the same task causes confusion, breaks assumptions about available APIs, and can lead to subtle failures when one implementation is forgotten or overridden.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Keep all implementations of do_compile as shell
+do_compile() {
+    make
+}
+
+# Append-layer continues in shell
+do_compile:append() {
+    make test
+}
 ```
 
-TODO: Explain how to fix the issue
+Choose one function type (shell or Python) for each task and stick with it throughout the recipe and all appends.
 
 ## Inline Suppression
 

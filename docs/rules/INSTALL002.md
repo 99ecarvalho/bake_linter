@@ -15,20 +15,28 @@ Detects install commands without explicit -m permission mode
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    install -d ${D}${bindir}
+    install tool ${D}${bindir}/tool
+    install config.conf ${D}${sysconfdir}/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without explicit `-m` modes, install uses umask-dependent defaults which vary by system. Reviewers can't tell what permissions are intended.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+    install -d ${D}${bindir}
+    install -m 0755 tool ${D}${bindir}/tool
+    install -m 0644 config.conf ${D}${sysconfdir}/
+}
 ```
 
-TODO: Explain how to fix the issue
+Always use `-m MODE` to specify exact permissions: `0755` for executables, `0644` for config/data files.
 
 ## Inline Suppression
 
