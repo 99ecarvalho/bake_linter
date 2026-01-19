@@ -62,7 +62,7 @@ rules:
     enabled: true  # or false to disable
     severity: error  # override severity (error, warning, info)
     # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    #   key: value  # Add rule-specific options if any
 ```
 
 ## References
