@@ -15,20 +15,37 @@ Detects global configuration variables in .bbappend files
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# my-layer/recipes-app/myapp.bbappend
+# Setting global build configuration
+BB_STRICT_CHECKSUM = "0"
+PARALLEL_MAKE = "-j4"
+
+do_install:append() {
+    install -m 0755 ${S}/myapp ${D}${bindir}/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`.bbappend` files should modify the target recipe, not global build configuration. Setting variables like `BB_STRICT_CHECKSUM` or `PARALLEL_MAKE` affects all recipes and builds, creating hidden dependencies and side effects. This breaks layer isolation and causes hard-to-debug issues.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# my-layer/recipes-app/myapp.bbappend
+# Recipe-specific modifications only
+
+do_install:append() {
+    install -m 0755 ${S}/myapp ${D}${bindir}/
+}
+
+# Recipe-specific variables (not global configs)
+EXTRA_OEMAKE = "-j4"
 ```
 
-TODO: Explain how to fix the issue
+Keep `.bbappend` files focused on their specific recipe. Move global configuration to `conf/local.conf` or layer-specific conf files. Use recipe-scoped variables (e.g., `EXTRA_OEMAKE`) instead of global settings.
+
+
 
 ## Inline Suppression
 

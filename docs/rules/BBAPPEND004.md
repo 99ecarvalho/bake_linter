@@ -15,20 +15,30 @@ Detects .bbappend files with no actual content
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# my-layer/recipes-app/myapp.bbappend
+# Empty file with no modifications
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Empty `.bbappend` files serve no purpose and clutter the layer. They indicate incomplete work or forgotten files. BitBake still processes them, wasting build system resources. An empty append provides no value and should be removed.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# my-layer/recipes-app/myapp.bbappend
+# Delete this file if no modifications are needed, or add intended changes:
+
+do_install:append() {
+    install -m 0755 ${S}/extra-file ${D}${bindir}/
+}
+
+RDEPENDS:${PN} += "required-dependency"
 ```
 
-TODO: Explain how to fix the issue
+Either add meaningful content to the `.bbappend` file (tasks, variables, settings) or delete it entirely. Every append file should modify the base recipe in some way.
+
+
 
 ## Inline Suppression
 

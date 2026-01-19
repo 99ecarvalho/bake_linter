@@ -37,6 +37,8 @@ SRC_URI:class-native = "git://example.com/foo.git;branch=native"
 
 Prefer additive operations (`+=`, `:append`, `:prepend`) or scoped overrides instead of reassignment. If the earlier value is truly obsolete, remove it rather than silently overwriting.
 
+
+
 ## Inline Suppression
 
 If you need to suppress this rule for a specific line, add a comment:

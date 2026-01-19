@@ -15,20 +15,27 @@ Check package list formatting (alphabetical, one per line)
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+PACKAGES = "myapp bash sed grep tar zlib awk gawk"  # Unsorted, mixed order
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Unsorted package lists are harder to maintain and easier to add duplicates to. When packages are listed alphabetically and one per line, reviewers can spot duplicates and missing entries more easily.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+PACKAGES = " \
+    myapp \
+    bash \
+    grep \
+    sed \
+    tar \
+    zlib \
+    "
 ```
 
-TODO: Explain how to fix the issue
+Sort package names alphabetically and place one per line. This improves readability, makes diffs cleaner, and prevents accidental duplicates
 
 ## Inline Suppression
 

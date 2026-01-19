@@ -15,20 +15,28 @@ Detects unclosed ${...} variable expansions
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Unclosed variable expansion
+FILES = "${bindir}/* ${libdir}/libmyapp.so"  # OK
+CFLAGS = "-O2 -I${STAGING_INCDIR}"
+EXTRA_FLAGS = "-D_GNU_SOURCE -I${STAGING_INCDIR"  # Missing closing }
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Unclosed `${...}` variable expansions cause parse errors. BitBake cannot interpret the variable reference, resulting in build failures. The error message may be cryptic, making debugging difficult.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Close all variable expansions
+FILES = "${bindir}/* ${libdir}/libmyapp.so"
+CFLAGS = "-O2 -I${STAGING_INCDIR}"
+EXTRA_FLAGS = "-D_GNU_SOURCE -I${STAGING_INCDIR}"  # Added closing }
 ```
 
-TODO: Explain how to fix the issue
+Ensure every `${` has a matching `}`. Use an editor with syntax highlighting to catch these early. Nested variables like `${@os.path.join(...)}` require careful bracket matching.
+
+
 
 ## Inline Suppression
 

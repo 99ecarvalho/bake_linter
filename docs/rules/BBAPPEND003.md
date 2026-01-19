@@ -15,20 +15,28 @@ Detects version-specific .bbappend files that may break on updates
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# my-layer/recipes-app/myapp_1.2.3.bbappend
+do_install:append() {
+    install -m 0755 ${S}/extra-file ${D}${bindir}/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Version-specific `.bbappend` files (e.g., `myapp_1.2.3.bbappend`) break when the recipe version is updated. The append file becomes orphaned, losing custom modifications. Yocto recommends version-independent appends.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# my-layer/recipes-app/myapp.bbappend (without version)
+do_install:append() {
+    install -m 0755 ${S}/extra-file ${D}${bindir}/
+}
 ```
 
-TODO: Explain how to fix the issue
+Use version-agnostic `.bbappend` files (matching the recipe name without version). BitBake automatically applies them to all versions of the recipe.
+
+
 
 ## Inline Suppression
 

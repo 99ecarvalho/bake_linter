@@ -15,20 +15,43 @@ Detects recipes using both old (_) and new (:) override syntax
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Mixing old (_) and new (:) syntax in same recipe
+RDEPENDS:${PN} += "base-files"     # New syntax
+
+RDEPENDS_${PN} += "libc"           # Old syntax - inconsistent!
+
+do_install_append() {              # Old syntax
+    install -m 0755 ${S}/app ${D}${bindir}/
+}
+
+do_compile:prepend() {             # New syntax
+    echo "Compiling"
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Mixing old (`_`) and new (`:`) override syntax is confusing and makes recipes hard to maintain. Yocto deprecated the old syntax in version 3.1. Recipes should use consistent syntax for clarity and compatibility.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use only new (:) syntax consistently
+RDEPENDS:${PN} += "base-files"
+RDEPENDS:${PN} += "libc"
+
+do_install:append() {
+    install -m 0755 ${S}/app ${D}${bindir}/
+}
+
+do_compile:prepend() {
+    echo "Compiling"
+}
 ```
 
-TODO: Explain how to fix the issue
+Migrate all variable overrides to the new `:` syntax. Use a linter or find-replace to systematically update old syntax to new. This improves readability and ensures forward compatibility.
+
+
 
 ## Inline Suppression
 
