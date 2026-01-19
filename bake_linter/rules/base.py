@@ -171,7 +171,7 @@ class BaseRule(metaclass=RuleMeta):
         line: Optional[int] = None,
         column: Optional[int] = None,
         hint: Optional[str] = None,
-        context_code: Optional[str] = None,
+        context: Optional[str] = None,
         severity: Optional[Severity] = None,
         check_suppression: bool = True,
     ) -> Optional[LintResult]:
@@ -186,7 +186,7 @@ class BaseRule(metaclass=RuleMeta):
             line: Line number (1-indexed)
             column: Column number (1-indexed)
             hint: How to fix the issue (defaults to rule's hint)
-            context_code: Code snippet or additional context
+            context: Code snippet or additional context
             severity: Override severity for this specific result
             check_suppression: Whether to check for inline suppressions
             
@@ -213,7 +213,7 @@ class BaseRule(metaclass=RuleMeta):
             severity=severity or self._severity,
             message=message,
             hint=hint or self.hint,
-            context=context_code,
+            context=context,
             rule_name=self.name,
         )
     
