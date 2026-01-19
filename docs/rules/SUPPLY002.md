@@ -15,20 +15,32 @@ Detects downloads from personal/temporary hosting services
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Using unreliable hosting in SRC_URI
+
+SRC_URI += "https://raw.githubusercontent.com/user/repo/main/script.sh"
+SRC_URI += "https://drive.google.com/uc?id=FILEID&export=download"
+SRC_URI += "https://pastebin.com/raw/ABC123"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Personal or temporary hosting services have high disappearance risk, poor
+availability guarantees, and can change content without notice. They
+undermine build reliability and supply-chain integrity.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Prefer official release sources and mirrors
+
+SRC_URI = "https://downloads.example.org/project/project-1.2.3.tar.gz"
+
+# Configure MIRRORS/FALLBACK to improve resilience
+# (set in distro or local.conf, not necessarily in recipe)
 ```
 
-TODO: Explain how to fix the issue
+Replace URLs from raw/personal file hosts with official release archives or
+vendor-maintained sources. Configure `MIRRORS` to provide fallback servers.
 
 ## Inline Suppression
 
@@ -55,8 +67,7 @@ rules:
   SUPPLY002:
     enabled: true  # or false to disable
     severity: warning  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

@@ -15,20 +15,38 @@ Check recipe file naming follows conventions
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Non-conformant filename examples
+
+# Missing version:
+myrecipe.bb
+
+# Underscore in name portion:
+my_recipe_1.0.bb
+
+# Uppercase letters:
+MyRecipe_1.0.bb
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Recipe filenames should be lowercase, use hyphens in the name portion,
+and include a version (e.g., `_1.0`). Deviations hinder consistency and
+tooling that relies on conventional naming.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Conformant examples
+my-recipe_1.0.bb
+my-recipe_git.bb
+
+# Some classes (e.g., -native, -cross) or types (packagegroup-*) may omit
+# version in filename if PV is set in content.
 ```
 
-TODO: Explain how to fix the issue
+Rename the recipe to lowercase, replace underscores with hyphens in the name
+portion, and include a version suffix unless it falls under documented
+exceptions (native/cross/packagegroup/init, etc.).
 
 ## Inline Suppression
 
@@ -55,8 +73,7 @@ rules:
   NAMING002:
     enabled: true  # or false to disable
     severity: info  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

@@ -15,20 +15,35 @@ Detects .bbappend adding sources without LIC_FILES_CHKSUM update
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# .bbappend adds new sources but omits license verification
+
+# my-recipe.bbappend
+SRC_URI += "file://extra.patch"
+
+# Missing: LIC_FILES_CHKSUM update or license verification comment
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Adding sources in a bbappend can change the effective license or introduce
+content that requires review. Without updating `LIC_FILES_CHKSUM`, license
+tracking becomes inaccurate and may violate policy.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Verify/acknowledge license impact when adding sources
+
+# my-recipe.bbappend
+SRC_URI += "file://extra.patch"
+
+# Update license checksum or document verification
+LIC_FILES_CHKSUM = "file://LICENSE;md5=0123456789abcdef0123456789abcdef"
 ```
 
-TODO: Explain how to fix the issue
+When modifying `SRC_URI` in a `.bbappend`, review the license and update
+`LIC_FILES_CHKSUM` if the license inputs change. Ensure added files are
+compatible with the base recipe's license.
 
 ## Inline Suppression
 
@@ -55,8 +70,7 @@ rules:
   SUPPLY001:
     enabled: true  # or false to disable
     severity: warning  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

@@ -15,20 +15,41 @@ Detects usage of systemd variables/paths without inherit systemd
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Using systemd features without inheriting the class
+
+do_install() {
+  # Uses ${systemd_system_unitdir} but recipe does NOT: inherit systemd
+  install -D ${WORKDIR}/myservice.service \
+    ${D}${systemd_system_unitdir}/myservice.service
+}
+
+SYSTEMD_SERVICE:${PN} = "myservice.service"  # also requires inherit systemd
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without `inherit systemd`, variables like `${systemd_system_unitdir}` and
+integration hooks are undefined. This can lead to build errors, missing
+install destinations, and services not being packaged or enabled correctly.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Correct: explicitly inherit systemd before using its features
+
+inherit systemd
+
+do_install() {
+  install -D ${WORKDIR}/myservice.service \
+    ${D}${systemd_system_unitdir}/myservice.service
+}
+
+SYSTEMD_SERVICE:${PN} = "myservice.service"
 ```
 
-TODO: Explain how to fix the issue
+Add `inherit systemd` near the top of the recipe before any use of
+`${systemd_*}` variables or `SYSTEMD_*` assignments. This ensures the
+systemd class defines required variables and performs integration steps.
 
 ## Inline Suppression
 
@@ -55,8 +76,7 @@ rules:
   SYSTEMD001:
     enabled: true  # or false to disable
     severity: error  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

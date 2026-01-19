@@ -15,20 +15,29 @@ Check that SYSTEMD_AUTO_ENABLE uses :${PN} suffix
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Missing package suffix on SYSTEMD_AUTO_ENABLE
+
+inherit systemd
+
+SYSTEMD_AUTO_ENABLE = "enable"   # wrong
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`SYSTEMD_AUTO_ENABLE` is package-scoped. Without the `:${PN}` suffix, the
+setting may not apply as intended to the package and can lead to confusion
+or incorrect enablement.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+inherit systemd
+
+SYSTEMD_AUTO_ENABLE:${PN} = "enable"  # correct
 ```
 
-TODO: Explain how to fix the issue
+Use the package override `:${PN}` (or a specific package name) with
+`SYSTEMD_AUTO_ENABLE` to scope the setting properly.
 
 ## Inline Suppression
 
@@ -55,8 +64,7 @@ rules:
   STYLE008:
     enabled: true  # or false to disable
     severity: warning  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

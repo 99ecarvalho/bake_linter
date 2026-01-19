@@ -15,20 +15,41 @@ Detects .service files installed without SYSTEMD_SERVICE declaration
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Recipe inherits systemd but does not declare SYSTEMD_SERVICE
+
+inherit systemd
+
+do_install() {
+  install -D ${WORKDIR}/myservice.service \
+    ${D}${systemd_system_unitdir}/myservice.service
+}
+
+# Missing: SYSTEMD_SERVICE:${PN} = "myservice.service"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+When installing systemd units, the systemd class relies on
+`SYSTEMD_SERVICE:${PN}` to know which services to package and manage.
+Without the declaration, the service may not be enabled, packaged, or
+handled correctly during post-install.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+inherit systemd
+
+do_install() {
+  install -D ${WORKDIR}/myservice.service \
+    ${D}${systemd_system_unitdir}/myservice.service
+}
+
+# Declare services associated with the package
+SYSTEMD_SERVICE:${PN} = "myservice.service"
 ```
 
-TODO: Explain how to fix the issue
+Add a proper `SYSTEMD_SERVICE:${PN}` declaration listing the services
+installed by the recipe. Use quotes and list multiple units if needed.
 
 ## Inline Suppression
 
@@ -55,8 +76,7 @@ rules:
   SYSTEMD002:
     enabled: true  # or false to disable
     severity: error  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

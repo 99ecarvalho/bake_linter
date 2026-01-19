@@ -15,20 +15,42 @@ Check for systemd service files installed but not in FILES
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Service installed to a non-standard path without FILES entry
+
+inherit systemd
+
+do_install() {
+  # Install service to a custom directory
+  install -D ${WORKDIR}/custom.service \
+    ${D}${libdir}/custom/systemd/custom.service
+}
+
+# Missing FILES:${PN} entry covering ${libdir}/custom/systemd/custom.service
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+The systemd class auto-packages units from standard directories (e.g.,
+`${systemd_system_unitdir}`). If a service is installed elsewhere, it may
+not be included in any package unless you explicitly extend `FILES:${PN}`.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+inherit systemd
+
+do_install() {
+  install -D ${WORKDIR}/custom.service \
+    ${D}${libdir}/custom/systemd/custom.service
+}
+
+# Ensure the service is packaged
+FILES:${PN} += "${libdir}/custom/systemd/custom.service"
 ```
 
-TODO: Explain how to fix the issue
+Add a `FILES:${PN}` entry that covers the custom installation path, or
+install into `${systemd_system_unitdir}` if appropriate so the systemd
+class picks it up automatically.
 
 ## Inline Suppression
 
@@ -55,8 +77,7 @@ rules:
   STYLE010:
     enabled: true  # or false to disable
     severity: warning  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

@@ -15,20 +15,27 @@ Suggests using systemd variables in FILES for consistency
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Hardcoded systemd path in FILES (works, but style issue)
+
+FILES:${PN} += "/usr/lib/systemd/system/custom.service"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Hardcoded paths in `FILES` function correctly but reduce portability and
+consistency. Using `${systemd_system_unitdir}` improves maintainability and
+matches do_install patterns.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Prefer variables for portability and consistency
+
+FILES:${PN} += "${systemd_system_unitdir}/custom.service"
 ```
 
-TODO: Explain how to fix the issue
+Refactor `FILES` entries to use `${systemd_*}` variables where possible.
+This is informational (style), not an error.
 
 ## Inline Suppression
 
@@ -55,8 +62,7 @@ rules:
   STYLE011:
     enabled: true  # or false to disable
     severity: info  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

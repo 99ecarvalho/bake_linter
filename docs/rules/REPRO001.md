@@ -15,20 +15,29 @@ Detects mutable branch references (master, main, develop) in git URIs
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Using development branches in production sources
+
+SRC_URI = "git://github.com/example/project.git;branch=master;protocol=https"
+SRC_URI += " git://github.com/example/lib.git;branch=develop;protocol=https"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Development branches are mutable and can change unexpectedly, making source
+lineage unclear and builds non-repeatable. Prefer stable or release branches
+that change in a controlled manner.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use stable/release branches for clarity and reproducibility
+
+SRC_URI = "git://github.com/example/project.git;branch=stable-2.0;protocol=https"
+SRC_URI += " git://github.com/example/lib.git;branch=release-1.x;protocol=https"
 ```
 
-TODO: Explain how to fix the issue
+Choose explicit, versioned branch names maintained for releases. Combine this
+with a pinned `SRCREV` for deterministic builds.
 
 ## Inline Suppression
 
@@ -55,8 +64,7 @@ rules:
   REPRO001:
     enabled: true  # or false to disable
     severity: warning  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

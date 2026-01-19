@@ -15,20 +15,33 @@ Detects unpinned git revisions (AUTOREV, branch names)
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Unpinned SRCREV leads to non-reproducible builds
+
+SRC_URI = "git://github.com/example/project.git;protocol=https;branch=main"
+SRCREV = "master"      # branch name, not a commit
+
+# Or using AUTOREV in production
+SRCREV = "${AUTOREV}"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Branch names and `${AUTOREV}` move over time, causing different source content
+for the same build and breaking reproducibility. Production recipes must pin to
+a specific commit hash.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Pin to a specific commit hash (40-char SHA-1)
+
+SRC_URI = "git://github.com/example/project.git;protocol=https;branch=main"
+SRCREV = "9f0c3e1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c"
 ```
 
-TODO: Explain how to fix the issue
+Replace branch names or `${AUTOREV}` with a fixed commit SHA. Skip special
+suffixes like `SRCREV_FORMAT`, which are format strings and not commits. Dev
+recipes (e.g., `-git.bb`) may be exempt.
 
 ## Inline Suppression
 
@@ -55,8 +68,7 @@ rules:
   SRCREV001:
     enabled: true  # or false to disable
     severity: error  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

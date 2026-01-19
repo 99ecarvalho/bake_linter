@@ -15,20 +15,35 @@ Check for proper BitBake variable naming
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Lowercase variable in BitBake metadata (bad)
+
+summary = "My recipe"   # should be UPPERCASE: SUMMARY
+src_uri = "https://example.com/archive.tar.gz"  # should be SRC_URI
+
+# Note: lowercase inside functions is fine and NOT flagged
+do_install() {
+  local tmpdir="${WORKDIR}/tmp"  # shell local
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+BitBake variables follow uppercase naming (e.g., `LICENSE`, `SRC_URI`).
+Using lowercase in metadata reduces consistency and can lead to unexpected
+behavior. Lowercase in shell/Python function bodies is acceptable and
+ignored by this rule.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use uppercase for BitBake variables
+
+SUMMARY = "My recipe"
+SRC_URI = "https://example.com/archive.tar.gz"
 ```
 
-TODO: Explain how to fix the issue
+Change lowercase metadata variables to UPPERCASE. This rule skips known
+lowercase exceptions (e.g., `hostname`) and code inside functions.
 
 ## Inline Suppression
 
@@ -55,8 +70,7 @@ rules:
   NAMING001:
     enabled: true  # or false to disable
     severity: warning  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

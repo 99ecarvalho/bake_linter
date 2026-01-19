@@ -15,20 +15,38 @@ Detects hardcoded systemd paths instead of using variables
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Hardcoded destination path under ${D} (bad)
+
+do_install() {
+  install -D ${WORKDIR}/myservice.service \
+    ${D}/usr/lib/systemd/system/myservice.service
+  install -d ${D}/lib/systemd/system
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Hardcoding destination paths reduces portability and can break packaging
+across distributions. Prefer BitBake variables like
+`${systemd_system_unitdir}` or `${systemd_user_unitdir}` so the path
+adapts to the target environment.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use BitBake variables for destination paths (good)
+
+do_install() {
+  install -D ${WORKDIR}/myservice.service \
+    ${D}${systemd_system_unitdir}/myservice.service
+  install -d ${D}${systemd_system_unitdir}
+}
 ```
 
-TODO: Explain how to fix the issue
+Replace hardcoded `/usr/lib/systemd/system` or `/lib/systemd/system` with
+`${systemd_system_unitdir}`, and `/usr/lib/systemd/user` with
+`${systemd_user_unitdir}`. Note: Source contexts like `SRC_URI` or
+`${WORKDIR}` are allowed; this rule focuses on install destinations.
 
 ## Inline Suppression
 
@@ -55,8 +73,7 @@ rules:
   SYSTEMD003:
     enabled: true  # or false to disable
     severity: error  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References

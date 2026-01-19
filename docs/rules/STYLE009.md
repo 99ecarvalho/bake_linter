@@ -15,20 +15,32 @@ Check install commands use trailing slash for directories
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Destination directory without trailing slash (bad)
+
+do_install() {
+  install -m 0644 my.conf ${D}${sysconfdir}
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Omitting the trailing slash can obscure the intent (directory vs file) and
+lead to subtle issues. Using a trailing slash makes the destination type
+explicit and improves readability.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Explicit directory destination (good)
+
+do_install() {
+  install -m 0644 my.conf ${D}${sysconfdir}/
+}
 ```
 
-TODO: Explain how to fix the issue
+Add a trailing `/` to directory destinations in `install` commands. This
+applies to common directory variables like `${sysconfdir}`, `${bindir}`,
+`${libdir}`, `${systemd_system_unitdir}`, etc.
 
 ## Inline Suppression
 
@@ -55,8 +67,7 @@ rules:
   STYLE009:
     enabled: true  # or false to disable
     severity: info  # override severity (error, warning, info)
-    # options:
-    #   key: value  # TODO: Add rule-specific options if any
+    # options: none
 ```
 
 ## References
