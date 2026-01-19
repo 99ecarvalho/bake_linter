@@ -15,20 +15,27 @@ Detects build paths leaking into runtime configuration
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  install -d ${D}${sysconfdir}/myapp
+  # Embeds build-time path into shipped config
+  echo "data_dir=${WORKDIR}/output" > ${D}${sysconfdir}/myapp/config.ini
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Build paths (like `${WORKDIR}` or `/home/builder/...`) do not exist on target systems. Shipping them leaks environment details and breaks runtime behavior when the path is accessed.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -d ${D}${sysconfdir}/myapp
+  echo "data_dir=${localstatedir}/lib/myapp" > ${D}${sysconfdir}/myapp/config.ini
+}
 ```
 
-TODO: Explain how to fix the issue
+Use target-side paths (`${localstatedir}`, `${datadir}`, `${sysconfdir}`) in installed configuration. Never embed `${WORKDIR}` or absolute build paths in runtime files.
 
 ## Inline Suppression
 

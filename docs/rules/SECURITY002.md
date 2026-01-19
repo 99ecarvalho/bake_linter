@@ -15,20 +15,22 @@ Check for missing checksums on SRC_URI entries
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SRC_URI = "https://example.com/releases/myapp-1.0.tar.gz"
+# No sha256 checksum provided
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without checksums, downloads are not verified. Man-in-the-middle attacks or tampered artifacts can slip into builds undetected, compromising supply-chain security.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "https://example.com/releases/myapp-1.0.tar.gz"
+SRC_URI[sha256sum] = "3c0d2f5c6a4d9f3a1b5a8c7e8f9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d"
 ```
 
-TODO: Explain how to fix the issue
+Always declare a checksum (`sha256sum` preferred) for every remote `SRC_URI` entry so BitBake can verify integrity before unpacking.
 
 ## Inline Suppression
 

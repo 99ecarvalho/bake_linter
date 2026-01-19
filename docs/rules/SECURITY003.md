@@ -15,20 +15,26 @@ Check for overly permissive file permissions
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  install -d ${D}${sysconfdir}/myapp
+  install -m 0777 defaults.conf ${D}${sysconfdir}/myapp/  # world-writable
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+World-writable files (`0777`) are a security risk: any user or process can modify configuration, enabling privilege escalation or tampering. Packages must install files with least-privilege permissions.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -d ${D}${sysconfdir}/myapp
+  install -m 0644 defaults.conf ${D}${sysconfdir}/myapp/
+}
 ```
 
-TODO: Explain how to fix the issue
+Use restrictive permissions (`0644` for config files, `0755` for executables) and avoid world-writable bits unless explicitly required.
 
 ## Inline Suppression
 

@@ -15,20 +15,25 @@ Detects eval usage which can lead to code injection
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  EXTRA_ARGS="-m 0755"
+  eval install $EXTRA_ARGS ${D}${bindir}/myapp ${B}/myapp  # uses eval
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`eval` executes strings as shell code, allowing injection if variables contain unexpected content. It also hides errors and makes scripts harder to audit.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -m 0755 ${B}/myapp ${D}${bindir}/myapp
+}
 ```
 
-TODO: Explain how to fix the issue
+Avoid `eval`; pass arguments directly and quote variables. Use `install` with explicit flags instead of constructing commands in strings.
 
 ## Inline Suppression
 

@@ -15,20 +15,20 @@ Detects essential dependencies incorrectly in RRECOMMENDS
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+RRECOMMENDS:${PN} = "openssl"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Placing essential runtime dependencies in `RRECOMMENDS` makes them optional. Systems that omit recommended packages will miss required libraries, causing runtime failures. Essential libraries must be in `RDEPENDS` so they are always installed.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+RDEPENDS:${PN} = "openssl"
 ```
 
-TODO: Explain how to fix the issue
+Move mandatory runtime dependencies to `RDEPENDS`. Reserve `RRECOMMENDS` for optional helpers that are nice-to-have but not required for correct operation.
 
 ## Inline Suppression
 

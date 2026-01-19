@@ -15,20 +15,24 @@ Check alignment of continuation lines in multiline variable assignments
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+DESCRIPTION = "My app provides tools \
+for monitoring systems and \
+  automation"  # misaligned continuation
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Misaligned continuation lines reduce readability and can introduce trailing spaces. Inconsistent indentation makes diffs noisy and hides formatting errors.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+DESCRIPTION = "My app provides tools \
+    for monitoring systems and \
+    automation"
 ```
 
-TODO: Explain how to fix the issue
+Align continuation lines under the opening quote (or after the operator) using spaces. Keep indentation consistent for multi-line strings and lists.
 
 ## Inline Suppression
 

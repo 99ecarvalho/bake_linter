@@ -18,7 +18,7 @@ Detects files installed outside standard FHS paths
 do_install() {
     install -d ${D}/opt/myapp/bin
     install -m 0755 ${B}/myapp ${D}/opt/myapp/bin/
-    
+
     install -d ${D}/root/.myapp
     install -m 0600 config.cfg ${D}/root/.myapp/
 }
@@ -34,7 +34,7 @@ Installing outside FHS (Filesystem Hierarchy Standard) paths like `/opt` or home
 do_install() {
     install -d ${D}${bindir}
     install -m 0755 ${B}/myapp ${D}${bindir}/
-    
+
     install -d ${D}${sysconfdir}/myapp
     install -m 0600 config.cfg ${D}${sysconfdir}/myapp/
 }

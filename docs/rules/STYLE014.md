@@ -15,20 +15,22 @@ Check for tab characters in variable definitions (should use spaces)
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SRC_URI	= "https://example.com/myapp-1.0.tar.gz"  # tab before '='
+LIC_FILES_CHKSUM	= "file://LICENSE;md5=abc123..."
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Tabs in variable definitions are discouraged because they render inconsistently across editors and can hide alignment issues. Yocto style prefers spaces for clarity and consistent diffs.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "https://example.com/myapp-1.0.tar.gz"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=abc123..."
 ```
 
-TODO: Explain how to fix the issue
+Replace tabs with spaces in variable assignments. Configure your editor to expand tabs to spaces in BitBake files.
 
 ## Inline Suppression
 

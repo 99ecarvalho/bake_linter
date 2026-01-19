@@ -15,20 +15,29 @@ Detects recipes using pkg-config without inherit pkgconfig
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+DEPENDS = "zlib"
+
+do_configure() {
+  pkg-config --cflags zlib   # uses pkg-config but recipe forgot to inherit pkgconfig
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Using `pkg-config` without `inherit pkgconfig` means the native pkg-config tool and its environment are not ensured. Builds can fail on hosts without pkg-config, or pick up host libraries instead of sysroot ones, leading to unreliable and non-reproducible builds.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+inherit pkgconfig
+DEPENDS = "zlib"
+
+do_configure() {
+  pkg-config --cflags zlib   # now uses the sysroot pkg-config
+}
 ```
 
-TODO: Explain how to fix the issue
+Always `inherit pkgconfig` when calling `pkg-config` or when upstream build tooling expects it. This ensures the native pkg-config is staged and points to the correct Yocto sysroot paths.
 
 ## Inline Suppression
 
