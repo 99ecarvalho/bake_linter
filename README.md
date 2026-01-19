@@ -171,6 +171,12 @@ The linter prints which config file is being used (or indicates if none was foun
 | STYLE013 | Single Quote Usage | Info | Yes | Check for single quotes in variable assignments (should use double quotes) |
 | STYLE014 | Tab in Variable Definition | Warning | Yes | Check for tab characters in variable definitions (should use spaces) |
 | STYLE015 | Multiline Continuation Alignment | Info | Yes | Check alignment of continuation lines in multiline variable assignments |
+| STYLE016 | Python Function Indentation | Warning | Yes | Check Python functions use 4 spaces for indentation |
+| STYLE017 | Recipe Variable Ordering | Info | Yes | Check recipe variables follow recommended ordering |
+| STYLE018 | LICENSE Variable Order | Info | Yes | Check LICENSE appears before LIC_FILES_CHKSUM |
+| STYLE019 | Source Variables Order | Info | Yes | Check SRC_URI, SRCREV, S are in recommended order |
+| STYLE020 | Metadata Before License | Info | Yes | Check metadata variables (SUMMARY, HOMEPAGE) appear before LICENSE |
+| STYLE021 | Task Execution Order | Info | Yes | Check task functions follow execution order (configure → compile → install) |
 
 ### Security Rules
 | Rule ID | Name | Default Severity | Description |

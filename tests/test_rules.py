@@ -1276,6 +1276,317 @@ do_install() {
         # Proper SRC_URI format
         assert len(results) == 0
 
+    def test_python_function_tabs_flagged(self):
+        """Test that tabs in Python functions are flagged."""
+        from bake_linter.rules.style import PythonFunctionIndentationRule
+        
+        content = '''python do_configure() {
+\tbb.note("Hello")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PythonFunctionIndentationRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "STYLE016"
+        assert "tab" in results[0].message.lower()
+
+    def test_python_function_4_spaces_ok(self):
+        """Test that 4-space indentation in Python functions passes."""
+        from bake_linter.rules.style import PythonFunctionIndentationRule
+        
+        content = '''python do_configure() {
+    bb.note("Hello")
+    if True:
+        bb.note("Nested")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PythonFunctionIndentationRule()
+        results = rule.check(context)
+        
+        # 4-space indentation is correct
+        assert len(results) == 0
+
+    def test_python_function_wrong_indent_flagged(self):
+        """Test that non-4-space indentation in Python functions is flagged."""
+        from bake_linter.rules.style import PythonFunctionIndentationRule
+        
+        content = '''python do_configure() {
+   bb.note("Hello")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PythonFunctionIndentationRule()
+        results = rule.check(context)
+        
+        # 3-space indentation should be flagged
+        assert len(results) >= 1
+        assert "not multiple of 4" in results[0].message.lower() or "indentation" in results[0].message.lower()
+
+    def test_anonymous_python_function_checked(self):
+        """Test that anonymous Python functions are also checked."""
+        from bake_linter.rules.style import PythonFunctionIndentationRule
+        
+        content = '''python () {
+\tbb.note("Anonymous")
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = PythonFunctionIndentationRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "STYLE016"
+
+    def test_recipe_variable_order_correct(self):
+        """Test that properly ordered variables pass."""
+        from bake_linter.rules.style import RecipeVariableOrderRule
+        
+        content = '''SUMMARY = "Test recipe"
+DESCRIPTION = "A test recipe"
+HOMEPAGE = "https://example.com"
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=xxx"
+DEPENDS = "foo"
+SRC_URI = "https://example.com/file.tar.gz"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RecipeVariableOrderRule()
+        results = rule.check(context)
+        
+        # Properly ordered
+        assert len(results) == 0
+
+    def test_recipe_variable_order_wrong_flagged(self):
+        """Test that incorrectly ordered variables are flagged."""
+        from bake_linter.rules.style import RecipeVariableOrderRule
+        
+        content = '''LICENSE = "MIT"
+SUMMARY = "Test recipe"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = RecipeVariableOrderRule()
+        results = rule.check(context)
+        
+        # SUMMARY should come before LICENSE - but this is a minor diff (priority 1 vs 11)
+        # The rule flags significant differences (>= 10 priority points)
+        assert len(results) >= 1
+
+    def test_license_order_wrong_flagged(self):
+        """Test that LIC_FILES_CHKSUM before LICENSE is flagged."""
+        from bake_linter.rules.style import LicenseVariablesOrderRule
+        
+        content = '''LIC_FILES_CHKSUM = "file://LICENSE;md5=xxx"
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = LicenseVariablesOrderRule()
+        results = rule.check(context)
+        
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE018"
+        assert "before LICENSE" in results[0].message
+
+    def test_license_order_correct_ok(self):
+        """Test that LICENSE before LIC_FILES_CHKSUM passes."""
+        from bake_linter.rules.style import LicenseVariablesOrderRule
+        
+        content = '''LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=xxx"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = LicenseVariablesOrderRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_source_variables_order_wrong_flagged(self):
+        """Test that SRCREV before SRC_URI is flagged."""
+        from bake_linter.rules.style import SourceVariablesOrderRule
+        
+        content = '''SRCREV = "abc123"
+SRC_URI = "git://github.com/test/repo.git"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SourceVariablesOrderRule()
+        results = rule.check(context)
+        
+        assert len(results) >= 1
+        assert results[0].rule_id == "STYLE019"
+        assert "before SRC_URI" in results[0].message
+
+    def test_source_variables_order_correct_ok(self):
+        """Test that SRC_URI → SRCREV → S order passes."""
+        from bake_linter.rules.style import SourceVariablesOrderRule
+        
+        content = '''SRC_URI = "git://github.com/test/repo.git"
+SRCREV = "abc123"
+S = "${WORKDIR}/git"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = SourceVariablesOrderRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_metadata_before_license_wrong_flagged(self):
+        """Test that metadata after LICENSE is flagged."""
+        from bake_linter.rules.style import MetadataBeforeLicenseRule
+        
+        content = '''LICENSE = "MIT"
+SUMMARY = "Test recipe"
+HOMEPAGE = "https://example.com"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MetadataBeforeLicenseRule()
+        results = rule.check(context)
+        
+        # SUMMARY and HOMEPAGE after LICENSE should be flagged
+        assert len(results) >= 2
+        assert all(r.rule_id == "STYLE020" for r in results)
+
+    def test_metadata_before_license_correct_ok(self):
+        """Test that metadata before LICENSE passes."""
+        from bake_linter.rules.style import MetadataBeforeLicenseRule
+        
+        content = '''SUMMARY = "Test recipe"
+HOMEPAGE = "https://example.com"
+LICENSE = "MIT"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = MetadataBeforeLicenseRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
+    def test_task_order_wrong_flagged(self):
+        """Test that tasks in wrong order are flagged."""
+        from bake_linter.rules.style import TaskOrderRule
+        
+        content = '''do_install() {
+    echo "install"
+}
+
+do_configure() {
+    echo "configure"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TaskOrderRule()
+        results = rule.check(context)
+        
+        # do_install before do_configure is wrong
+        assert len(results) >= 1
+        assert results[0].rule_id == "STYLE021"
+
+    def test_task_order_correct_ok(self):
+        """Test that tasks in correct order pass."""
+        from bake_linter.rules.style import TaskOrderRule
+        
+        content = '''do_configure() {
+    echo "configure"
+}
+
+do_compile() {
+    echo "compile"
+}
+
+do_install() {
+    echo "install"
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        
+        rule = TaskOrderRule()
+        results = rule.check(context)
+        
+        assert len(results) == 0
+
 
 class TestSecurityRules:
     """Tests for security rules."""

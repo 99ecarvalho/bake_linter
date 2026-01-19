@@ -1205,3 +1205,524 @@ class MultilineContinuationAlignmentRule(BaseRule):
                     first_continuation_indent = None
         
         return results
+
+
+class PythonFunctionIndentationRule(BaseRule):
+    """
+    Check that Python functions use 4 spaces for indentation.
+    
+    Per Yocto style guide, Python code must use spaces for indentation,
+    with 4 spaces per indentation level. Tabs are not allowed.
+    
+    This checks:
+    - No tab characters in Python function bodies
+    - Consistent 4-space indentation increments
+    """
+    
+    rule_id = "STYLE016"
+    name = "Python Function Indentation"
+    description = "Check Python functions use 4 spaces for indentation"
+    default_severity = Severity.WARNING
+    groups = ["style", "formatting", "python"]
+    hint = "Use 4 spaces per indentation level in Python functions"
+
+    # Patterns to detect Python function contexts
+    PYTHON_FUNC_START = re.compile(r'^python\s+([a-z_][a-z0-9_]*)\s*\(\s*\)\s*\{')
+    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
+    PYTHON_TASK_OVERRIDE = re.compile(r'^python\s+do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        in_python_func = False
+        func_name = ""
+        func_start_line = 0
+        brace_depth = 0
+        base_indent = 0
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip empty lines and comments outside functions
+            if not stripped:
+                continue
+            
+            # Check for Python function start
+            match = self.PYTHON_FUNC_START.match(stripped)
+            if not match:
+                match = self.ANON_PYTHON_START.match(stripped)
+            if not match:
+                match = self.PYTHON_TASK_OVERRIDE.match(stripped)
+            
+            if match:
+                in_python_func = True
+                func_name = match.group(1) if match.lastindex else "anonymous"
+                func_start_line = line_num
+                brace_depth = stripped.count('{') - stripped.count('}')
+                # Calculate base indentation from the function definition
+                base_indent = len(line) - len(line.lstrip())
+                continue
+            
+            if in_python_func:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                
+                # Check for tabs in Python code
+                if '\t' in line:
+                    tab_count = line.count('\t')
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"Tab character(s) in Python function '{func_name}' ({tab_count} tab{'s' if tab_count > 1 else ''})",
+                        context=stripped[:60],
+                        hint="Replace tabs with 4 spaces per indentation level",
+                    ))
+                
+                # Check indentation is multiple of 4 (relative to function body)
+                if stripped and not stripped.startswith('#'):
+                    current_indent = len(line) - len(line.lstrip())
+                    # Indent relative to function start should be multiple of 4
+                    relative_indent = current_indent - base_indent
+                    if relative_indent > 0 and relative_indent % 4 != 0:
+                        # Don't flag continuation lines or closing braces
+                        if not stripped.startswith('}') and not line.rstrip().endswith('\\'):
+                            results.append(self.create_result(
+                                file=context.path,
+                                line=line_num,
+                                message=f"Python indentation not multiple of 4 spaces (found {relative_indent} relative spaces)",
+                                context=stripped[:60],
+                                hint="Use 4 spaces per indentation level",
+                            ))
+                
+                # Exit function when braces balance
+                if brace_depth <= 0:
+                    in_python_func = False
+                    func_name = ""
+        
+        return results
+
+
+class RecipeVariableOrderRule(BaseRule):
+    """
+    Check that recipe variables follow the recommended ordering.
+    
+    Per Yocto style guide, variables should follow this general order:
+    1. SUMMARY, DESCRIPTION, HOMEPAGE, BUGTRACKER, SECTION
+    2. LICENSE, LIC_FILES_CHKSUM
+    3. DEPENDS, PROVIDES
+    4. PV, SRC_URI, SRCREV, S
+    5. inherit statements
+    6. PACKAGECONFIG
+    7. Build class specific variables
+    8. Tasks
+    9. PACKAGE_ARCH, PACKAGES, FILES
+    10. RDEPENDS, RRECOMMENDS, etc.
+    11. BBCLASSEXTEND
+    
+    This rule provides INFO-level suggestions when ordering differs significantly.
+    """
+    
+    rule_id = "STYLE017"
+    name = "Recipe Variable Ordering"
+    description = "Check recipe variables follow recommended ordering"
+    default_severity = Severity.INFO
+    groups = ["style", "ordering"]
+    hint = "Consider reordering variables per Yocto style guide"
+    enabled_by_default = True
+
+    # Define variable categories in recommended order
+    # Each category has a priority (lower = earlier in file)
+    VARIABLE_ORDER = {
+        # Metadata (priority 1-10)
+        'SUMMARY': 1,
+        'DESCRIPTION': 2,
+        'HOMEPAGE': 3,
+        'BUGTRACKER': 4,
+        'SECTION': 5,
+        'AUTHOR': 6,
+        
+        # License (priority 10-20)
+        'LICENSE': 11,
+        'LIC_FILES_CHKSUM': 12,
+        
+        # Dependencies and provides (priority 20-30)
+        'DEPENDS': 21,
+        'PROVIDES': 22,
+        
+        # Version and source (priority 30-40)
+        'PV': 31,
+        'PR': 32,
+        'SRC_URI': 33,
+        'SRCREV': 34,
+        'SRCBRANCH': 35,
+        'S': 36,
+        'B': 37,
+        
+        # Build configuration (priority 50-60)
+        'PACKAGECONFIG': 51,
+        'EXTRA_OECONF': 52,
+        'EXTRA_OECMAKE': 53,
+        'EXTRA_QMAKEVARS_POST': 54,
+        'EXTRA_QMAKEVARS_PRE': 55,
+        
+        # Packaging (priority 70-80)
+        'PACKAGE_ARCH': 71,
+        'PACKAGES': 72,
+        'FILES': 73,
+        
+        # Runtime dependencies (priority 80-90)
+        'RDEPENDS': 81,
+        'RRECOMMENDS': 82,
+        'RSUGGESTS': 83,
+        'RPROVIDES': 84,
+        'RCONFLICTS': 85,
+        'RREPLACES': 86,
+        
+        # Extension (priority 99)
+        'BBCLASSEXTEND': 99,
+    }
+    
+    # Pattern to extract variable name from assignment
+    VAR_ASSIGNMENT = re.compile(r'^([A-Z][A-Z0-9_]*)(?::[^\s=]+)?\s*[\+\?:]?=')
+    
+    # Pattern to detect inherit statement
+    INHERIT_PATTERN = re.compile(r'^inherit\s+')
+    
+    # Pattern to detect task definitions
+    TASK_PATTERN = re.compile(r'^(do_[a-z_]+)(?::[a-z_]+)?\s*\(')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        # Collect variable positions
+        var_positions = []  # List of (line_num, var_name, priority)
+        inherit_line = None
+        task_start_line = None
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith('#'):
+                continue
+            
+            # Track inherit statement
+            if self.INHERIT_PATTERN.match(stripped):
+                if inherit_line is None:
+                    inherit_line = line_num
+                continue
+            
+            # Track first task
+            if self.TASK_PATTERN.match(stripped):
+                if task_start_line is None:
+                    task_start_line = line_num
+                continue
+            
+            # Extract variable name
+            match = self.VAR_ASSIGNMENT.match(stripped)
+            if match:
+                var_name = match.group(1)
+                # Get base variable name (without package suffix)
+                base_var = var_name.split(':')[0] if ':' in var_name else var_name
+                
+                if base_var in self.VARIABLE_ORDER:
+                    priority = self.VARIABLE_ORDER[base_var]
+                    var_positions.append((line_num, var_name, priority))
+        
+        # Check for out-of-order variables
+        if len(var_positions) >= 2:
+            # Check for major ordering issues
+            for i in range(len(var_positions) - 1):
+                curr_line, curr_var, curr_priority = var_positions[i]
+                next_line, next_var, next_priority = var_positions[i + 1]
+                
+                # Only flag if there's a significant ordering issue
+                # (variable from a later category appears before one from an earlier category)
+                priority_diff = curr_priority - next_priority
+                
+                if priority_diff >= 10:  # Significant category difference
+                    # Get category names for clarity
+                    curr_cat = self._get_category(curr_priority)
+                    next_cat = self._get_category(next_priority)
+                    
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=curr_line,
+                        message=f"'{curr_var}' ({curr_cat}) appears before '{next_var}' ({next_cat})",
+                        context=f"Consider placing {next_var} before {curr_var}",
+                        hint=f"Yocto style suggests: metadata → license → source → build → packaging → runtime",
+                    ))
+        
+        # Check if inherit comes after variables that should follow it
+        if inherit_line:
+            for line_num, var_name, priority in var_positions:
+                # Variables with priority >= 50 should come after inherit
+                if priority >= 50 and line_num < inherit_line:
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=line_num,
+                        message=f"'{var_name}' typically appears after 'inherit' statement",
+                        hint="Move 'inherit' before build configuration and packaging variables",
+                    ))
+                    break  # One warning is enough
+        
+        return results
+    
+    def _get_category(self, priority: int) -> str:
+        """Get human-readable category name from priority."""
+        if priority <= 10:
+            return "metadata"
+        elif priority <= 20:
+            return "license"
+        elif priority <= 30:
+            return "dependencies"
+        elif priority <= 40:
+            return "source"
+        elif priority <= 60:
+            return "build config"
+        elif priority <= 75:
+            return "packaging"
+        elif priority <= 90:
+            return "runtime deps"
+        else:
+            return "extension"
+
+
+class LicenseVariablesOrderRule(BaseRule):
+    """
+    Check that LICENSE comes before LIC_FILES_CHKSUM.
+    
+    Per Yocto style guide, LICENSE should be defined before LIC_FILES_CHKSUM.
+    """
+    
+    rule_id = "STYLE018"
+    name = "LICENSE Variable Order"
+    description = "Check LICENSE appears before LIC_FILES_CHKSUM"
+    default_severity = Severity.INFO
+    groups = ["style", "ordering", "license"]
+    hint = "Place LICENSE before LIC_FILES_CHKSUM"
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        license_line = None
+        lic_files_line = None
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith('#'):
+                continue
+            
+            if stripped.startswith('LICENSE') and '=' in stripped:
+                if license_line is None:
+                    license_line = line_num
+            
+            if stripped.startswith('LIC_FILES_CHKSUM') and '=' in stripped:
+                if lic_files_line is None:
+                    lic_files_line = line_num
+        
+        # Check order
+        if license_line and lic_files_line:
+            if lic_files_line < license_line:
+                results.append(self.create_result(
+                    file=context.path,
+                    line=lic_files_line,
+                    message="LIC_FILES_CHKSUM appears before LICENSE",
+                    hint="Place LICENSE before LIC_FILES_CHKSUM per Yocto style guide",
+                ))
+        
+        return results
+
+
+class SourceVariablesOrderRule(BaseRule):
+    """
+    Check that source-related variables are in the recommended order.
+    
+    Recommended order: SRC_URI → SRCREV → S
+    """
+    
+    rule_id = "STYLE019"
+    name = "Source Variables Order"
+    description = "Check SRC_URI, SRCREV, S are in recommended order"
+    default_severity = Severity.INFO
+    groups = ["style", "ordering", "source"]
+    hint = "Order source variables: SRC_URI → SRCREV → S"
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        src_uri_line = None
+        srcrev_line = None
+        s_line = None
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith('#'):
+                continue
+            
+            # Match SRC_URI (but not SRC_URI:append etc for simplicity)
+            if re.match(r'^SRC_URI\s*[+?:]?=', stripped):
+                if src_uri_line is None:
+                    src_uri_line = line_num
+            
+            if re.match(r'^SRCREV\s*[+?:]?=', stripped):
+                if srcrev_line is None:
+                    srcrev_line = line_num
+            
+            # Match S but not SECTION, SUMMARY, etc.
+            if re.match(r'^S\s*[+?:]?=', stripped):
+                if s_line is None:
+                    s_line = line_num
+        
+        # Check SRCREV before SRC_URI
+        if src_uri_line and srcrev_line and srcrev_line < src_uri_line:
+            results.append(self.create_result(
+                file=context.path,
+                line=srcrev_line,
+                message="SRCREV appears before SRC_URI",
+                hint="Place SRC_URI before SRCREV per Yocto style guide",
+            ))
+        
+        # Check S before SRC_URI
+        if src_uri_line and s_line and s_line < src_uri_line:
+            results.append(self.create_result(
+                file=context.path,
+                line=s_line,
+                message="S appears before SRC_URI",
+                hint="Place SRC_URI before S per Yocto style guide",
+            ))
+        
+        # Check S before SRCREV (if both exist)
+        if srcrev_line and s_line and s_line < srcrev_line:
+            results.append(self.create_result(
+                file=context.path,
+                line=s_line,
+                message="S appears before SRCREV",
+                hint="Place SRCREV before S per Yocto style guide",
+            ))
+        
+        return results
+
+
+class MetadataBeforeLicenseRule(BaseRule):
+    """
+    Check that metadata variables come before license variables.
+    
+    SUMMARY, DESCRIPTION, HOMEPAGE, BUGTRACKER should appear before LICENSE.
+    """
+    
+    rule_id = "STYLE020"
+    name = "Metadata Before License"
+    description = "Check metadata variables appear before LICENSE"
+    default_severity = Severity.INFO
+    groups = ["style", "ordering", "metadata"]
+    hint = "Place SUMMARY, DESCRIPTION, HOMEPAGE before LICENSE"
+
+    METADATA_VARS = ['SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER', 'SECTION']
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        license_line = None
+        
+        # Find first LICENSE line
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            if stripped.startswith('LICENSE') and '=' in stripped:
+                license_line = line_num
+                break
+        
+        if not license_line:
+            return results
+        
+        # Check if any metadata vars appear after LICENSE
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            
+            for meta_var in self.METADATA_VARS:
+                if stripped.startswith(meta_var) and '=' in stripped:
+                    if line_num > license_line:
+                        results.append(self.create_result(
+                            file=context.path,
+                            line=line_num,
+                            message=f"'{meta_var}' appears after LICENSE (line {license_line})",
+                            hint=f"Place {meta_var} before LICENSE per Yocto style guide",
+                        ))
+        
+        return results
+
+
+class TaskOrderRule(BaseRule):
+    """
+    Check that task functions are in execution order.
+    
+    Tasks should generally be ordered by their execution order:
+    do_fetch → do_unpack → do_patch → do_configure → do_compile → do_install → do_package
+    """
+    
+    rule_id = "STYLE021"
+    name = "Task Execution Order"
+    description = "Check task functions follow execution order"
+    default_severity = Severity.INFO
+    groups = ["style", "ordering", "tasks"]
+    hint = "Order tasks by execution: fetch → unpack → patch → configure → compile → install"
+    enabled_by_default = True
+
+    # Task execution order (lower = earlier)
+    TASK_ORDER = {
+        'do_fetch': 1,
+        'do_unpack': 2,
+        'do_patch': 3,
+        'do_prepare_recipe_sysroot': 4,
+        'do_configure': 5,
+        'do_compile': 6,
+        'do_install': 7,
+        'do_populate_sysroot': 8,
+        'do_package': 9,
+        'do_package_write': 10,
+    }
+    
+    # Pattern to detect task definitions
+    TASK_PATTERN = re.compile(r'^(do_[a-z_]+)(?::[a-z_]+)?\s*\(')
+
+    def check(self, context: FileContext) -> List[LintResult]:
+        results = []
+        
+        # Collect task positions
+        task_positions = []  # List of (line_num, task_name, order)
+        
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            
+            if stripped.startswith('#'):
+                continue
+            
+            match = self.TASK_PATTERN.match(stripped)
+            if match:
+                task_name = match.group(1)
+                # Get base task name (without :append etc)
+                base_task = task_name.split(':')[0] if ':' in task_name else task_name
+                
+                if base_task in self.TASK_ORDER:
+                    order = self.TASK_ORDER[base_task]
+                    task_positions.append((line_num, task_name, order))
+        
+        # Check for out-of-order tasks
+        if len(task_positions) >= 2:
+            for i in range(len(task_positions) - 1):
+                curr_line, curr_task, curr_order = task_positions[i]
+                next_line, next_task, next_order = task_positions[i + 1]
+                
+                if curr_order > next_order:
+                    results.append(self.create_result(
+                        file=context.path,
+                        line=curr_line,
+                        message=f"'{curr_task}' appears before '{next_task}' (should be after)",
+                        hint="Order tasks by execution sequence: configure → compile → install",
+                    ))
+        
+        return results
