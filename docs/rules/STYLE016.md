@@ -15,20 +15,26 @@ Check Python functions use 4 spaces for indentation
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+python do_install() {
+  import os
+  os.makedirs(d + "/usr/share/myapp", exist_ok=True)  # 2-space indent, not 4
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Python blocks require consistent 4-space indentation (PEP8). Mis-indented blocks are hard to read and can trigger `IndentationError`, breaking tasks during parsing or execution.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+python do_install() {
+    import os
+    os.makedirs(d + "/usr/share/myapp", exist_ok=True)
+}
 ```
 
-TODO: Explain how to fix the issue
+Use 4 spaces for every indentation level in inline Python. Configure your editor to expand tabs to spaces for BitBake/Python blocks.
 
 ## Inline Suppression
 

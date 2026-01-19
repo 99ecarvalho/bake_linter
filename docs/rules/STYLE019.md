@@ -15,20 +15,24 @@ Check SRC_URI, SRCREV, S are in recommended order
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+S = "${WORKDIR}/git"
+SRCREV = "abcdef123456"
+SRC_URI = "git://example.com/myapp.git;branch=main"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Ordering source variables inconsistently makes recipes harder to scan and can hide mistakes (e.g., SRCREV mismatching SRC_URI). Recommended order keeps related source settings together and reviewable.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "git://example.com/myapp.git;branch=main"
+SRCREV = "abcdef123456"
+S = "${WORKDIR}/git"
 ```
 
-TODO: Explain how to fix the issue
+Keep source declarations grouped in order: SRC_URI, SRCREV (if used), then S. This mirrors fetch → pin → unpack order and improves readability.
 
 ## Inline Suppression
 

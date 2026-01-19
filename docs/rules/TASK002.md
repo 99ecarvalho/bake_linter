@@ -15,20 +15,24 @@ Detects sudo usage in recipe task code
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  sudo install -m 0755 ${B}/myapp ${D}${bindir}/myapp
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Tasks run under BitBake's controlled environment (fakeroot). Using `sudo` bypasses build isolation, breaks reproducibility, and may fail on build hosts without sudo or with restricted policies.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -m 0755 ${B}/myapp ${D}${bindir}/myapp
+}
 ```
 
-TODO: Explain how to fix the issue
+Never use `sudo` inside tasks. Let BitBake/fakeroot manage permissions, and rely on standard `install` commands with correct ownership and modes.
 
 ## Inline Suppression
 

@@ -15,20 +15,36 @@ Check task functions follow execution order
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_package() {
+  # packaging logic here
+}
+
+do_compile() {
+  oe_runmake
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Defining tasks out of logical execution order (e.g., package before compile/install) makes recipes harder to follow and hides when tasks run. Readers expect the standard flow: fetch → unpack → patch → configure → compile → install → package.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_compile() {
+  oe_runmake
+}
+
+do_install() {
+  oe_runmake install DESTDIR=${D}
+}
+
+do_package() {
+  # packaging logic here
+}
 ```
 
-TODO: Explain how to fix the issue
+Order task functions to mirror their execution sequence. Place custom tasks near their phase (compile before install, install before package) to keep the recipe readable.
 
 ## Inline Suppression
 

@@ -15,20 +15,27 @@ Check recipe variables follow recommended ordering
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+LICENSE = "MIT"
+SRC_URI = "https://example.com/myapp-${PV}.tar.gz"
+SUMMARY = "My App"
+HOMEPAGE = "https://example.com/myapp"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Placing metadata out of order reduces readability and makes reviews harder. Standard ordering (SUMMARY/DESCRIPTION/HOMEPAGE before LICENSE/LIC_FILES_CHKSUM, then SRC_URI, then build variables) keeps recipes consistent.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SUMMARY = "My App"
+HOMEPAGE = "https://example.com/myapp"
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=abc123..."
+SRC_URI = "https://example.com/myapp-${PV}.tar.gz"
 ```
 
-TODO: Explain how to fix the issue
+Follow the common ordering: SUMMARY/DESCRIPTION, HOMEPAGE, LICENSE, LIC_FILES_CHKSUM, SRC_URI/SRCREV/S, then build and packaging variables.
 
 ## Inline Suppression
 

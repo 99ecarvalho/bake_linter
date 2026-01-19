@@ -15,20 +15,22 @@ Check LICENSE appears before LIC_FILES_CHKSUM
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+LIC_FILES_CHKSUM = "file://LICENSE;md5=abc123..."
+LICENSE = "MIT"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Putting `LIC_FILES_CHKSUM` before `LICENSE` breaks the expected order and hinders quick scanning. Reviewers expect the license declaration first, followed by the checksum proving the license file.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=abc123..."
 ```
 
-TODO: Explain how to fix the issue
+Declare `LICENSE` first, then `LIC_FILES_CHKSUM`. This aligns with OE/Yocto style and improves readability.
 
 ## Inline Suppression
 

@@ -15,20 +15,25 @@ Check metadata variables appear before LICENSE
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+LICENSE = "MIT"
+SUMMARY = "My App"
+HOMEPAGE = "https://example.com/myapp"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Metadata (SUMMARY, DESCRIPTION, HOMEPAGE) should appear before LICENSE for consistent recipe headers. Mixing order makes scanning and templating harder and can hide missing metadata.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SUMMARY = "My App"
+HOMEPAGE = "https://example.com/myapp"
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=abc123..."
 ```
 
-TODO: Explain how to fix the issue
+List metadata first (SUMMARY/DESCRIPTION/HOMEPAGE), then LICENSE/LIC_FILES_CHKSUM. Follow with source variables and build settings.
 
 ## Inline Suppression
 
