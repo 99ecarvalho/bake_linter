@@ -15,20 +15,23 @@ Detect common typos in LICENSE variable name
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+LICENSE = "MIT"
+LICENSE_URI = "https://opensource.org/licenses/MIT"
+LICENES = "MIT"  # Typo: LICENES instead of LICENSE
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Typos in the LICENSE variable name (e.g., `LICENES`, `LICENCE`, `LISENCE`) mean BitBake won't recognize the license, and the license check may fail or not run.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://COPYING;md5=1234567890abcdef1234567890abcdef"
 ```
 
-TODO: Explain how to fix the issue
+Use the correct variable name: `LICENSE` (not `LICENES`, `LICENCE`, or other variants). Pair it with `LIC_FILES_CHKSUM` to verify license files.
 
 ## Inline Suppression
 

@@ -15,20 +15,24 @@ Detects unmatched quotes in variable assignments
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SUMMARY = "Tool for building recipes
+ DESCRIPTION = "A long description
+DEPENDS = "gcc make
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Unmatched quotes cause BitBake parse errors. The parser cannot distinguish where the string ends, leading to truncated values or syntax failures.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SUMMARY = "Tool for building recipes"
+DESCRIPTION = "A long description"
+DEPENDS = "gcc make"
 ```
 
-TODO: Explain how to fix the issue
+Ensure all quotes (single and double) are balanced. Each opening quote must have a matching closing quote on the same logical line (or continued with `\`).
 
 ## Inline Suppression
 

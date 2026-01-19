@@ -15,20 +15,26 @@ Detects git-based recipes without SRCPV in PV
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SRC_URI = "git://github.com/project/repo.git;branch=main"
+SRCREV = "9f0c3e1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c"
+
+PV = "1.0.0+git${SRCPV}"  # SRCPV reference but no += SRCPV in PV
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Git recipes should include `${SRCPV}` in the version to distinguish commits. Without it, different commits have the same version, causing caching and reproducibility issues.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "git://github.com/project/repo.git;branch=main"
+SRCREV = "9f0c3e1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c"
+
+PV = "1.0.0+git${SRCPV}"
 ```
 
-TODO: Explain how to fix the issue
+Include `${SRCPV}` in PV for git-based recipes. This automatically appends the commit hash, ensuring unique versions per commit and enabling proper caching.
 
 ## Inline Suppression
 

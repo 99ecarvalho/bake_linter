@@ -15,20 +15,26 @@ Detects tab characters in Python function indentation
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+python do_configure() {
+	if True:  # Tab character
+		bb.note("Configuring...")  # Tab
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Python requires consistent indentation (spaces or tabs, not mixed). Tabs in BitBake recipes cause Python parse errors because different editors/tools treat tab width differently.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+python do_configure() {
+    if True:  # Spaces
+        bb.note("Configuring...")  # Spaces
+}
 ```
 
-TODO: Explain how to fix the issue
+Use spaces (conventionally 4 per indentation level) in Python functions. Never use tabs. Configure your editor to convert tabs to spaces.
 
 ## Inline Suppression
 

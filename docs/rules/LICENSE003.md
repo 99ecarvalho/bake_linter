@@ -15,20 +15,22 @@ Check that LIC_FILES_CHKSUM is present for non-CLOSED licenses
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+LICENSE = "MIT"
+# Missing LIC_FILES_CHKSUM
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without `LIC_FILES_CHKSUM`, Yocto cannot verify that the license text matches expectations. This breaks reproducibility and compliance checks; any license file change is undetected.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://COPYING;md5=1234567890abcdef1234567890abcdef"
 ```
 
-TODO: Explain how to fix the issue
+Always provide `LIC_FILES_CHKSUM` with a checksum (MD5, SHA256, etc.) of the license file. Use `file://` paths relative to the source tree. Only omit this for `LICENSE = "CLOSED"` recipes.
 
 ## Inline Suppression
 

@@ -15,20 +15,24 @@ Detects patches in SRC_URI without explicit striplevel
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SRC_URI = "https://example.com/source.tar.gz"
+SRC_URI += "file://fix-build.patch"
+SRC_URI += "file://add-feature.patch"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without an explicit striplevel, BitBake guesses the directory depth to strip (`-p` flag in `patch`). Incorrect guesses cause patch failures. The striplevel depends on how the patch was generated and must match the source structure.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "https://example.com/source.tar.gz"
+SRC_URI += "file://fix-build.patch;striplevel=1"
+SRC_URI += "file://add-feature.patch;striplevel=1"
 ```
 
-TODO: Explain how to fix the issue
+Specify `striplevel=N` in the patch URI where `N` matches the directory depth. Common values: `striplevel=0` (patch from root), `striplevel=1` (patch from inside source dir).
 
 ## Inline Suppression
 

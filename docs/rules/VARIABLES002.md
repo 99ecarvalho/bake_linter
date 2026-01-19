@@ -15,20 +15,30 @@ Detects S = "${WORKDIR}" which is unconventional
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+S = "${WORKDIR}"
+
+do_compile() {
+    cd ${S}
+    make
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Setting `S = "${WORKDIR}"` means the source directory is the entire work directory, not a subdirectory. This is unusual and suggests the recipe is missing an unpack step or explicit directory structure handling.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+S = "${WORKDIR}/${BPN}-${PV}"
+
+do_compile() {
+    cd ${S}
+    make
+}
 ```
 
-TODO: Explain how to fix the issue
+Set `S` to point to the actual source directory (usually a subdirectory of `${WORKDIR}` created during unpack). Document the directory layout if non-standard.
 
 ## Inline Suppression
 
