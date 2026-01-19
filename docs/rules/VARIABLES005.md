@@ -15,20 +15,26 @@ Detects variables with many append/prepend operations
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Many appends create fragmented state
+CFLAGS:append = " -fno-omit-frame-pointer"
+CFLAGS:append = " -fstack-protector-strong"
+CFLAGS:append = " -D_FORTIFY_SOURCE=2"
+CFLAGS:append = " -O2"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Excessive `:append`/`:prepend` operations reduce readability and make it hard to audit the final value. It also increases the risk of duplicated flags and conflicting settings.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Consolidate into a single assignment or a reusable variable
+EXTRA_SECURITY_FLAGS = "-fno-omit-frame-pointer -fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2"
+CFLAGS += "${EXTRA_SECURITY_FLAGS}"
 ```
 
-TODO: Explain how to fix the issue
+Group related changes into fewer statements. Use helper variables when appropriate to make intent clear and simplify maintenance.
 
 ## Inline Suppression
 

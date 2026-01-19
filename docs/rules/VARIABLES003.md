@@ -15,20 +15,28 @@ Detects variables assigned but never referenced in the recipe
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Variable assigned but never used
+MY_EXTRA_FLAGS = "-O3 -DNDEBUG"
+
+# ... no references to ${MY_EXTRA_FLAGS}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Dead assignments increase maintenance burden and confusion. Unused variables can hide configuration drift and make it unclear which flags or settings are actually applied.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Either remove it, or reference it explicitly
+MY_EXTRA_FLAGS = "-O3 -DNDEBUG"
+CFLAGS += "${MY_EXTRA_FLAGS}"
+
+# Or inline the value if reuse is not needed
+CFLAGS += "-O3 -DNDEBUG"
 ```
 
-TODO: Explain how to fix the issue
+Prefer removing unused variables. If the variable is intended for reuse, ensure it is referenced where needed (e.g., `CFLAGS`, `EXTRA_OECMAKE`, `EXTRA_OEMAKE`).
 
 ## Inline Suppression
 

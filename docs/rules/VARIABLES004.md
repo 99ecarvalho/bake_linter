@@ -15,20 +15,27 @@ Detects variables redefined in same scope without clear intent
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Same variable redefined, earlier value lost
+SRC_URI = "git://example.com/foo.git;branch=main"
+SRC_URI = "git://example.com/foo.git;branch=stable"  # overwrites previous
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Redefining a variable discards the previous value, often unintentionally. This can remove required entries (e.g., patches, mirrors) and make behavior depend on assignment order.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use += or :append to extend instead of overwrite
+SRC_URI = "git://example.com/foo.git;branch=stable"
+SRC_URI:append = " file://fix-build.patch"
+
+# Or use overrides to scope differences
+SRC_URI:class-native = "git://example.com/foo.git;branch=native"
 ```
 
-TODO: Explain how to fix the issue
+Prefer additive operations (`+=`, `:append`, `:prepend`) or scoped overrides instead of reassignment. If the earlier value is truly obsolete, remove it rather than silently overwriting.
 
 ## Inline Suppression
 

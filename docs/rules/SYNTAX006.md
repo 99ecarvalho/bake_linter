@@ -15,20 +15,26 @@ Detects incorrect override ordering in variable assignments
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Overrides ordered inconsistently (class before package)
+FILES:class-target:${PN} += "${bindir}/mytool"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Override tags should follow a consistent, conventional order for readability and predictable matching. Placing class overrides before package overrides is confusing and can lead to misapplied values when overrides are combined.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Place package overrides before class overrides
+FILES:${PN}:class-target += "${bindir}/mytool"
+
+# Additional common patterns
+RDEPENDS:${PN}:class-target += "bash"
+RDEPENDS:${PN}-tools:class-target += "coreutils"
 ```
 
-TODO: Explain how to fix the issue
+Use a consistent ordering: `VAR:${PN}[:<other package overrides>]:class-<...>`. Keep related overrides grouped to improve readability and reduce mistakes.
 
 ## Inline Suppression
 

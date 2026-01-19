@@ -15,20 +15,28 @@ Detects potential missing line continuation characters
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# Multiline value without line continuation
+RDEPENDS:${PN} += "bash
+                   coreutils"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+BitBake treats newlines as statement boundaries. Without a trailing `\` line continuation, the second line is parsed as a new statement (or a syntax error), leading to truncated values, parsing errors, or unintended overrides.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use `\` at end of lines to continue values
+RDEPENDS:${PN} += "bash \
+                   coreutils"
+
+# Alternatively, split across multiple assignments
+RDEPENDS:${PN} += "bash"
+RDEPENDS:${PN} += "coreutils"
 ```
 
-TODO: Explain how to fix the issue
+Ensure each continued line ends with `\` outside of quotes, or use multiple `+=` statements to build the value safely.
 
 ## Inline Suppression
 
