@@ -15,20 +15,20 @@ Detects build-time tools incorrectly in RDEPENDS
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+RDEPENDS:${PN} += "cmake ninja make pkg-config"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Build tools and -native packages are only needed at compile time. Shipping them as runtime deps bloats images, slows installs, and may pull in host-like toolchains onto the target.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+DEPENDS += "cmake-native ninja-native pkgconfig-native"
 ```
 
-TODO: Explain how to fix the issue
+Move build-time tools from `RDEPENDS` to `DEPENDS` (usually the `-native` variant). Keep runtime dependencies limited to what the target actually needs to execute.
 
 ## Inline Suppression
 

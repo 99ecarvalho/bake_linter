@@ -15,20 +15,27 @@ Flags SUID/SGID binary installations
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  install -m 0755 helper ${D}${bindir}/helper
+  chmod 4755 ${D}${bindir}/helper
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+SUID/SGID binaries execute with elevated privileges and expand the attack surface. They need explicit review and justification; silent additions can introduce privilege-escalation bugs.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -m 0755 helper ${D}${bindir}/helper
+  # SECURITY: setuid required for legacy helper, reviewed in TICKET-1234
+  chmod 4755 ${D}${bindir}/helper
+}
 ```
 
-TODO: Explain how to fix the issue
+Remove unnecessary setuid/setgid bits whenever possible. If unavoidable, document the justification with a preceding security comment so reviewers can validate the risk.
 
 ## Inline Suppression
 

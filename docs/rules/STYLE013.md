@@ -15,20 +15,22 @@ Check for single quotes in variable assignments (should use double quotes)
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+DESCRIPTION = 'Uses single quotes'
+SRC_URI = 'https://example.com/src.tar.gz'
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+BitBake treats double quotes as the standard for variable values; mixing quoting styles reduces consistency and can behave differently with expansions.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+DESCRIPTION = "Uses double quotes"
+SRC_URI = "https://example.com/src.tar.gz"
 ```
 
-TODO: Explain how to fix the issue
+Prefer double quotes for assignments to match common BitBake style and avoid surprises with expansions. **Note:** This rule is currently documented but not enforced by the linter code.
 
 ## Inline Suppression
 

@@ -15,20 +15,24 @@ Check for proper spacing around assignment operators
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SUMMARY="Bad spacing"
+LICENSE= "MIT"
+SRC_URI  ="https://example.com/src.tar.gz"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Inconsistent spacing around `=` makes recipes harder to scan and review. Standard BitBake style uses a single space on each side for readability.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SUMMARY = "Consistent spacing"
+LICENSE = "MIT"
+SRC_URI = "https://example.com/src.tar.gz"
 ```
 
-TODO: Explain how to fix the issue
+Normalize assignments to `VAR = "value"` with exactly one space on each side of `=`. **Note:** This rule is currently documented but not enforced by the linter code.
 
 ## Inline Suppression
 

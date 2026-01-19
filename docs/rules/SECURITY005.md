@@ -15,20 +15,27 @@ Detects rm -rf with potentially dangerous patterns
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  rm -rf ${D}/*
+  rm -rf ${D}${bindir}/*
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Unprotected `rm -rf` can wipe the target rootfs if variables are empty or expanded to `/`. Recipes have removed entire workdirs when `${D}` or other variables were unset.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  if [ -n "${D}" ] && [ -d "${D}${bindir}" ]; then
+    rm -rf "${D}${bindir:?}"/*
+  fi
+}
 ```
 
-TODO: Explain how to fix the issue
+Guard destructive commands with existence checks and `:?` protections, and scope deletions to known subdirectories. Never run `rm -rf /` or `${D}/*`.
 
 ## Inline Suppression
 

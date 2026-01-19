@@ -15,20 +15,32 @@ Check for potential hardcoded credentials or secrets
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  install -d ${D}${sysconfdir}/myapp
+  echo "password=secret123" > ${D}${sysconfdir}/myapp/config.ini
+}
+
+API_TOKEN = "sk-live-1234567890abcdef"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Secrets baked into recipes or installed files are visible to anyone with source or image access. They cannot be rotated, leak to version control, and may grant unintended production access.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -d ${D}${sysconfdir}/myapp
+  install -m 0600 ${WORKDIR}/config.ini ${D}${sysconfdir}/myapp/
+  # SECURITY: credentials injected at deploy time
+}
+
+# Use placeholders or BitBake-provided values instead of literals
+APP_PASSWORD ??= "${@d.getVar('MYAPP_PASSWORD', True) or ''}"
 ```
 
-TODO: Explain how to fix the issue
+Supply secrets through BitBake variables, external credential stores, or deployment-time templating (placeholders like @PASSWORD@). Avoid committing real tokens; keep them in secure configs or CI/CD secret management.
 
 ## Inline Suppression
 

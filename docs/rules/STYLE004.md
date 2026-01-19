@@ -15,20 +15,26 @@ Flag TODO, FIXME, and XXX comments
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  # TODO: handle permissions better
+  install -m 0755 helper ${D}${bindir}/helper
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Lingering TODO/FIXME markers signal unfinished work and make it unclear whether a concern is known or forgotten. They can also be scraped into release artifacts.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -m 0755 helper ${D}${bindir}/helper
+  # Tracked in ISSUE-123: permission hardening follow-up
+}
 ```
 
-TODO: Explain how to fix the issue
+Resolve the TODO or reference a tracked issue so readers know the status, then remove the marker once addressed.
 
 ## Inline Suppression
 

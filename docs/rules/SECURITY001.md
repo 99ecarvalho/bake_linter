@@ -15,20 +15,24 @@ Check for insecure URI protocols (HTTP, FTP, git://)
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SRC_URI += "http://example.com/source.tar.gz"
+SRC_URI += "git://github.com/org/project.git;branch=main"
+SRC_URI += "ftp://downloads.example.com/tool.zip"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Unencrypted fetches allow man-in-the-middle tampering of source code or build inputs. Attackers can swap artifacts, inject malware, or harvest credentials when traffic is not protected with TLS. Using plain HTTP/FTP/git:// also bypasses modern integrity protections like HSTS.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI += "https://example.com/source.tar.gz"
+SRC_URI += "https://github.com/org/project.git;branch=main"
+SRC_URI += "https://downloads.example.com/tool.zip"
 ```
 
-TODO: Explain how to fix the issue
+Switch to HTTPS (or FTPS) endpoints. If only HTTP is available, mirror the artifact behind HTTPS and keep checksums up to date so BitBake can verify integrity.
 
 ## Inline Suppression
 

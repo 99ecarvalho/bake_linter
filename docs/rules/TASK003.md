@@ -15,20 +15,29 @@ Detects potential network access in compile/build tasks
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_compile() {
+  wget https://example.com/dep.tar.gz -O /tmp/dep.tar.gz
+  tar -xf /tmp/dep.tar.gz
+  make
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Build steps must be reproducible and offline. Downloading during `do_compile` bypasses BitBake fetcher, breaks mirroring, and causes flaky builds.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI += "https://example.com/dep.tar.gz;downloadfilename=dep.tar.gz"
+
+do_compile() {
+  tar -xf ${WORKDIR}/dep.tar.gz
+  oe_runmake
+}
 ```
 
-TODO: Explain how to fix the issue
+Move all downloads to `SRC_URI` so BitBake handles fetching, mirroring, checksums, and license data. Keep `do_compile` limited to building from already-fetched sources.
 
 ## Inline Suppression
 

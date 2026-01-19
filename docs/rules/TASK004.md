@@ -15,20 +15,24 @@ Detects empty or meaningless task function overrides
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Empty overrides hide default task implementations and make maintenance harder. They may accidentally drop install steps or package metadata while appearing intentional.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  # No install steps required; task intentionally left empty
+  :
+}
 ```
 
-TODO: Explain how to fix the issue
+Avoid overriding tasks unless needed. If you intentionally leave a task empty, document that decision (e.g., `:` with a comment) so readers know it is deliberate. **Note:** This rule is not currently enforced by the linter; it serves as guidance for recipe authors.
 
 ## Inline Suppression
 

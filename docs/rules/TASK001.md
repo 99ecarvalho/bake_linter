@@ -15,20 +15,28 @@ Detects unquoted shell variables (not BitBake ${VAR}) in task code
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  install -d $D/usr/bin
+  cp mytool $D/usr/bin
+  chown root:root $WORKDIR/output
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Shell variables without quotes are subject to word splitting and globbing. Paths with spaces or unset variables can break installs or delete unexpected files. BitBake expansions `${D}` are safe; bare `$D` is not.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -d "${D}${bindir}"
+  cp mytool "${D}${bindir}/"
+  chown root:root "${WORKDIR}/output"
+}
 ```
 
-TODO: Explain how to fix the issue
+Quote shell variables (`"$var"`) or use BitBake-style `${VAR}` expansions which are substituted before the shell runs.
 
 ## Inline Suppression
 

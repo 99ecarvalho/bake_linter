@@ -15,20 +15,22 @@ Check for trailing whitespace
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SUMMARY = "Example with trailing whitespace"
+LICENSE = "MIT"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Trailing whitespace causes noisy diffs, hides meaning in patch review, and can break tooling that is sensitive to exact content.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SUMMARY = "Example with trailing whitespace"
+LICENSE = "MIT"
 ```
 
-TODO: Explain how to fix the issue
+Strip trailing spaces before committing. Many editors can highlight or auto-trim them on save.
 
 ## Inline Suppression
 
