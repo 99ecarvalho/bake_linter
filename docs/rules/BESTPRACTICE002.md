@@ -15,20 +15,31 @@ Detects rm commands in do_configure that may be misplaced
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_configure() {
+    rm -f unwanted-file.o
+    rm -rf temp-build
+    ./configure
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Cleanup belongs in `do_compile` or a dedicated cleanup step, not in `do_configure`. Mixing cleanup and configuration makes the task logic unclear.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_compile:prepend() {
+    rm -f unwanted-file.o
+    rm -rf temp-build
+}
+
+do_configure() {
+    ./configure
+}
 ```
 
-TODO: Explain how to fix the issue
+Move cleanup to `do_compile:prepend()` or `do_install:prepend()` depending on context. Keep `do_configure` focused on configuration.
 
 ## Inline Suppression
 

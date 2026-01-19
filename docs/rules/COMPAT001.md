@@ -15,20 +15,20 @@ Detects deprecated or improper COMPATIBLE_HOST patterns
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+COMPATIBLE_HOST = "linux|cygwin"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+The pipe syntax `|` is deprecated. Modern Yocto uses regular expressions in `COMPATIBLE_HOST` and `INCOMPATIBLE_HOST` patterns.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+COMPATIBLE_HOST = "(linux|cygwin).*"
 ```
 
-TODO: Explain how to fix the issue
+Use regex patterns instead of pipe syntax. Ensure patterns are anchored or appropriately constructed for the target platform triplet.
 
 ## Inline Suppression
 

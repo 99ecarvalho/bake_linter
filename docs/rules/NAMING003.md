@@ -15,20 +15,29 @@ Check that PN matches recipe filename if explicitly set
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# File: libfoo_1.0.bb
+PN = "libbar"  # Different from filename libfoo
+PV = "1.0"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+When `PN` doesn't match the filename, build outputs and packaging become confusing. BitBake expects the recipe name to reflect the package name.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# File: libfoo_1.0.bb
+# Don't set PN; BitBake infers it from the filename
+PV = "1.0"
+
+# Or if custom PN is needed, rename the file to match:
+# File: libbar_1.0.bb
+PN = "libbar"
+PV = "1.0"
 ```
 
-TODO: Explain how to fix the issue
+Always keep the recipe filename and `PN` in sync. If you override `PN`, ensure the filename matches or document the reason.
 
 ## Inline Suppression
 

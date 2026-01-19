@@ -15,20 +15,24 @@ Detects modifications to do_fetch which should use SRC_URI
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_fetch() {
+    wget https://example.com/source.tar.gz -O ${WORKDIR}/source.tar.gz
+    curl -L https://example.com/patches/patch.tar.gz | tar -xC ${WORKDIR}
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Custom fetch implementations bypass BitBake's download infrastructure (SRC_URI), breaking mirrors, integrity checks, and reproducibility.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "https://example.com/source.tar.gz"
+SRC_URI += "https://example.com/patches/patch.tar.gz;downloadfilename=patch.tar.gz"
 ```
 
-TODO: Explain how to fix the issue
+Use `SRC_URI` for all downloads so BitBake can manage fetching, mirroring, and checksums. Never override `do_fetch`.
 
 ## Inline Suppression
 

@@ -15,20 +15,24 @@ Detects recipes without HOMEPAGE
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SUMMARY = "Tool for building"
+DESCRIPTION = "A tool"
+# Missing HOMEPAGE
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`HOMEPAGE` helps users find the project, contribute, and report issues. Without it, package metadata is incomplete.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SUMMARY = "Tool for building"
+DESCRIPTION = "A tool"
+HOMEPAGE = "https://github.com/example/project"
 ```
 
-TODO: Explain how to fix the issue
+Include the project's official website or repository URL in `HOMEPAGE`. This aids discoverability and maintenance.
 
 ## Inline Suppression
 

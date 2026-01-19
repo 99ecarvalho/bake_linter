@@ -15,20 +15,29 @@ Detects sed usage in do_install that should be in do_configure
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    install -m 0755 config.in ${D}${sysconfdir}/config.in
+    sed -i "s/@version@/1.0.0/" ${D}${sysconfdir}/config.in
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Template substitution should happen before install, not after. Doing it in `do_install` makes build reproducibility fragile and mixes templating logic with installation.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_configure() {
+    sed "s/@version@/${PV}/" config.in.in > config.in
+}
+
+do_install() {
+    install -m 0755 config.in ${D}${sysconfdir}/config.in
+}
 ```
 
-TODO: Explain how to fix the issue
+Perform `sed` and template substitution in `do_configure` or earlier, so `do_install` only moves files.
 
 ## Inline Suppression
 

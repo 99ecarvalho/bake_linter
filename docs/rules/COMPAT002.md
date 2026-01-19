@@ -15,20 +15,25 @@ Detects PACKAGE_ARCH = "${MACHINE_ARCH}" without clear justification
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+PACKAGE_ARCH = "${MACHINE_ARCH}"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Setting `PACKAGE_ARCH = "${MACHINE_ARCH}"` makes packages machine-specific, breaking binary distribution. Only do this if the recipe truly has hardware-specific code.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# If truly hardware-specific (rare), add justification
+# SECURITY: contains processor-specific optimizations
+PACKAGE_ARCH = "${MACHINE_ARCH}"
+
+# Otherwise, rely on defaults (generic architecture)
+# PACKAGE_ARCH = "all"  # Default; usually not needed
 ```
 
-TODO: Explain how to fix the issue
+Only use `PACKAGE_ARCH = "${MACHINE_ARCH}"` for recipes with CPU-specific code. Document the reason.
 
 ## Inline Suppression
 
