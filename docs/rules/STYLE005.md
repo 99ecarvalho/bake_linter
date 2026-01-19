@@ -15,20 +15,28 @@ Flag empty variable assignments
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+EXTRA_OECONF = ""
+# No comment or intent; value is empty
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Empty assignments add noise and can mask missing configuration. They may unintentionally clear defaults or mislead reviewers into thinking a value is set.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Remove the empty assignment if not needed
+# EXTRA_OECONF = ""
+
+# Or document intentional empties
+EXTRA_OECONF = ""  # Intentionally empty to rely on defaults
+
+# Or set a real value
+EXTRA_OECONF = "--enable-foo"
 ```
 
-TODO: Explain how to fix the issue
+Prefer deleting unused empty assignments. If intentional, add a short comment. Otherwise provide the actual value the build requires.
 
 ## Inline Suppression
 

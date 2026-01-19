@@ -15,20 +15,22 @@ Detects recipes without SECTION classification
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+DESCRIPTION = "Foo utilities"
+# Missing SECTION
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without `SECTION`, packages are harder to categorize and discover, and layer QA may complain about incomplete metadata.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+DESCRIPTION = "Foo utilities"
+SECTION = "utils"
 ```
 
-TODO: Explain how to fix the issue
+Add a relevant SECTION (e.g., `base`, `libs`, `net`, `utils`). Images and packagegroups are typically skipped by this rule.
 
 ## Inline Suppression
 

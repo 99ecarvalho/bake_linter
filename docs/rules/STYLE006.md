@@ -15,20 +15,22 @@ Check for duplicate inherit class references
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+inherit cmake pkgconfig cmake
+inherit setuptools3
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Duplicate `inherit` entries are redundant and can confuse readers about ordering or intent. They also increase maintenance noise without changing behavior.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+inherit cmake pkgconfig
+inherit setuptools3
 ```
 
-TODO: Explain how to fix the issue
+Keep each class inherited once. Remove duplicate class names within the same `inherit` line or across multiple lines.
 
 ## Inline Suppression
 

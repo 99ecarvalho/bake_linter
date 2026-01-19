@@ -15,20 +15,24 @@ Detects improper COMPATIBLE_MACHINE regex syntax
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+COMPATIBLE_MACHINE = "myboard"
+# No anchors; may match unintended machines
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Unanchored regex values can match substrings of other machine names, enabling the recipe on unsupported targets.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+COMPATIBLE_MACHINE = "^myboard$"
+
+# Multiple machines
+COMPATIBLE_MACHINE = "^(board1|board2)$"
 ```
 
-TODO: Explain how to fix the issue
+Use anchored regex patterns to constrain which machines build the recipe. Prefer explicit lists with `^(a|b)$` when supporting more than one machine.
 
 ## Inline Suppression
 

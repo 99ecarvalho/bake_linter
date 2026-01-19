@@ -15,20 +15,24 @@ Detects hardcoded -march/-mtune/etc. in compiler flags
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+CFLAGS += "-march=native -mtune=skylake"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Hardcoded CPU flags break cross-compilation and make builds machine-specific, bypassing Yocto tune settings.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Remove hardcoded flags and rely on tune settings
+# CFLAGS += "-march=native -mtune=skylake"
+
+# If a special flag is truly needed, gate it by machine/tune
+CFLAGS:myboard:append = " -fstack-protector-strong"
 ```
 
-TODO: Explain how to fix the issue
+Avoid hardcoding `-march/-mtune/-mcpu` etc. Use machine tune configuration or scoped overrides only when necessary.
 
 ## Inline Suppression
 

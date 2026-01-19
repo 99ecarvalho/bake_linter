@@ -15,20 +15,24 @@ Detects absolute host filesystem paths in recipes
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  install -m 0644 mylib.so /usr/lib/mylib.so
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Absolute host paths break sysroot isolation and cross-compilation. They bypass `${D}` and staging variables, so files end up on the build host or paths resolve incorrectly.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  install -m 0644 mylib.so ${D}${libdir}/mylib.so
+}
 ```
 
-TODO: Explain how to fix the issue
+Use Yocto path variables (`${D}${libdir}`, `${D}${bindir}`, `${STAGING_DIR_TARGET}`, etc.) instead of absolute host paths.
 
 ## Inline Suppression
 

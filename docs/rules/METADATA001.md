@@ -15,20 +15,22 @@ Detects recipes without BUGTRACKER metadata
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+HOMEPAGE = "https://example.com/project"
+# Missing BUGTRACKER entry
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without `BUGTRACKER`, downstream users lack a clear place to report issues or check known bugs, reducing traceability.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+HOMEPAGE = "https://example.com/project"
+BUGTRACKER = "https://example.com/project/issues"
 ```
 
-TODO: Explain how to fix the issue
+Add a `BUGTRACKER` URL whenever a `HOMEPAGE` exists (except for images/packagegroups where metadata may not be required).
 
 ## Inline Suppression
 

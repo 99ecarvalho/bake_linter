@@ -15,20 +15,25 @@ Detects GNU-specific sed features
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+  sed -i -r 's/foo/bar/g' ${D}${sysconfdir}/foo.conf
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+GNU-specific sed options (`-i` without backup, `-r`, `\d`, `\w`) are not portable to BusyBox/BSD sed and can fail on targets.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+  # Use POSIX-friendly sed: -i'' or separate temp file; -E for ERE
+  sed -i'' -E 's/[Ff]oo/bar/g' ${D}${sysconfdir}/foo.conf
+}
 ```
 
-TODO: Explain how to fix the issue
+Prefer POSIX-compatible constructs: use `-E` instead of `-r`, avoid `\d/\w`, and supply a backup suffix with `-i` (or use a temp file + install).
 
 ## Inline Suppression
 
