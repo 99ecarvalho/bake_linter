@@ -15,20 +15,29 @@ Check that SRC_URI is properly defined
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+RECIPE = "hello"
+PV = "1.0"
+PR = "r0"
+
+# Missing SRC_URI entirely
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`SRC_URI` is essential for recipes that need to download or reference source code. Without it, the build system cannot fetch dependencies, resulting in build failures. Most recipes require a defined source URL.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+RECIPE = "hello"
+PV = "1.0"
+PR = "r0"
+
+SRC_URI = "https://example.com/hello-${PV}.tar.gz"
+SRC_URI[sha256sum] = "abc123def456..."
 ```
 
-TODO: Explain how to fix the issue
+Define `SRC_URI` with appropriate download locations (http, https, git, file, etc.) and include a checksum for verification.
 
 ## Inline Suppression
 

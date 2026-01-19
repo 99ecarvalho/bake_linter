@@ -15,20 +15,29 @@ Detects .bbappend files overriding tasks without :append/:prepend
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# my-layer/recipes-app/myapp/myapp.bbappend
+
+do_compile() {
+    oe_runmake
+    cp output/* ${B}/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Overriding tasks in `.bbappend` files without `:append` or `:prepend` operators completely replaces the original task, losing important functionality. Modern Yocto requires explicit syntax to extend tasks. This causes subtle bugs and maintenance issues.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# my-layer/recipes-app/myapp/myapp.bbappend
+
+do_compile:append() {
+    cp output/* ${B}/
+}
 ```
 
-TODO: Explain how to fix the issue
+Use `:append` to extend a task or `:prepend` to run code before the original task. Define new tasks with `:append` operations to integrate cleanly with base recipes.
 
 ## Inline Suppression
 

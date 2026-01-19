@@ -15,20 +15,22 @@ Detect usage of deprecated BitBake functions
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+PV = "1.2.3"
+BBCLASSEXTEND = "native"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`BBCLASSEXTEND` is deprecated in favor of `BBCLASSEXTEND :=` syntax (Yocto 4.0+). Using the old simple assignment can cause recipe compatibility issues with newer Yocto versions. Deprecated functions and variables are no longer maintained and may be removed in future releases.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+PV = "1.2.3"
+BBCLASSEXTEND := "native"
 ```
 
-TODO: Explain how to fix the issue
+Use modern operator syntax and check the Yocto release notes for recommended alternatives to deprecated features.
 
 ## Inline Suppression
 

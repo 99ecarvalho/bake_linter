@@ -15,20 +15,25 @@ Verifies LAYERSERIES_COMPAT is set with valid Yocto releases
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# conf/layer.conf - Missing LAYERSERIES_COMPAT
+LAYER_PATH = "${LAYERDIR}"
+LAYERVERSION = "1"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`LAYERSERIES_COMPAT` declares which Yocto versions your layer supports. Without it, the build system cannot validate layer compatibility, leading to unexpected failures when layers target mismatched Yocto releases. Modern Yocto versions require this declaration.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# conf/layer.conf
+LAYER_PATH = "${LAYERDIR}"
+LAYERVERSION = "1"
+LAYERSERIES_COMPAT = "scarthgap styhead nanbield mickledore"
 ```
 
-TODO: Explain how to fix the issue
+Add `LAYERSERIES_COMPAT` to your `conf/layer.conf` listing all Yocto release names your layer supports (check against compatible releases and your dependencies).
 
 ## Inline Suppression
 

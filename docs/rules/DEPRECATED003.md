@@ -15,20 +15,23 @@ Detect usage of deprecated BitBake variables
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+BB_STRICT_CHECKSUM = "0"
+PATCH_GET_STATUS = "1"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Variables like `BB_STRICT_CHECKSUM` and `PATCH_GET_STATUS` have been deprecated in newer Yocto versions. Using deprecated variables makes recipes incompatible with current Yocto releases and may cause unexpected behavior. The linter detects these to help maintain recipe compatibility.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# Use modern alternatives or remove if not needed
+# Check Yocto release notes for replacement variables
+BB_VERIFY_SSTATE_CHECKSUMS = "0"
 ```
 
-TODO: Explain how to fix the issue
+Replace deprecated variables with their modern equivalents and test recipes with the target Yocto release.
 
 ## Inline Suppression
 

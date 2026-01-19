@@ -15,20 +15,29 @@ Detects recipes without UPSTREAM_CHECK for version tracking
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+RECIPE = "legacy-lib"
+PV = "1.2.0"
+SRC_URI = "https://example.com/legacy-lib-${PV}.tar.gz"
+
+# No upstream version tracking configured
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without `UPSTREAM_CHECK` configuration, recipes cannot be automatically monitored for updates. Manual version tracking becomes error-prone, leading to recipes using outdated software with known vulnerabilities. This is problematic for maintenance and security.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+RECIPE = "legacy-lib"
+PV = "1.2.0"
+SRC_URI = "https://example.com/legacy-lib-${PV}.tar.gz"
+
+UPSTREAM_CHECK_URI = "https://example.com/releases"
+UPSTREAM_CHECK_REGEX = "legacy-lib-(?P<pver>[\\d.]+)\\.tar\\.gz"
 ```
 
-TODO: Explain how to fix the issue
+Add `UPSTREAM_CHECK_URI` and `UPSTREAM_CHECK_REGEX` to enable automatic version monitoring. Test the regex against real URLs to ensure it captures version strings correctly.
 
 ## Inline Suppression
 

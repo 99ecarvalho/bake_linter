@@ -15,20 +15,32 @@ Detects .bbappend files adding files without FILESEXTRAPATHS
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+# my-layer/recipes-app/myapp/myapp.bbappend
+do_install:append() {
+    install -d ${D}${sysconfdir}/myapp
+    install -m 0644 ${WORKDIR}/config.conf ${D}${sysconfdir}/myapp/
+}
+
+# Missing FILESEXTRAPATHS for source files
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Without `FILESEXTRAPATHS`, the build system cannot locate recipe files in your `.bbappend` directory. The source and configuration files will be missing, causing build failures or incorrect functionality. `FILESEXTRAPATHS` tells BitBake where to find your appended files.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+# my-layer/recipes-app/myapp/myapp.bbappend
+FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
+
+do_install:append() {
+    install -d ${D}${sysconfdir}/myapp
+    install -m 0644 ${WORKDIR}/config.conf ${D}${sysconfdir}/myapp/
+}
 ```
 
-TODO: Explain how to fix the issue
+Always add `FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"` at the top of `.bbappend` files when appending files.
 
 ## Inline Suppression
 

@@ -15,20 +15,32 @@ Detects files installed outside standard FHS paths
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    install -d ${D}/opt/myapp/bin
+    install -m 0755 ${B}/myapp ${D}/opt/myapp/bin/
+    
+    install -d ${D}/root/.myapp
+    install -m 0600 config.cfg ${D}/root/.myapp/
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Installing outside FHS (Filesystem Hierarchy Standard) paths like `/opt` or home directories breaks portability and system organization. Standard locations like `/usr/bin`, `/etc`, `/var` are preferred for consistency, system management tools, and compliance with packaging standards.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+    install -d ${D}${bindir}
+    install -m 0755 ${B}/myapp ${D}${bindir}/
+    
+    install -d ${D}${sysconfdir}/myapp
+    install -m 0600 config.cfg ${D}${sysconfdir}/myapp/
+}
 ```
 
-TODO: Explain how to fix the issue
+Use standard Yocto variables (`${bindir}`, `${sysconfdir}`, `${libdir}`, etc.) which resolve to proper FHS paths. This ensures consistent installation and portability across systems.
 
 ## Inline Suppression
 

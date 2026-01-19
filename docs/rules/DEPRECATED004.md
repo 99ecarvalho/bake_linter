@@ -14,21 +14,30 @@ Detect Python 2 syntax in inline Python
 
 ## Example of Bad Code
 
-```bitbake
-# TODO: Add example of code that violates this rule
+```python
+python do_fetch() {
+    import sys
+    print "Building for Python 2"  # Python 2 print statement
+    os.system('wget https://example.com/file.tar.gz')
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Yocto now requires Python 3 syntax. Python 2 syntax (like `print` statements without parentheses, `os.system()` calls) is not supported. Old-style print statements and deprecated Python 2 APIs will cause recipe execution failures.
 
 ## How to Fix It
 
-```bitbake
-# TODO: Add example of correct code
+```python
+python do_fetch() {
+    import sys
+    print("Building for Python 3")  # Python 3 print function
+    import subprocess
+    subprocess.run(['wget', 'https://example.com/file.tar.gz'])
+}
 ```
 
-TODO: Explain how to fix the issue
+Convert all inline Python to Python 3 syntax: use `print()` function, modern subprocess APIs, and avoid deprecated 2-only libraries.
 
 ## Inline Suppression
 

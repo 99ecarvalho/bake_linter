@@ -15,20 +15,29 @@ Check that HOMEPAGE is defined for open-source recipes
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+RECIPE = "myapp"
+PV = "2.1.0"
+LICENSE = "MIT"
+LICENSE_PATH = "${S}/LICENSE"
+
+# Missing HOMEPAGE
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`HOMEPAGE` provides critical metadata about the software's origin and project website. Open-source recipes should include this for compliance, package management systems, and documentation. Missing HOMEPAGE makes packages incomplete and harder to track upstream changes.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+RECIPE = "myapp"
+PV = "2.1.0"
+LICENSE = "MIT"
+LICENSE_PATH = "${S}/LICENSE"
+HOMEPAGE = "https://github.com/example/myapp"
 ```
 
-TODO: Explain how to fix the issue
+Add `HOMEPAGE` pointing to the official project website or repository. For proprietary software, it's optional but recommended.
 
 ## Inline Suppression
 

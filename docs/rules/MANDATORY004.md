@@ -15,20 +15,34 @@ Check for appropriate inherit directives
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+RECIPE = "custom-app"
+PV = "1.0"
+
+do_compile() {
+    cc -o app main.c
+}
+
+# Missing inherit directives needed for package class
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Recipes need appropriate `inherit` directives (like `autotools`, `cmake`, `setuptools`) to properly configure build environments, set variables, and define default tasks. Without correct inherits, recipes lack critical build hooks and fail to package correctly.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+RECIPE = "custom-app"
+PV = "1.0"
+
+inherit autotools
+
+do_compile() {
+    oe_runmake
+}
 ```
 
-TODO: Explain how to fix the issue
+Include appropriate `inherit` directives based on the build system (autotools, cmake, setuptools, etc.). Always inherit from a base class that matches your build system.
 
 ## Inline Suppression
 
