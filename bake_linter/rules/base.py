@@ -133,6 +133,9 @@ class BaseRule(metaclass=RuleMeta):
         It receives a parsed FileContext and returns a list of
         LintResult objects for any issues found.
         
+        Inline suppressions are automatically filtered out after this
+        method returns, so rules don't need to check for them.
+        
         Args:
             context: Parsed file context to check
             
@@ -140,6 +143,26 @@ class BaseRule(metaclass=RuleMeta):
             List of LintResult objects (empty if no issues)
         """
         pass
+    
+    def _is_suppressed(self, context: FileContext, line: int) -> bool:
+        """
+        Check if this rule is suppressed for a specific line.
+        
+        Args:
+            context: The file context
+            line: Line number to check
+            
+        Returns:
+            True if this rule is suppressed for this line
+        """
+        # Check current line and previous line (for standalone suppression comments)
+        for check_line in [line, line - 1]:
+            if check_line in context.inline_suppressions:
+                suppressed_rules = context.inline_suppressions[check_line]
+                # Check for specific rule ID or wildcard suppression
+                if self.rule_id in suppressed_rules or "*" in suppressed_rules:
+                    return True
+        return False
 
     def create_result(
         self,
@@ -148,35 +171,62 @@ class BaseRule(metaclass=RuleMeta):
         line: Optional[int] = None,
         column: Optional[int] = None,
         hint: Optional[str] = None,
-        context: Optional[str] = None,
+        context_code: Optional[str] = None,
         severity: Optional[Severity] = None,
-    ) -> LintResult:
+        check_suppression: bool = True,
+    ) -> Optional[LintResult]:
         """
         Helper method to create a LintResult with this rule's info.
         
+        Automatically checks for inline suppressions if check_suppression is True.
+        
         Args:
-            file: The file path
+            file: The file path or FileContext
             message: Description of the issue
             line: Line number (1-indexed)
             column: Column number (1-indexed)
             hint: How to fix the issue (defaults to rule's hint)
-            context: Code snippet or additional context
+            context_code: Code snippet or additional context
             severity: Override severity for this specific result
+            check_suppression: Whether to check for inline suppressions
             
         Returns:
-            A LintResult object
+            A LintResult object, or None if suppressed
         """
+        # Extract path and check suppression
+        if isinstance(file, FileContext):
+            file_context = file
+            file_path = file.path
+            
+            # Check if this issue is suppressed
+            if check_suppression and line is not None:
+                if self._is_suppressed(file_context, line):
+                    return None
+        else:
+            file_path = file
+        
         return LintResult(
             rule_id=self.rule_id,
-            file=file,
+            file=file_path,
             line=line,
             column=column,
             severity=severity or self._severity,
             message=message,
             hint=hint or self.hint,
-            context=context,
+            context=context_code,
             rule_name=self.name,
         )
+    
+    def get_documentation_url(self) -> str:
+        """
+        Get the URL to the documentation for this rule.
+        
+        Returns:
+            URL to the rule's documentation
+        """
+        # This can be customized per installation
+        base_url = "https://github.com/99ecarvalho/bake_linter/blob/main/docs/rules"
+        return f"{base_url}/{self.rule_id}.md"
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}({self.rule_id})>"

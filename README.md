@@ -121,6 +121,90 @@ The linter prints which config file is being used (or indicates if none was foun
 2. Configuration file
 3. Built-in defaults (lowest priority)
 
+## Inline Suppression
+
+You can suppress specific rules for individual lines using inline comments:
+
+```bitbake
+# Suppress a single rule
+# nolint: LICENSE001
+SUMMARY = "Meta-package without traditional license"
+
+# Suppress multiple rules
+# nolint: LICENSE001, MANDATORY001
+RDEPENDS:${PN} = "dependency-packages"
+
+# Inline suppression (same line as code)
+LICENSE = "CLOSED"  # nolint: LICENSE001
+
+# Suppress all rules (use sparingly!)
+# nolint: *
+CUSTOM_VAR = "special-case"
+```
+
+### Suppression Syntax
+
+- **Format**: `# nolint: RULE_ID1, RULE_ID2, ...`
+- **Case insensitive**: `nolint`, `NOLINT`, `NoLint` all work
+- **Whitespace flexible**: Spaces around `:` and `,` are optional
+- **Standalone comments**: Apply to the next non-comment line
+- **Inline comments**: Apply to the current line
+
+### When to Use Suppressions
+
+✅ **Good use cases:**
+- False positives where the rule doesn't apply
+- Temporary workarounds during migration
+- Special cases with valid technical justification
+- Legacy code that will be refactored later
+
+❌ **Bad use cases:**
+- Hiding real issues that should be fixed
+- Avoiding proper code improvements
+- Widespread use instead of fixing root cause
+- Suppressing security warnings without review
+
+### Best Practices
+
+1. **Add a comment explaining why** the rule is suppressed
+2. **Use specific rule IDs** instead of wildcard suppression
+3. **Track suppressions** and review them periodically
+4. **Link to issue tracker** if suppression is temporary
+5. **Get code review** for security-related suppressions
+
+## Rule Documentation
+
+Each rule has detailed documentation in the `docs/rules/` directory. Documentation includes:
+
+- **What the rule checks** - Clear description of the issue
+- **Examples** - Both bad and good code samples
+- **Why it matters** - Explanation of the impact
+- **How to fix** - Step-by-step remediation guide
+- **Configuration** - Rule-specific options
+- **References** - Links to Yocto documentation and standards
+
+To view documentation for a specific rule, see `docs/rules/{RULE_ID}.md`. For example:
+- [LICENSE001](docs/rules/LICENSE001.md) - License Required
+- [DEPRECATED001](docs/rules/DEPRECATED001.md) - Deprecated Override Syntax
+- [MANDATORY001](docs/rules/MANDATORY001.md) - Summary or Description Required
+
+### Generating Documentation
+
+To generate documentation for all rules:
+
+```bash
+# Generate docs for all rules (skips existing)
+python -m bake_linter.utils.gen_docs
+
+# Force regeneration of all docs
+python -m bake_linter.utils.gen_docs --force
+
+# Generate docs for a specific rule
+python -m bake_linter.utils.gen_docs --rule LICENSE001
+```
+
+Generated documentation will need manual editing to fill in examples and explanations.
+
 ## Available Rules
 
 ### License Rules
