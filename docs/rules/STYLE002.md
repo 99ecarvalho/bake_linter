@@ -15,20 +15,21 @@ Check for lines exceeding maximum length
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+SRC_URI = "https://github.com/example/long-project-name/archive/refs/tags/v1.2.3.tar.gz;downloadfilename=source.tar.gz;sha256=abc123..." # exceeds 120 chars
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Long lines are harder to review, print, and navigate in editors. They reduce code readability across tools and terminals.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+SRC_URI = "https://github.com/example/long-project-name/archive/refs/tags/v1.2.3.tar.gz"
+SRC_URI[sha256sum] = "abc123..."
 ```
 
-TODO: Explain how to fix the issue
+Break long lines using continuation (backslash at end of line) or split attributes onto separate lines with `:` syntax. Aim for 120 characters or less per line.
 
 ## Inline Suppression
 

@@ -15,20 +15,29 @@ Detects potential missing d.setVar() in Python functions
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+python do_compile() {
+    # Direct assignment—BitBake won't see this
+    CFLAGS = "-O3 -march=native"
+    PN = "modified-name"
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Direct Python variable assignment sets only a local Python variable, not the BitBake variable. Changes won't be visible to the build system or other recipes.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+python do_compile() {
+    # Use d.setVar to set BitBake variables
+    d.setVar('CFLAGS', "-O3 -march=native")
+    # Note: Usually PN/PV are not modified; this is an example
+    d.setVar('COMPILED_NAME', "modified-name")
+}
 ```
 
-TODO: Explain how to fix the issue
+Use `d.setVar('VAR', value)` to modify BitBake variables from Python functions so changes are visible throughout the build.
 
 ## Inline Suppression
 

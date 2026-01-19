@@ -15,20 +15,26 @@ Detects print() usage where bb.note/bb.warn should be used
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+python __anonymous() {
+    print("Building %s" % d.getVar('PN'))
+    print("Version: " + d.getVar('PV'))
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+`print()` output is not captured by BitBake logging; it won't appear in build logs or be formatted consistently. Use `bb.note()`, `bb.warn()`, or `bb.error()` for proper integration.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+python __anonymous() {
+    bb.note("Building %s" % d.getVar('PN'))
+    bb.warn("Version: " + d.getVar('PV'))
+}
 ```
 
-TODO: Explain how to fix the issue
+Use `bb.note()` for informational messages, `bb.warn()` for warnings, and `bb.error()` for errors. These integrate with BitBake's logging system.
 
 ## Inline Suppression
 

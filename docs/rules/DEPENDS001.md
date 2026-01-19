@@ -15,20 +15,22 @@ Validates version constraint syntax in DEPENDS/RDEPENDS
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+DEPENDS = "openssl (>= 1.0) && libc (< 3.0)"
+RDEPENDS = "python3 > 3.6"
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+BitBake and Yocto don't support complex constraint syntax like `&&` or arbitrary comparison operators in dependency declarations. Only simple version operators are valid.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+DEPENDS = "openssl (>= 1.0) libc"
+RDEPENDS = "python3 (>= 3.6)"
 ```
 
-TODO: Explain how to fix the issue
+Use only valid operators: `(>=)`, `(>)`, `(<=)`, `(<)`, `(=)`. Separate dependencies with spaces, not operators. BitBake doesn't support boolean logic in constraints.
 
 ## Inline Suppression
 

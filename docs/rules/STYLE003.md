@@ -15,20 +15,28 @@ Detect hardcoded paths that should use BitBake variables
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+do_install() {
+    install -m 0755 ${S}/bin/tool ${D}/usr/bin/tool
+    cp config ${D}/etc/myapp/config
+    install -d ${D}/usr/local/share/doc
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Hardcoded paths like `/usr/bin`, `/etc`, `/usr/share` are fragile and not portable across different Yocto configurations. Variables like `${bindir}`, `${sysconfdir}` handle machine-specific paths automatically.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+do_install() {
+    install -m 0755 ${S}/bin/tool ${D}${bindir}/tool
+    install -m 0644 config ${D}${sysconfdir}/myapp/config
+    install -d ${D}${datadir}/doc/myapp
+}
 ```
 
-TODO: Explain how to fix the issue
+Replace hardcoded paths with BitBake variables: `${bindir}`, `${sbindir}`, `${libdir}`, `${sysconfdir}`, `${datadir}`, `${localstatedir}`, etc.
 
 ## Inline Suppression
 

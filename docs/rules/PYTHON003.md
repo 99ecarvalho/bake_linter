@@ -15,20 +15,34 @@ Detects common issues in anonymous Python functions
 ## Example of Bad Code
 
 ```bitbake
-# TODO: Add example of code that violates this rule
+python __anonymous() {
+    # Missing error handling
+    src = d.getVar('SRC_URI').split()[0]
+    # Accessing undefined variable
+    bb.note("Custom: " + custom_var)
+}
 ```
 
 ## Why This Is Bad
 
-TODO: Explain why this pattern is problematic
+Anonymous Python blocks that fail crash the build. Missing variable initialization or error handling causes cryptic failures.
 
 ## How to Fix It
 
 ```bitbake
-# TODO: Add example of correct code
+python __anonymous() {
+    # Safe variable access with defaults
+    src_uri = d.getVar('SRC_URI', '') or ''
+    if src_uri:
+        src = src_uri.split()[0]
+    # Define or check before use
+    custom_var = d.getVar('CUSTOM_VAR')
+    if custom_var:
+        bb.note("Custom: " + custom_var)
+}
 ```
 
-TODO: Explain how to fix the issue
+Always check variable existence with `d.getVar('VAR')` returning None safely, add defaults, and handle exceptions in anonymous Python.
 
 ## Inline Suppression
 
