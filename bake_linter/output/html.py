@@ -2551,6 +2551,24 @@ class HtmlFormatter(BaseFormatter):
             
             let html = md;
             
+            // First, extract and protect code blocks to prevent processing their contents
+            const codeBlocks = [];
+            html = html.replace(/```([\\w]*)?\\n([\\s\\S]*?)```/g, function(match, lang, code) {
+                const placeholder = '%%CODEBLOCK' + codeBlocks.length + '%%';
+                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                codeBlocks.push('<pre><code class="language-' + (lang || '') + '">' + escaped + '</code></pre>');
+                return placeholder;
+            });
+            
+            // Also protect inline code
+            const inlineCodes = [];
+            html = html.replace(/`([^`]+)`/g, function(match, code) {
+                const placeholder = '%%INLINECODE' + inlineCodes.length + '%%';
+                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                inlineCodes.push('<code>' + escaped + '</code>');
+                return placeholder;
+            });
+            
             // Headers (process from h6 to h1 to avoid conflicts)
             html = html.replace(/^######\\s+(.+)$/gm, '<h6>$1</h6>');
             html = html.replace(/^#####\\s+(.+)$/gm, '<h5>$1</h5>');
@@ -2559,23 +2577,15 @@ class HtmlFormatter(BaseFormatter):
             html = html.replace(/^##\\s+(.+)$/gm, '<h2>$1</h2>');
             html = html.replace(/^#\\s+(.+)$/gm, '<h1>$1</h1>');
             
-            // Code blocks (fenced with ```)
-            html = html.replace(/```([\\w]*)?\\n([\\s\\S]*?)```/g, function(match, lang, code) {
-                return '<pre><code class="language-' + (lang || '') + '">' + 
-                    code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + 
-                    '</code></pre>';
-            });
-            
-            // Inline code
-            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-            
             // Bold
             html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
             html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
             
-            // Italic
+            // Italic - only match underscores/asterisks that are not part of a word
+            // Use word boundaries to avoid matching underscores inside identifiers like do_install
             html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
-            html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+            // For underscores, only match if surrounded by whitespace or start/end of string
+            html = html.replace(/(^|\\s)_([^_]+)_(\\s|$)/gm, '$1<em>$2</em>$3');
             
             // Links
             html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
@@ -2601,8 +2611,17 @@ class HtmlFormatter(BaseFormatter):
                 block = block.trim();
                 if (!block) return '';
                 if (block.startsWith('<')) return block;
+                if (block.startsWith('%%CODEBLOCK')) return block;
                 return '<p>' + block.replace(/\\n/g, '<br>') + '</p>';
             }).join('\\n');
+            
+            // Restore code blocks and inline code
+            for (let i = 0; i < codeBlocks.length; i++) {
+                html = html.replace('%%CODEBLOCK' + i + '%%', codeBlocks[i]);
+            }
+            for (let i = 0; i < inlineCodes.length; i++) {
+                html = html.replace('%%INLINECODE' + i + '%%', inlineCodes[i]);
+            }
             
             return html;
         }
