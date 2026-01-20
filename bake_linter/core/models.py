@@ -57,6 +57,64 @@ class ExitCode(IntEnum):
     RUNTIME_ERROR = 3
 
 
+def get_rule_docs_path(rule_id: str) -> Optional[Path]:
+    """
+    Get the local path to the documentation file for a rule.
+    
+    Args:
+        rule_id: The rule identifier (e.g., "DEPRECATED001")
+        
+    Returns:
+        Path to the docs/rules/<rule_id>.md file, or None if not found
+    """
+    # Get the docs/rules directory relative to this module
+    import importlib.resources
+    try:
+        # Try to find the docs directory in the package
+        docs_dir = Path(__file__).parent.parent.parent / "docs" / "rules"
+        doc_file = docs_dir / f"{rule_id}.md"
+        if doc_file.exists():
+            return doc_file
+    except Exception:
+        pass
+    return None
+
+
+def get_rule_docs_url(rule_id: str) -> str:
+    """
+    Get the documentation URL for a rule.
+    
+    This returns a relative path to the documentation file that can be
+    used in HTML reports or as a reference in text output.
+    
+    Args:
+        rule_id: The rule identifier (e.g., "DEPRECATED001")
+        
+    Returns:
+        Documentation reference string (relative path to md file)
+    """
+    return f"docs/rules/{rule_id}.md"
+
+
+def get_rule_docs_content(rule_id: str) -> Optional[str]:
+    """
+    Get the documentation content for a rule.
+    
+    Args:
+        rule_id: The rule identifier (e.g., "DEPRECATED001")
+        
+    Returns:
+        The markdown content of the documentation file, or None if not found
+    """
+    doc_path = get_rule_docs_path(rule_id)
+    if doc_path and doc_path.exists():
+        try:
+            return doc_path.read_text(encoding='utf-8')
+        except Exception:
+            pass
+    return None
+
+
 @dataclass
 class LintResult:
     """
@@ -76,6 +134,7 @@ class LintResult:
         hint: Optional suggestion on how to fix the issue
         context: Optional code snippet or additional context
         rule_name: Human-readable name of the rule
+        docs_url: Optional URL to rule documentation (auto-generated if not provided)
     """
     rule_id: str
     file: Path
@@ -86,6 +145,12 @@ class LintResult:
     hint: Optional[str] = None
     context: Optional[str] = None
     rule_name: Optional[str] = None
+    docs_url: Optional[str] = None
+    
+    def __post_init__(self):
+        """Auto-generate docs_url if not provided."""
+        if self.docs_url is None:
+            self.docs_url = get_rule_docs_url(self.rule_id)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -99,6 +164,7 @@ class LintResult:
             "message": self.message,
             "hint": self.hint,
             "context": self.context,
+            "docs_url": self.docs_url,
         }
 
     def to_json(self) -> str:

@@ -7,6 +7,7 @@ Generates a standalone HTML report with:
 - Color-coded severities
 - Expandable sections
 - How-to-fix hints
+- Interactive rule documentation viewer
 
 (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
 All rights reserved.
@@ -16,11 +17,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, TextIO
+from typing import List, Dict, Optional, TextIO, Set
 from collections import defaultdict
 import html
+import json
+import re
 
-from bake_linter.core.models import LintResult, LintSummary, Severity
+from bake_linter.core.models import LintResult, LintSummary, Severity, get_rule_docs_content
 from bake_linter.output.base import BaseFormatter
 
 
@@ -161,6 +164,22 @@ class HtmlFormatter(BaseFormatter):
             </blockquote>
         </footer>
     </div>
+    
+    <!-- Rule Documentation Modal -->
+    <div id="rule-docs-modal" class="rule-docs-modal">
+        <div class="rule-docs-modal-content">
+            <div class="rule-docs-modal-header">
+                <h2 id="rule-docs-title">Rule Documentation</h2>
+                <button class="rule-docs-close" onclick="closeRuleDocsModal()">&times;</button>
+            </div>
+            <div id="rule-docs-body" class="rule-docs-modal-body">
+                <p>Loading documentation...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Rule Documentation Data -->
+    <script id="rule-docs-data" type="application/json">{self._get_rule_docs_data(by_rule)}</script>
     
     {self._get_scripts()}
 </body>
@@ -340,10 +359,14 @@ class HtmlFormatter(BaseFormatter):
                 
                 files_html = "\n".join(file_sections)
                 
+                # Help link for rule documentation
+                help_link = f'<a href="#" class="rule-help-link" data-rule-id="{html.escape(rule_id)}" title="View rule documentation">❓</a>'
+                
                 rule_sections.append(f"""
                 <details class="rule-section" open data-total-occurrences="{len(rule_results)}">
                     <summary>
                         <span class="rule-id">{html.escape(rule_id)}</span>
+                        {help_link}
                         <span class="rule-name">{html.escape(rule_name)}</span>
                         <span class="rule-count">{' '.join(badges)} (<span class="occurrence-count">{len(rule_results)}</span> occurrence(s))</span>
                     </summary>
@@ -399,12 +422,16 @@ class HtmlFormatter(BaseFormatter):
                 <code>{html.escape(result.context)}</code>
             </div>"""
         
+        # Help link for rule documentation
+        help_link = f'<a href="#" class="rule-help-link" data-rule-id="{html.escape(result.rule_id)}" title="View rule documentation">❓</a>'
+        
         return f"""
-        <div class="issue {severity_class}" data-rule-id="{html.escape(result.rule_id)}" data-rule-name="{html.escape(result.rule_name)}">
+        <div class="issue {severity_class}" data-rule-id="{html.escape(result.rule_id)}" data-rule-name="{html.escape(result.rule_name or '')}">
             <div class="issue-header">
                 <span class="severity-badge {severity_class}">{result.severity.name}</span>
                 <span class="rule-id">[{html.escape(result.rule_id)}]</span>
-                <span class="rule-name" style="display:none;">{html.escape(result.rule_name)}</span>
+                {help_link}
+                <span class="rule-name" style="display:none;">{html.escape(result.rule_name or '')}</span>
                 {line_info}
             </div>
             <div class="issue-message">{html.escape(result.message)}</div>
@@ -672,6 +699,19 @@ class HtmlFormatter(BaseFormatter):
         }}
         </script>
         """
+
+    def _get_rule_docs_data(self, by_rule: Dict[str, List[LintResult]]) -> str:
+        """Generate JSON data containing rule documentation for all rules found in results."""
+        docs_data: Dict[str, str] = {}
+        
+        for rule_id in by_rule.keys():
+            content = get_rule_docs_content(rule_id)
+            if content:
+                docs_data[rule_id] = content
+            else:
+                docs_data[rule_id] = f"# {rule_id}\n\nNo documentation available for this rule.\n\nPlease create a documentation file at `docs/rules/{rule_id}.md`."
+        
+        return json.dumps(docs_data)
 
     def _get_styles(self) -> str:
         """Get embedded CSS styles."""
@@ -1552,6 +1592,191 @@ class HtmlFormatter(BaseFormatter):
                 grid-column: span 1;
             }
         }
+        
+        /* Rule Help Link Styles */
+        .rule-help-link {
+            display: inline-block;
+            text-decoration: none;
+            font-size: 0.9em;
+            margin-left: 6px;
+            vertical-align: middle;
+            opacity: 0.7;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        
+        .rule-help-link:hover {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+        
+        /* Rule Documentation Modal */
+        .rule-docs-modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(3px);
+            overflow: auto;
+        }
+        
+        .rule-docs-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .rule-docs-modal-content {
+            background-color: #fff;
+            margin: 20px;
+            padding: 0;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            animation: modalSlideIn 0.3s ease;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .rule-docs-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 25px;
+            border-bottom: 1px solid #eee;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px 12px 0 0;
+        }
+        
+        .rule-docs-modal-header h2 {
+            margin: 0;
+            font-size: 1.3em;
+        }
+        
+        .rule-docs-close {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.8em;
+            cursor: pointer;
+            padding: 0 10px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .rule-docs-close:hover {
+            opacity: 1;
+        }
+        
+        .rule-docs-modal-body {
+            padding: 25px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 0.95em;
+            line-height: 1.7;
+        }
+        
+        /* Markdown rendering styles in modal */
+        .rule-docs-modal-body h1 {
+            font-size: 1.5em;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        
+        .rule-docs-modal-body h2 {
+            font-size: 1.3em;
+            color: #444;
+            margin-top: 25px;
+        }
+        
+        .rule-docs-modal-body h3 {
+            font-size: 1.1em;
+            color: #555;
+        }
+        
+        .rule-docs-modal-body code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }
+        
+        .rule-docs-modal-body pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+        
+        .rule-docs-modal-body pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+        }
+        
+        .rule-docs-modal-body ul, .rule-docs-modal-body ol {
+            padding-left: 25px;
+        }
+        
+        .rule-docs-modal-body li {
+            margin-bottom: 8px;
+        }
+        
+        .rule-docs-modal-body blockquote {
+            border-left: 4px solid #667eea;
+            margin: 15px 0;
+            padding: 10px 20px;
+            background: #f9f9f9;
+            color: #555;
+        }
+        
+        .rule-docs-modal-body table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }
+        
+        .rule-docs-modal-body th, .rule-docs-modal-body td {
+            border: 1px solid #ddd;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        
+        .rule-docs-modal-body th {
+            background: #f4f4f4;
+        }
+        
+        .rule-docs-modal-body a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        .rule-docs-modal-body a:hover {
+            text-decoration: underline;
+        }
     </style>"""
 
     def _get_scripts(self) -> str:
@@ -2313,4 +2538,127 @@ class HtmlFormatter(BaseFormatter):
         if (document.querySelector('.tab-btn[data-tab="statistics"].active')) {
             setTimeout(initializeCharts, 100);
         }
+        
+        // ==================== Rule Documentation Modal ====================
+        
+        // Load rule documentation data
+        const ruleDocsDataEl = document.getElementById('rule-docs-data');
+        const ruleDocsData = ruleDocsDataEl ? JSON.parse(ruleDocsDataEl.textContent) : {};
+        
+        // Simple Markdown to HTML converter
+        function markdownToHtml(md) {
+            if (!md) return '<p>No documentation available.</p>';
+            
+            let html = md;
+            
+            // Headers (process from h6 to h1 to avoid conflicts)
+            html = html.replace(/^######\\s+(.+)$/gm, '<h6>$1</h6>');
+            html = html.replace(/^#####\\s+(.+)$/gm, '<h5>$1</h5>');
+            html = html.replace(/^####\\s+(.+)$/gm, '<h4>$1</h4>');
+            html = html.replace(/^###\\s+(.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^##\\s+(.+)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^#\\s+(.+)$/gm, '<h1>$1</h1>');
+            
+            // Code blocks (fenced with ```)
+            html = html.replace(/```([\\w]*)?\\n([\\s\\S]*?)```/g, function(match, lang, code) {
+                return '<pre><code class="language-' + (lang || '') + '">' + 
+                    code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + 
+                    '</code></pre>';
+            });
+            
+            // Inline code
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            
+            // Bold
+            html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+            html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+            
+            // Italic
+            html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+            html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+            
+            // Links
+            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
+            
+            // Blockquotes
+            html = html.replace(/^>\\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+            
+            // Unordered lists
+            html = html.replace(/^[\\-\\*]\\s+(.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\\/li>\\n?)+/g, function(match) {
+                return '<ul>' + match + '</ul>';
+            });
+            
+            // Ordered lists
+            html = html.replace(/^\\d+\\.\\s+(.+)$/gm, '<li>$1</li>');
+            
+            // Horizontal rules
+            html = html.replace(/^---+$/gm, '<hr>');
+            
+            // Paragraphs - wrap text blocks not already in tags
+            const lines = html.split('\\n\\n');
+            html = lines.map(block => {
+                block = block.trim();
+                if (!block) return '';
+                if (block.startsWith('<')) return block;
+                return '<p>' + block.replace(/\\n/g, '<br>') + '</p>';
+            }).join('\\n');
+            
+            return html;
+        }
+        
+        // Open rule documentation modal
+        function openRuleDocsModal(ruleId) {
+            const modal = document.getElementById('rule-docs-modal');
+            const title = document.getElementById('rule-docs-title');
+            const body = document.getElementById('rule-docs-body');
+            
+            if (!modal || !title || !body) return;
+            
+            title.textContent = 'Rule: ' + ruleId;
+            
+            const docContent = ruleDocsData[ruleId];
+            if (docContent) {
+                body.innerHTML = markdownToHtml(docContent);
+            } else {
+                body.innerHTML = '<p>No documentation available for rule <strong>' + ruleId + '</strong>.</p>' +
+                    '<p>Create a documentation file at <code>docs/rules/' + ruleId + '.md</code></p>';
+            }
+            
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';  // Prevent background scroll
+        }
+        
+        // Close rule documentation modal
+        function closeRuleDocsModal() {
+            const modal = document.getElementById('rule-docs-modal');
+            if (modal) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';  // Restore scroll
+            }
+        }
+        
+        // Attach click handlers to all help links
+        document.querySelectorAll('.rule-help-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const ruleId = this.dataset.ruleId;
+                openRuleDocsModal(ruleId);
+            });
+        });
+        
+        // Close modal when clicking outside
+        document.getElementById('rule-docs-modal')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRuleDocsModal();
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeRuleDocsModal();
+            }
+        });
     </script>"""

@@ -166,6 +166,11 @@ class TextFormatter(BaseFormatter):
             hint_text = f"    💡 {result.hint}" if self.use_unicode else f"    -> {result.hint}"
             parts.append(self._colorize(hint_text, Colors.GREEN))
         
+        # Documentation reference
+        if result.docs_url:
+            docs_text = f"    📚 {result.docs_url}" if self.use_unicode else f"    [docs] {result.docs_url}"
+            parts.append(self._colorize(docs_text, Colors.CYAN))
+        
         return "\n".join(parts)
 
     def _format_summary(self, summary: LintSummary) -> str:
@@ -212,7 +217,7 @@ class CompactTextFormatter(TextFormatter):
     Compact text formatter for CI output.
     
     Produces one-line-per-issue output suitable for CI parsing.
-    Format: file:line:column: severity: [rule_id] message
+    Format: file:line:column: severity: [rule_id] message: doc: docs_url
     """
 
     def format_results(self, results: List[LintResult], summary: LintSummary) -> str:
@@ -227,7 +232,8 @@ class CompactTextFormatter(TextFormatter):
                     loc += f":{result.column}"
             
             severity = result.severity.name.lower()
-            lines.append(f"{loc}: {severity}: [{result.rule_id}] {result.message}")
+            docs_ref = f": {result.docs_url}" if result.docs_url else ""
+            lines.append(f"{loc}: {severity}: [{result.rule_id}] {result.message}{docs_ref}")
         
         # Add summary line
         if results:

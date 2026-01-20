@@ -85,6 +85,7 @@ class JsonFormatter(BaseFormatter):
             "message": result.message,
             "hint": result.hint,
             "context": result.context if self.verbose else None,
+            "docs_url": result.docs_url,
         }
 
     def _format_summary(self, summary: LintSummary) -> Dict[str, Any]:
@@ -145,6 +146,7 @@ class JsonLinesFormatter(BaseFormatter):
                 "severity": result.severity.name.lower(),
                 "message": result.message,
                 "hint": result.hint,
+                "docs_url": result.docs_url,
             }
             lines.append(json.dumps(obj))
         
