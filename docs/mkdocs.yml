@@ -1,0 +1,204 @@
+site_name: Bake Linter Documentation
+site_description: Documentation for Yocto/OpenEmbedded BitBake Recipe Linter
+site_author: Eduardo Correia
+docs_dir: .
+site_dir: ../_site
+
+# Exclude non-documentation files (only from root docs directory)
+exclude_docs: |
+  /Dockerfile
+  /build-docs.sh
+  /mkdocs.yml
+  /README.md
+  **/*.bb
+  **/*.py
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+  - tables
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+  - Inline Suppression: INLINE_SUPPRESSION.md
+  - Examples:
+    - Overview: examples/README.md
+  - Rules Reference:
+    - Overview: rules/README.md
+    - BBAppend Rules:
+      - BBAPPEND001 - Missing FILESEXTRAPATHS: rules/BBAPPEND001.md
+      - BBAPPEND002: rules/BBAPPEND002.md
+      - BBAPPEND003: rules/BBAPPEND003.md
+      - BBAPPEND004: rules/BBAPPEND004.md
+      - BBAPPEND005: rules/BBAPPEND005.md
+    - Best Practice Rules:
+      - BESTPRACTICE001: rules/BESTPRACTICE001.md
+      - BESTPRACTICE002: rules/BESTPRACTICE002.md
+      - BESTPRACTICE003: rules/BESTPRACTICE003.md
+      - BESTPRACTICE004: rules/BESTPRACTICE004.md
+    - Compatibility Rules:
+      - COMPAT001: rules/COMPAT001.md
+      - COMPAT002: rules/COMPAT002.md
+    - Dependency Rules:
+      - DEPENDENCY001: rules/DEPENDENCY001.md
+      - DEPENDENCY002: rules/DEPENDENCY002.md
+      - DEPENDENCY003: rules/DEPENDENCY003.md
+      - DEPENDS001: rules/DEPENDS001.md
+    - Deprecated Rules:
+      - DEPRECATED001: rules/DEPRECATED001.md
+      - DEPRECATED002: rules/DEPRECATED002.md
+      - DEPRECATED003: rules/DEPRECATED003.md
+      - DEPRECATED004: rules/DEPRECATED004.md
+    - Documentation Rules:
+      - DOC001: rules/DOC001.md
+      - DOC002: rules/DOC002.md
+      - DOC003: rules/DOC003.md
+    - Function Rules:
+      - FUNCTION001: rules/FUNCTION001.md
+      - FUNCTION002: rules/FUNCTION002.md
+    - Install Rules:
+      - INSTALL001: rules/INSTALL001.md
+      - INSTALL002: rules/INSTALL002.md
+      - INSTALL003: rules/INSTALL003.md
+      - INSTALL004: rules/INSTALL004.md
+      - INSTALL005: rules/INSTALL005.md
+    - Layer Rules:
+      - LAYER001: rules/LAYER001.md
+    - License Rules:
+      - LICENSE001: rules/LICENSE001.md
+      - LICENSE002: rules/LICENSE002.md
+      - LICENSE003: rules/LICENSE003.md
+    - Lifecycle Rules:
+      - LIFECYCLE001: rules/LIFECYCLE001.md
+    - Mandatory Rules:
+      - MANDATORY001: rules/MANDATORY001.md
+      - MANDATORY002: rules/MANDATORY002.md
+      - MANDATORY003: rules/MANDATORY003.md
+      - MANDATORY004: rules/MANDATORY004.md
+    - Metadata Rules:
+      - METADATA001: rules/METADATA001.md
+      - METADATA002: rules/METADATA002.md
+      - METADATA003: rules/METADATA003.md
+    - Naming Rules:
+      - NAMING001: rules/NAMING001.md
+      - NAMING002: rules/NAMING002.md
+      - NAMING003: rules/NAMING003.md
+    - Patch Rules:
+      - PATCH001: rules/PATCH001.md
+    - Package Rules:
+      - PKG001: rules/PKG001.md
+      - PKG002: rules/PKG002.md
+      - PKG003: rules/PKG003.md
+      - PKG004: rules/PKG004.md
+      - PKG005: rules/PKG005.md
+      - PKG006: rules/PKG006.md
+    - Portability Rules:
+      - PORT001: rules/PORT001.md
+      - PORT002: rules/PORT002.md
+      - PORT003: rules/PORT003.md
+    - Python Rules:
+      - PYTHON001: rules/PYTHON001.md
+      - PYTHON002: rules/PYTHON002.md
+      - PYTHON003: rules/PYTHON003.md
+    - Reproducibility Rules:
+      - REPRO001: rules/REPRO001.md
+    - Security Rules:
+      - SECURITY001: rules/SECURITY001.md
+      - SECURITY002: rules/SECURITY002.md
+      - SECURITY003: rules/SECURITY003.md
+      - SECURITY004: rules/SECURITY004.md
+      - SECURITY005: rules/SECURITY005.md
+      - SECURITY006: rules/SECURITY006.md
+      - SECURITY007: rules/SECURITY007.md
+      - SECURITY008: rules/SECURITY008.md
+    - Source Revision Rules:
+      - SRCREV001: rules/SRCREV001.md
+    - Style Rules:
+      - STYLE001: rules/STYLE001.md
+      - STYLE002: rules/STYLE002.md
+      - STYLE003: rules/STYLE003.md
+      - STYLE004: rules/STYLE004.md
+      - STYLE005: rules/STYLE005.md
+      - STYLE006: rules/STYLE006.md
+      - STYLE007: rules/STYLE007.md
+      - STYLE008: rules/STYLE008.md
+      - STYLE009: rules/STYLE009.md
+      - STYLE010: rules/STYLE010.md
+      - STYLE011: rules/STYLE011.md
+      - STYLE012: rules/STYLE012.md
+      - STYLE013: rules/STYLE013.md
+      - STYLE014: rules/STYLE014.md
+      - STYLE015: rules/STYLE015.md
+      - STYLE016: rules/STYLE016.md
+      - STYLE017: rules/STYLE017.md
+      - STYLE018: rules/STYLE018.md
+      - STYLE019: rules/STYLE019.md
+      - STYLE020: rules/STYLE020.md
+      - STYLE021: rules/STYLE021.md
+    - Supply Chain Rules:
+      - SUPPLY001: rules/SUPPLY001.md
+      - SUPPLY002: rules/SUPPLY002.md
+    - Syntax Rules:
+      - SYNTAX001: rules/SYNTAX001.md
+      - SYNTAX002: rules/SYNTAX002.md
+      - SYNTAX003: rules/SYNTAX003.md
+      - SYNTAX004: rules/SYNTAX004.md
+      - SYNTAX005: rules/SYNTAX005.md
+      - SYNTAX006: rules/SYNTAX006.md
+    - Systemd Rules:
+      - SYSTEMD001: rules/SYSTEMD001.md
+      - SYSTEMD002: rules/SYSTEMD002.md
+      - SYSTEMD003: rules/SYSTEMD003.md
+    - Task Rules:
+      - TASK001: rules/TASK001.md
+      - TASK002: rules/TASK002.md
+      - TASK003: rules/TASK003.md
+      - TASK004: rules/TASK004.md
+    - URI Rules:
+      - URI001: rules/URI001.md
+      - URI002: rules/URI002.md
+    - Variable Rules:
+      - VARIABLES001: rules/VARIABLES001.md
+      - VARIABLES002: rules/VARIABLES002.md
+      - VARIABLES003: rules/VARIABLES003.md
+      - VARIABLES004: rules/VARIABLES004.md
+      - VARIABLES005: rules/VARIABLES005.md
+
+extra:
+  version: "1.0"

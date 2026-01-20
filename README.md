@@ -205,6 +205,28 @@ python -m bake_linter.utils.gen_docs --rule LICENSE001
 
 Generated documentation will need manual editing to fill in examples and explanations.
 
+### Building HTML Documentation
+
+The documentation can be built as a static HTML website using MkDocs in a Docker container:
+
+```bash
+cd docs
+
+# Build static HTML documentation
+./build-docs.sh build
+
+# Start a local preview server at http://localhost:8001
+./build-docs.sh serve
+
+# Clean generated documentation
+./build-docs.sh clean
+
+# Rebuild Docker image (after Dockerfile changes)
+./build-docs.sh rebuild
+```
+
+The generated HTML is output to `_site/` and is excluded from version control.
+
 ## Available Rules
 
 ### License Rules
