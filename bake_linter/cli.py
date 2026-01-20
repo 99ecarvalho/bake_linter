@@ -34,6 +34,7 @@ from bake_linter.core.registry import get_registry
 from bake_linter.output.text import TextFormatter, CompactTextFormatter
 from bake_linter.output.json_output import JsonFormatter, JsonLinesFormatter
 from bake_linter.output.html import HtmlFormatter
+from bake_linter.output.html_oelint import OelintHtmlFormatter
 
 
 VALID_FORMATS = ["text", "compact", "json", "jsonl", "html"]
@@ -280,6 +281,41 @@ def get_formatter(format_name: str, color: bool, verbose: bool, output: TextIO):
     return formatters[format_name]()
 
 
+def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False):
+    """
+    Run oelint-adv if available.
+    
+    Args:
+        paths: Paths to lint
+        exclude_patterns: Patterns to exclude
+        quiet: Whether to suppress status messages
+        
+    Returns:
+        Tuple of (results, summary) or (None, None) if not available
+    """
+    from bake_linter.core.oelint_integration import get_oelint_integration
+    
+    integration = get_oelint_integration()
+    
+    if not integration.is_available():
+        return None, None
+    
+    if not quiet:
+        version = integration.get_version() or "unknown"
+        print(f"Running oelint-adv ({version})...", file=sys.stderr)
+    
+    results, summary, _stdout, _stderr = integration.run(
+        paths=paths,
+        exclude_patterns=exclude_patterns,
+        mode="all",  # Use 'all' mode for comprehensive checking
+    )
+    
+    if not quiet and summary:
+        print(f"oelint-adv found {summary.total_issues} issue(s)", file=sys.stderr)
+    
+    return results, summary
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point."""
     parser = create_parser()
@@ -363,6 +399,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     
     summary = engine.get_summary()
     
+    # Run oelint-adv if available
+    oelint_results, oelint_summary = run_oelint_adv(
+        paths=args.paths,
+        exclude_patterns=exclude_patterns if exclude_patterns else None,
+        quiet=config.quiet,
+    )
+    
     # Output to stdout using the primary format
     use_color = config.color and not args.ci and sys.stdout.isatty()
     if not config.quiet:
@@ -372,6 +415,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             verbose=args.verbose,
             output=sys.stdout,
         )
+        # Set oelint-adv data if available
+        if oelint_results is not None and oelint_summary is not None:
+            formatter.set_oelint_data(oelint_results, oelint_summary)
         formatter.write(results, summary)
     
     # Generate additional output files if specified
@@ -389,10 +435,34 @@ def main(argv: Optional[List[str]] = None) -> int:
                         verbose=args.verbose,
                         output=f,
                     )
+                    # Set oelint-adv data if available
+                    if oelint_results is not None and oelint_summary is not None:
+                        file_formatter.set_oelint_data(oelint_results, oelint_summary)
                     file_formatter.write(results, summary)
                 
                 if not config.quiet:
                     print(f"\n{fmt.upper()} report written to: {filepath}", file=sys.stderr)
+                
+                # For HTML output, also generate separate oelint-adv HTML file if results available
+                if fmt == "html" and oelint_results is not None and oelint_summary is not None:
+                    # Generate filename with _oelintadv suffix
+                    oelint_filepath = filepath.with_stem(filepath.stem + "_oelintadv")
+                    
+                    try:
+                        with open(oelint_filepath, "w", encoding="utf-8") as of:
+                            oelint_formatter = OelintHtmlFormatter(
+                                output=of,
+                                verbose=args.verbose,
+                                title="oelint-adv Report",
+                            )
+                            oelint_formatter.write(oelint_results, oelint_summary)
+                        
+                        if not config.quiet:
+                            print(f"oelint-adv HTML report written to: {oelint_filepath}", file=sys.stderr)
+                    except IOError as e:
+                        print(f"Error writing oelint-adv HTML output to {oelint_filepath}: {e}", file=sys.stderr)
+                        # Don't fail the whole run for this, just warn
+                        
             except IOError as e:
                 print(f"Error writing {fmt} output to {filename}: {e}", file=sys.stderr)
                 return ExitCode.RUNTIME_ERROR

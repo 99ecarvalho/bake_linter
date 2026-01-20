@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional, TextIO
+from typing import List, Optional, TextIO, TYPE_CHECKING
 import sys
 
 from bake_linter.core.models import LintResult, LintSummary
+
+if TYPE_CHECKING:
+    from bake_linter.core.oelint_integration import OelintResult, OelintSummary
 
 
 class BaseFormatter(ABC):
@@ -41,6 +44,25 @@ class BaseFormatter(ABC):
         self.output = output or sys.stdout
         self.color = color
         self.verbose = verbose
+        
+        # oelint-adv data (set externally before write)
+        self.oelint_results: Optional[List["OelintResult"]] = None
+        self.oelint_summary: Optional["OelintSummary"] = None
+
+    def set_oelint_data(
+        self,
+        results: Optional[List["OelintResult"]],
+        summary: Optional["OelintSummary"],
+    ) -> None:
+        """
+        Set oelint-adv data to be included in output.
+        
+        Args:
+            results: List of oelint-adv results
+            summary: Oelint-adv summary
+        """
+        self.oelint_results = results
+        self.oelint_summary = summary
 
     @abstractmethod
     def format_results(self, results: List[LintResult], summary: LintSummary) -> str:

@@ -9,11 +9,14 @@ All rights reserved.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Dict, Optional, TextIO
+from typing import List, Dict, Optional, TextIO, TYPE_CHECKING
 import sys
 
 from bake_linter.core.models import LintResult, LintSummary, Severity
 from bake_linter.output.base import BaseFormatter
+
+if TYPE_CHECKING:
+    from bake_linter.core.oelint_integration import OelintResult, OelintSummary
 
 
 class Colors:
@@ -111,30 +114,145 @@ class TextFormatter(BaseFormatter):
             lines.append(self._colorize("✓ No issues found!", Colors.GREEN))
             lines.append("")
             lines.append(self._format_summary(summary))
-            return "\n".join(lines)
-        
-        # Group results by file
-        by_file: Dict[Path, List[LintResult]] = {}
-        for result in results:
-            if result.file not in by_file:
-                by_file[result.file] = []
-            by_file[result.file].append(result)
-        
-        # Format each file's results
-        for file_path in sorted(by_file.keys()):
-            file_results = by_file[file_path]
+        else:
+            # Group results by file
+            by_file: Dict[Path, List[LintResult]] = {}
+            for result in results:
+                if result.file not in by_file:
+                    by_file[result.file] = []
+                by_file[result.file].append(result)
             
-            # File header
+            # Format each file's results
+            for file_path in sorted(by_file.keys()):
+                file_results = by_file[file_path]
+                
+                # File header
+                lines.append("")
+                lines.append(self._colorize(f"━━━ {file_path} ━━━", Colors.BOLD))
+                
+                # Results for this file
+                for result in sorted(file_results, key=lambda r: r.line or 0):
+                    lines.append(self._format_result(result))
+            
+            # Summary
             lines.append("")
-            lines.append(self._colorize(f"━━━ {file_path} ━━━", Colors.BOLD))
+            lines.append(self._format_summary(summary))
+        
+        # Append oelint-adv results if available
+        if self.oelint_results is not None and self.oelint_summary is not None:
+            lines.append("")
+            lines.append(self._format_oelint_section())
+        
+        return "\n".join(lines)
+
+    def _format_oelint_section(self) -> str:
+        """Format oelint-adv results section."""
+        lines = []
+        
+        # Section header
+        lines.append(self._colorize("═" * 60, Colors.MAGENTA))
+        lines.append(self._colorize("  oelint-adv Analysis Results", Colors.MAGENTA + Colors.BOLD))
+        if self.oelint_summary and self.oelint_summary.tool_version:
+            lines.append(self._colorize(f"  Version: {self.oelint_summary.tool_version}", Colors.DIM))
+        lines.append(self._colorize("═" * 60, Colors.MAGENTA))
+        
+        if not self.oelint_results:
+            lines.append(self._colorize("  ✓ No issues found by oelint-adv!", Colors.GREEN))
+        else:
+            # Group results by file
+            by_file: Dict[Path, List["OelintResult"]] = {}
+            for result in self.oelint_results:
+                if result.file not in by_file:
+                    by_file[result.file] = []
+                by_file[result.file].append(result)
             
-            # Results for this file
-            for result in sorted(file_results, key=lambda r: r.line or 0):
-                lines.append(self._format_result(result))
+            # Format each file's results
+            for file_path in sorted(by_file.keys()):
+                file_results = by_file[file_path]
+                
+                # File header
+                lines.append("")
+                lines.append(self._colorize(f"━━━ {file_path} ━━━", Colors.BOLD))
+                
+                # Results for this file
+                for result in sorted(file_results, key=lambda r: r.line):
+                    lines.append(self._format_oelint_result(result))
         
         # Summary
         lines.append("")
-        lines.append(self._format_summary(summary))
+        lines.append(self._format_oelint_summary())
+        
+        return "\n".join(lines)
+
+    def _format_oelint_result(self, result: "OelintResult") -> str:
+        """Format a single oelint-adv result."""
+        parts = []
+        
+        # Location
+        loc = f"  Line {result.line}"
+        parts.append(self._colorize(loc, Colors.DIM))
+        
+        # Severity with color
+        severity_colors = {
+            'error': Colors.RED,
+            'warning': Colors.YELLOW,
+            'info': Colors.BLUE,
+        }
+        severity_symbols = {
+            'error': "✖" if self.use_unicode else "[E]",
+            'warning': "⚠" if self.use_unicode else "[W]",
+            'info': "ℹ" if self.use_unicode else "[I]",
+        }
+        color = severity_colors.get(result.severity, Colors.WHITE)
+        symbol = severity_symbols.get(result.severity, "?")
+        severity_str = self._colorize(f"{symbol} {result.severity.upper()}", color)
+        
+        # Rule ID
+        rule_str = self._colorize(f"[{result.rule_id}]", Colors.DIM)
+        parts.append(f"  {severity_str} {rule_str}")
+        
+        # Message
+        parts.append(f"    {result.message}")
+        
+        # Extra info if available
+        if self.verbose and result.extra:
+            parts.append(self._colorize(f"    │ {result.extra}", Colors.DIM))
+        
+        return "\n".join(parts)
+
+    def _format_oelint_summary(self) -> str:
+        """Format the oelint-adv summary section."""
+        lines = []
+        
+        if not self.oelint_summary:
+            return ""
+        
+        summary = self.oelint_summary
+        
+        # Divider
+        lines.append(self._colorize("─" * 60, Colors.DIM))
+        
+        # Counts
+        parts = []
+        
+        if summary.errors > 0:
+            parts.append(self._colorize(f"{summary.errors} error(s)", Colors.RED))
+        if summary.warnings > 0:
+            parts.append(self._colorize(f"{summary.warnings} warning(s)", Colors.YELLOW))
+        if summary.infos > 0:
+            parts.append(self._colorize(f"{summary.infos} info(s)", Colors.BLUE))
+        
+        if parts:
+            lines.append("  oelint-adv: " + ", ".join(parts))
+        else:
+            lines.append("  oelint-adv: No issues")
+        
+        # Stats
+        stats = f"  {summary.files_scanned} file(s) scanned"
+        if summary.files_with_issues > 0:
+            stats += f", {summary.files_with_issues} with issues"
+        stats += f", {len(summary.rules_triggered)} rule(s) triggered"
+        lines.append(self._colorize(stats, Colors.DIM))
         
         return "\n".join(lines)
 
@@ -244,5 +362,24 @@ class CompactTextFormatter(TextFormatter):
             )
         else:
             lines.append("No issues found.")
+        
+        # Append oelint-adv results if available
+        if self.oelint_results is not None and self.oelint_summary is not None:
+            lines.append("")
+            lines.append("=== oelint-adv ===")
+            
+            for result in sorted(self.oelint_results, key=lambda r: (str(r.file), r.line)):
+                loc = f"{result.file}:{result.line}"
+                lines.append(f"{loc}: {result.severity}: [{result.rule_id}] {result.message}")
+            
+            if self.oelint_results:
+                lines.append("")
+                lines.append(
+                    f"oelint-adv found {self.oelint_summary.total_issues} issue(s): "
+                    f"{self.oelint_summary.errors} error(s), {self.oelint_summary.warnings} warning(s), "
+                    f"{self.oelint_summary.infos} info(s)"
+                )
+            else:
+                lines.append("oelint-adv: No issues found.")
         
         return "\n".join(lines)
