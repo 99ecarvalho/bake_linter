@@ -403,62 +403,176 @@ class OelintHtmlFormatter:
         rule_categories: Dict[str, str],
     ) -> str:
         """Render the statistics section with charts."""
-        # Severity distribution data
-        severity_data = json.dumps({
-            "labels": ["Errors", "Warnings", "Info"],
-            "data": [summary.errors, summary.warnings, summary.infos],
-            "colors": ["#ef4444", "#f59e0b", "#3b82f6"]
-        })
+        # Prepare data for charts - matching the original html.py format
+        severity_data = {
+            'labels': ['Errors', 'Warnings', 'Info'],
+            'values': [summary.errors, summary.warnings, summary.infos],
+            'colors': ['#dc3545', '#ffc107', '#17a2b8'],
+        }
         
-        # Top rules data (top 10)
-        top_rules = sorted(by_rule.items(), key=lambda x: len(x[1]), reverse=True)[:10]
-        top_rules_data = json.dumps({
-            "labels": [rule_id for rule_id, _ in top_rules],
-            "data": [len(results) for _, results in top_rules],
-        })
-        
-        # Category distribution
-        category_counts: Dict[str, int] = defaultdict(int)
-        for rule_id, results in by_rule.items():
+        # Category data with severity breakdown
+        category_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {'errors': 0, 'warnings': 0, 'infos': 0})
+        for rule_id, rule_results in by_rule.items():
             category = rule_categories.get(rule_id, 'OTHER')
-            category_counts[category] += len(results)
+            for r in rule_results:
+                if r.severity == 'error':
+                    category_counts[category]['errors'] += 1
+                elif r.severity == 'warning':
+                    category_counts[category]['warnings'] += 1
+                else:
+                    category_counts[category]['infos'] += 1
         
-        category_data = json.dumps({
-            "labels": list(category_counts.keys()),
-            "data": list(category_counts.values()),
-        })
+        # Top rules by issue count with severity breakdown
+        rule_stats = []
+        for rule_id, results in by_rule.items():
+            errors = sum(1 for r in results if r.severity == 'error')
+            warnings = sum(1 for r in results if r.severity == 'warning')
+            infos = sum(1 for r in results if r.severity == 'info')
+            total = errors + warnings + infos
+            rule_stats.append((rule_id, total, errors, warnings, infos))
+        top_rules = sorted(rule_stats, key=lambda x: -x[1])[:15]
         
-        # Top files data (top 10)
-        top_files = sorted(by_file.items(), key=lambda x: len(x[1]), reverse=True)[:10]
-        top_files_data = json.dumps({
-            "labels": [str(f.name) for f, _ in top_files],
-            "data": [len(results) for _, results in top_files],
-        })
+        # File issues distribution with severity breakdown
+        file_stats = []
+        for f, results in by_file.items():
+            errors = sum(1 for r in results if r.severity == 'error')
+            warnings = sum(1 for r in results if r.severity == 'warning')
+            infos = sum(1 for r in results if r.severity == 'info')
+            total = errors + warnings + infos
+            file_stats.append((str(f.name), total, errors, warnings, infos))
+        top_files = sorted(file_stats, key=lambda x: -x[1])[:10]
+        
+        # Encode data for JavaScript
+        severity_json = json.dumps(severity_data)
+        category_labels = json.dumps(list(category_counts.keys()))
+        category_errors = json.dumps([v['errors'] for v in category_counts.values()])
+        category_warnings = json.dumps([v['warnings'] for v in category_counts.values()])
+        category_infos = json.dumps([v['infos'] for v in category_counts.values()])
+        
+        top_rule_labels = json.dumps([r[0] for r in top_rules])
+        top_rule_values = json.dumps([r[1] for r in top_rules])
+        top_rule_errors = json.dumps([r[2] for r in top_rules])
+        top_rule_warnings = json.dumps([r[3] for r in top_rules])
+        top_rule_infos = json.dumps([r[4] for r in top_rules])
+        
+        top_file_labels = json.dumps([f[0] for f in top_files])
+        top_file_values = json.dumps([f[1] for f in top_files])
+        top_file_errors = json.dumps([f[2] for f in top_files])
+        top_file_warnings = json.dumps([f[3] for f in top_files])
+        top_file_infos = json.dumps([f[4] for f in top_files])
         
         return f"""
-        <div class="statistics-grid">
-            <div class="chart-container">
-                <h3>Severity Distribution</h3>
-                <canvas id="severity-chart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3>Top Rules</h3>
-                <canvas id="top-rules-chart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3>Issues by Category</h3>
-                <canvas id="category-chart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3>Top Files with Issues</h3>
-                <canvas id="top-files-chart"></canvas>
+        <div class="statistics-container">
+            <h2>📊 oelint-adv Analysis Dashboard</h2>
+            
+            <div class="stats-grid">
+                <div class="chart-card">
+                    <h3>🎯 Severity Distribution</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="severityPieChart"></canvas>
+                    </div>
+                    <p class="chart-description">Distribution of issues by severity level</p>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>📊 Severity Breakdown</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="severityDoughnutChart"></canvas>
+                    </div>
+                    <p class="chart-description">Proportional view of issue types</p>
+                </div>
+                
+                <div class="chart-card wide">
+                    <h3>📁 Issues by Category</h3>
+                    <div class="chart-wrapper-wide">
+                        <canvas id="categoryBarChart"></canvas>
+                    </div>
+                    <p class="chart-description">Stacked bar chart showing errors, warnings, and info by rule category</p>
+                </div>
+                
+                <div class="chart-card wide">
+                    <h3>🔝 Top 15 Rules by Issue Count</h3>
+                    <div class="chart-wrapper-wide">
+                        <canvas id="topRulesChart"></canvas>
+                    </div>
+                    <p class="chart-description">Rules that generated the most issues</p>
+                </div>
+                
+                <div class="chart-card wide">
+                    <h3>📄 Top 10 Files by Issue Count</h3>
+                    <div class="chart-wrapper-wide">
+                        <canvas id="topFilesChart"></canvas>
+                    </div>
+                    <p class="chart-description">Files with the highest number of issues</p>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>📈 Quick Stats</h3>
+                    <div class="quick-stats">
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-total-issues">{summary.total_issues}</span>
+                            <span class="qs-label">Total Issues</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-files-with-issues">{len(by_file)}</span>
+                            <span class="qs-label">Files with Issues</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-rules-triggered">{len(by_rule)}</span>
+                            <span class="qs-label">Rules Triggered</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-categories-affected">{len(category_counts)}</span>
+                            <span class="qs-label">Categories Affected</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="qs-value" id="qs-avg-issues-file">{summary.total_issues / max(len(by_file), 1):.1f}</span>
+                            <span class="qs-label">Avg Issues/File</span>
+                        </div>
+                        <div class="quick-stat error-highlight">
+                            <span class="qs-value" id="qs-error-rate">{(summary.errors / max(summary.total_issues, 1) * 100):.1f}%</span>
+                            <span class="qs-label">Error Rate</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>🏆 Health Score</h3>
+                    <div class="health-score-container">
+                        <canvas id="healthGauge"></canvas>
+                        <div class="health-score-text">
+                            <span class="health-value" id="healthValue">--</span>
+                            <span class="health-label">Code Health</span>
+                        </div>
+                    </div>
+                    <p class="chart-description">Based on error/warning ratio and issue density</p>
+                </div>
             </div>
         </div>
-        <script>
-            const severityData = {severity_data};
-            const topRulesData = {top_rules_data};
-            const categoryData = {category_data};
-            const topFilesData = {top_files_data};
+        
+        <script id="chart-data" type="application/json">
+        {{
+            "severity": {severity_json},
+            "categoryLabels": {category_labels},
+            "categoryErrors": {category_errors},
+            "categoryWarnings": {category_warnings},
+            "categoryInfos": {category_infos},
+            "topRuleLabels": {top_rule_labels},
+            "topRuleValues": {top_rule_values},
+            "topRuleErrors": {top_rule_errors},
+            "topRuleWarnings": {top_rule_warnings},
+            "topRuleInfos": {top_rule_infos},
+            "topFileLabels": {top_file_labels},
+            "topFileValues": {top_file_values},
+            "topFileErrors": {top_file_errors},
+            "topFileWarnings": {top_file_warnings},
+            "topFileInfos": {top_file_infos},
+            "totalIssues": {summary.total_issues},
+            "errors": {summary.errors},
+            "warnings": {summary.warnings},
+            "infos": {summary.infos},
+            "filesScanned": {summary.files_scanned}
+        }}
         </script>"""
 
     def _get_rule_docs_data(self, by_rule: Dict[str, List["OelintResult"]]) -> str:
@@ -482,349 +596,582 @@ class OelintHtmlFormatter:
         """Get embedded CSS styles."""
         return """<style>
 :root {
-    --color-error: #ef4444;
-    --color-error-bg: #fef2f2;
-    --color-warning: #f59e0b;
-    --color-warning-bg: #fffbeb;
-    --color-info: #3b82f6;
-    --color-info-bg: #eff6ff;
-    --color-success: #10b981;
-    --color-success-bg: #ecfdf5;
-    --color-neutral: #6b7280;
-    --color-neutral-bg: #f3f4f6;
+    --color-error: #dc3545;
+    --color-error-bg: #f8d7da;
+    --color-warning: #ffc107;
+    --color-warning-bg: #fff3cd;
+    --color-info: #17a2b8;
+    --color-info-bg: #d1ecf1;
+    --color-success: #28a745;
+    --color-success-bg: #d4edda;
+    --color-neutral: #6c757d;
+    --color-neutral-bg: #e9ecef;
     --color-purple: #8b5cf6;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     line-height: 1.6;
-    color: #1f2937;
-    background: #f9fafb;
+    color: #333;
+    background: #f5f5f5;
+    margin: 0;
+    padding: 20px;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 2rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    overflow: hidden;
 }
 
 header {
+    background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+    color: white;
+    padding: 30px;
     text-align: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #e5e7eb;
 }
 
 header h1 {
-    font-size: 2rem;
-    color: #8b5cf6;
-    margin-bottom: 0.5rem;
+    margin: 0 0 10px 0;
+    font-size: 2em;
 }
 
 .timestamp, .version-info {
-    color: #6b7280;
-    font-size: 0.9rem;
+    opacity: 0.9;
+    font-size: 0.9em;
+    margin: 5px 0;
 }
 
 .copyright-section {
-    margin-top: 1rem;
-    font-size: 0.85rem;
-    color: #6b7280;
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.2);
 }
 
 .copyright-main {
-    margin-bottom: 0.3rem;
+    opacity: 0.95;
+    font-size: 0.95em;
+    margin: 0 0 8px 0;
 }
 
-.tool-info {
-    margin-top: 0.5rem;
-    font-style: italic;
-}
-
-.author-link, .cv-link, .contact-link {
-    color: #8b5cf6;
+.copyright-main a {
+    color: white;
     text-decoration: none;
+    font-weight: 500;
 }
 
-.author-link:hover, .cv-link:hover, .contact-link:hover {
+.copyright-main a:hover {
     text-decoration: underline;
 }
 
+.author-link {
+    font-weight: 600 !important;
+}
+
+.cv-link {
+    opacity: 0.9;
+    margin-left: 5px;
+}
+
+.copyright-links {
+    opacity: 0.9;
+    font-size: 0.85em;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.contact-link {
+    color: white;
+    text-decoration: none;
+    padding: 3px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.contact-link:hover {
+    background-color: rgba(255,255,255,0.15);
+    transform: translateY(-1px);
+}
+
+.linkedin-link:hover {
+    background-color: rgba(10, 102, 194, 0.4);
+}
+
 .link-separator {
-    margin: 0 0.5rem;
-    color: #d1d5db;
+    opacity: 0.5;
+}
+
+.tool-info {
+    margin-top: 10px;
+    font-size: 0.85em;
+    opacity: 0.9;
+}
+
+.tool-info a {
+    color: white;
+    text-decoration: none;
+}
+
+.tool-info a:hover {
+    text-decoration: underline;
 }
 
 /* Summary Section */
 .summary {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 20px 30px;
+    border-bottom: 1px solid #eee;
 }
 
-.summary.success { border-left: 4px solid var(--color-success); }
-.summary.warning { border-left: 4px solid var(--color-warning); }
-.summary.error { border-left: 4px solid var(--color-error); }
+.summary.success { background: var(--color-success-bg); }
+.summary.error { background: var(--color-error-bg); }
+.summary.warning { background: var(--color-warning-bg); }
 
 .summary-header {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 1rem;
+    text-align: center;
+    margin-bottom: 20px;
 }
 
 .status-badge {
-    padding: 0.5rem 1.5rem;
+    display: inline-block;
+    padding: 8px 20px;
     border-radius: 20px;
-    font-weight: 600;
-    font-size: 1.1rem;
+    font-weight: bold;
+    color: white;
 }
 
-.status-badge.success { background: var(--color-success-bg); color: var(--color-success); }
-.status-badge.warning { background: var(--color-warning-bg); color: var(--color-warning); }
-.status-badge.error { background: var(--color-error-bg); color: var(--color-error); }
+.status-badge.success { background: var(--color-success); }
+.status-badge.error { background: var(--color-error); }
+.status-badge.warning { background: #e0a800; color: #333; }
 
 .summary-stats {
     display: flex;
     justify-content: center;
-    gap: 2rem;
+    gap: 30px;
     flex-wrap: wrap;
 }
 
 .stat {
     text-align: center;
-    padding: 1rem;
-    min-width: 100px;
+    padding: 15px 25px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .stat-value {
     display: block;
-    font-size: 2rem;
-    font-weight: 700;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    color: #6b7280;
-    text-transform: uppercase;
+    font-size: 2em;
+    font-weight: bold;
 }
 
 .stat.error .stat-value { color: var(--color-error); }
-.stat.warning .stat-value { color: var(--color-warning); }
+.stat.warning .stat-value { color: #e0a800; }
 .stat.info .stat-value { color: var(--color-info); }
 .stat.neutral .stat-value { color: var(--color-neutral); }
+
+.stat-label {
+    font-size: 0.85em;
+    color: #666;
+    text-transform: uppercase;
+}
 
 /* Tabs */
 .tabs {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    border-bottom: 2px solid #e5e7eb;
-    padding-bottom: 0.5rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #ddd;
 }
 
 .tab-btn {
-    padding: 0.75rem 1.5rem;
+    flex: 1;
+    padding: 15px 20px;
     border: none;
-    background: transparent;
+    background: none;
     cursor: pointer;
-    font-size: 1rem;
-    color: #6b7280;
-    border-radius: 8px 8px 0 0;
+    font-size: 1em;
+    color: #666;
     transition: all 0.2s;
 }
 
-.tab-btn:hover { background: #f3f4f6; }
-.tab-btn.active {
-    background: #8b5cf6;
-    color: white;
+.tab-btn:hover {
+    background: #e9ecef;
 }
 
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+.tab-btn.active {
+    background: white;
+    color: #8b5cf6;
+    font-weight: bold;
+    border-bottom: 3px solid #8b5cf6;
+}
+
+.tab-content {
+    display: none;
+    padding: 20px 30px;
+}
+
+.tab-content.active {
+    display: block;
+}
 
 /* Filters */
 .severity-filters {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: white;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
     border-radius: 8px;
     flex-wrap: wrap;
 }
 
 .filter-label {
-    font-weight: 500;
-    color: #374151;
+    font-weight: 600;
+    color: #333;
 }
 
 .filter-btn {
-    padding: 0.5rem 1rem;
-    border: 2px solid #e5e7eb;
+    padding: 8px 16px;
+    border: 2px solid #ddd;
     background: white;
     border-radius: 20px;
     cursor: pointer;
     transition: all 0.2s;
+    font-size: 0.9em;
 }
 
 .filter-btn.active {
     border-color: #8b5cf6;
-    background: #f5f3ff;
+    background: #f3e8ff;
 }
 
-.filter-btn:hover { border-color: #8b5cf6; }
+.filter-btn:hover {
+    border-color: #8b5cf6;
+}
 
 /* Expand Controls */
 .expand-controls {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    gap: 10px;
+    margin-bottom: 15px;
 }
 
 .expand-btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid #e5e7eb;
+    padding: 8px 16px;
+    border: 1px solid #ddd;
     background: white;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.85em;
+    transition: all 0.2s;
 }
 
-.expand-btn:hover { background: #f3f4f6; }
+.expand-btn:hover {
+    background: #f8f9fa;
+    border-color: #8b5cf6;
+}
 
 /* File & Rule Sections */
 .file-section, .rule-section, .category-section, .rule-file-section {
     background: white;
     border-radius: 8px;
-    margin-bottom: 0.5rem;
-    border: 1px solid #e5e7eb;
+    margin-bottom: 10px;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .file-section summary, .rule-section summary, .category-section summary, .rule-file-section summary {
-    padding: 1rem;
+    padding: 15px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 15px;
     flex-wrap: wrap;
+    transition: background 0.2s;
 }
 
-.file-section summary:hover, .rule-section summary:hover, .category-section summary:hover {
-    background: #f9fafb;
+.file-section summary:hover, .rule-section summary:hover, .category-section summary:hover, .rule-file-section summary:hover {
+    background: #f8f9fa;
 }
 
-.file-path, .rule-id, .category-name {
+.file-path {
     font-weight: 600;
-    color: #1f2937;
+    color: #333;
+    word-break: break-all;
 }
 
-.rule-id { color: #8b5cf6; font-family: monospace; }
+.rule-id {
+    font-weight: 600;
+    color: #8b5cf6;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
 
-.file-badges, .category-badges { margin-left: auto; }
+.category-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 1.1em;
+}
+
+.file-badges, .category-badges {
+    margin-left: auto;
+    display: flex;
+    gap: 5px;
+}
 
 .badge {
     display: inline-block;
-    padding: 0.25rem 0.5rem;
+    padding: 4px 10px;
     border-radius: 12px;
-    font-size: 0.75rem;
+    font-size: 0.75em;
     font-weight: 600;
-    margin-left: 0.25rem;
 }
 
 .badge.error { background: var(--color-error-bg); color: var(--color-error); }
-.badge.warning { background: var(--color-warning-bg); color: var(--color-warning); }
-.badge.info { background: var(--color-info-bg); color: var(--color-info); }
+.badge.warning { background: var(--color-warning-bg); color: #856404; }
+.badge.info { background: var(--color-info-bg); color: #0c5460; }
 
 .rule-count, .category-count {
-    color: #6b7280;
-    font-size: 0.9rem;
+    color: #666;
+    font-size: 0.9em;
 }
 
 .rule-help-link {
     text-decoration: none;
-    font-size: 1rem;
+    font-size: 1.1em;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.rule-help-link:hover {
+    opacity: 1;
 }
 
 /* Issues */
 .file-issues, .rule-issues, .rule-file-issues, .category-rules {
-    padding: 0 1rem 1rem;
+    padding: 0 15px 15px;
 }
 
 .issue {
-    padding: 0.75rem;
-    margin-top: 0.5rem;
+    padding: 12px 15px;
+    margin-top: 10px;
     border-radius: 6px;
-    border-left: 3px solid;
+    border-left: 4px solid;
 }
 
-.issue.error { background: var(--color-error-bg); border-color: var(--color-error); }
-.issue.warning { background: var(--color-warning-bg); border-color: var(--color-warning); }
-.issue.info { background: var(--color-info-bg); border-color: var(--color-info); }
+.issue.error {
+    background: var(--color-error-bg);
+    border-color: var(--color-error);
+}
+
+.issue.warning {
+    background: var(--color-warning-bg);
+    border-color: #e0a800;
+}
+
+.issue.info {
+    background: var(--color-info-bg);
+    border-color: var(--color-info);
+}
 
 .issue-header {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
+    gap: 10px;
+    margin-bottom: 8px;
     flex-wrap: wrap;
 }
 
 .line-num {
-    font-family: monospace;
-    color: #6b7280;
-    font-size: 0.85rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #666;
+    font-size: 0.85em;
+    background: rgba(0,0,0,0.05);
+    padding: 2px 8px;
+    border-radius: 4px;
 }
 
 .severity-badge {
-    padding: 0.2rem 0.5rem;
+    padding: 3px 8px;
     border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 600;
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 .severity-badge.error { background: var(--color-error); color: white; }
-.severity-badge.warning { background: var(--color-warning); color: white; }
+.severity-badge.warning { background: #e0a800; color: #333; }
 .severity-badge.info { background: var(--color-info); color: white; }
 
 .rule-id-small {
-    font-family: monospace;
-    font-size: 0.8rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8em;
     color: #8b5cf6;
 }
 
 .issue-message {
-    color: #374151;
+    color: #333;
+    line-height: 1.5;
 }
 
 .no-issues {
     text-align: center;
-    padding: 2rem;
+    padding: 40px;
     color: var(--color-success);
-    font-size: 1.2rem;
+    font-size: 1.3em;
 }
 
 /* Statistics */
-.statistics-grid {
+.statistics-container {
+    padding: 20px;
+}
+
+.statistics-container h2 {
+    color: #8b5cf6;
+    margin-bottom: 25px;
+    text-align: center;
+    font-size: 1.8em;
+}
+
+.stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
 }
 
-.chart-container {
+.chart-card {
     background: white;
-    border-radius: 8px;
-    padding: 1.5rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.chart-container h3 {
-    margin-bottom: 1rem;
-    color: #374151;
+.chart-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.chart-card.wide {
+    grid-column: span 2;
+}
+
+.chart-card h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 1.1em;
+    border-bottom: 2px solid #8b5cf6;
+    padding-bottom: 10px;
+}
+
+.chart-wrapper {
+    position: relative;
+    height: 250px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.chart-wrapper-wide {
+    position: relative;
+    height: 300px;
+}
+
+.chart-description {
+    text-align: center;
+    color: #888;
+    font-size: 0.85em;
+    margin-top: 10px;
+    font-style: italic;
+}
+
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.quick-stat {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    transition: transform 0.2s;
+}
+
+.quick-stat:hover {
+    transform: scale(1.02);
+}
+
+.quick-stat.error-highlight {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+}
+
+.qs-value {
+    display: block;
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #8b5cf6;
+}
+
+.error-highlight .qs-value {
+    color: #dc3545;
+}
+
+.qs-label {
+    display: block;
+    font-size: 0.8em;
+    color: #666;
+    text-transform: uppercase;
+    margin-top: 5px;
+}
+
+.health-score-container {
+    position: relative;
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.health-score-text {
+    position: absolute;
+    text-align: center;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.health-value {
+    display: block;
+    font-size: 2.5em;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.health-label {
+    display: block;
+    font-size: 0.9em;
+    color: #666;
+}
+
+@media (max-width: 1024px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-card.wide {
+        grid-column: span 1;
+    }
 }
 
 /* Rule Documentation Modal */
@@ -841,7 +1188,9 @@ header h1 {
     justify-content: center;
 }
 
-.rule-docs-modal.show { display: flex; }
+.rule-docs-modal.show {
+    display: flex;
+}
 
 .rule-docs-modal-content {
     background: white;
@@ -852,257 +1201,848 @@ header h1 {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
 }
 
 .rule-docs-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
+    padding: 15px 20px;
     border-bottom: 1px solid #e5e7eb;
-    background: #8b5cf6;
+    background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
     color: white;
 }
 
 .rule-docs-modal-header h2 {
-    font-size: 1.2rem;
+    font-size: 1.2em;
+    margin: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
 }
 
 .rule-docs-close {
     background: none;
     border: none;
-    font-size: 1.5rem;
+    font-size: 1.5em;
     cursor: pointer;
     color: white;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.rule-docs-close:hover {
+    opacity: 1;
 }
 
 .rule-docs-modal-body {
-    padding: 1.5rem;
+    padding: 20px;
     overflow-y: auto;
     line-height: 1.8;
 }
 
-.rule-docs-modal-body h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #8b5cf6; }
-.rule-docs-modal-body h2 { font-size: 1.2rem; margin: 1rem 0 0.5rem; color: #374151; }
-.rule-docs-modal-body p { margin-bottom: 1rem; }
+.rule-docs-modal-body h1 {
+    font-size: 1.5em;
+    margin-bottom: 15px;
+    color: #8b5cf6;
+}
+
+.rule-docs-modal-body h2 {
+    font-size: 1.2em;
+    margin: 20px 0 10px;
+    color: #333;
+}
+
+.rule-docs-modal-body p {
+    margin-bottom: 15px;
+}
+
 .rule-docs-modal-body code {
     background: #f3f4f6;
-    padding: 0.2rem 0.4rem;
+    padding: 2px 6px;
     border-radius: 4px;
-    font-family: monospace;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
 }
+
 .rule-docs-modal-body pre {
     background: #1f2937;
     color: #f9fafb;
-    padding: 1rem;
+    padding: 15px;
     border-radius: 8px;
     overflow-x: auto;
-    margin: 1rem 0;
+    margin: 15px 0;
+    font-family: 'Consolas', 'Monaco', monospace;
 }
 
 /* Footer */
 footer {
     text-align: center;
-    padding: 2rem 0;
-    margin-top: 2rem;
-    border-top: 1px solid #e5e7eb;
-    color: #6b7280;
+    padding: 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #eee;
+    color: #666;
+    font-size: 0.9em;
 }
 
 /* Hidden class for filtering */
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
+
+.hidden-by-filter {
+    display: none !important;
+}
 </style>"""
 
     def _get_scripts(self) -> str:
         """Get embedded JavaScript."""
         return """<script>
-// Tab switching
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
-    });
-});
-
-// Severity filtering
-document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        btn.classList.toggle('active');
-        applyFilters();
-    });
-});
-
-function applyFilters() {
-    const activeFilters = Array.from(document.querySelectorAll('.filter-btn.active'))
-        .map(btn => btn.dataset.severity);
+(function() {
+    'use strict';
     
-    document.querySelectorAll('.issue').forEach(issue => {
-        const severity = issue.dataset.severity;
-        if (activeFilters.includes(severity)) {
-            issue.classList.remove('hidden');
-        } else {
-            issue.classList.add('hidden');
+    // ==================== Tab Switching ====================
+    var tabBtns = document.querySelectorAll('.tab-btn');
+    var tabContents = document.querySelectorAll('.tab-content');
+    
+    for (var i = 0; i < tabBtns.length; i++) {
+        tabBtns[i].onclick = function() {
+            var tabName = this.getAttribute('data-tab');
+            for (var j = 0; j < tabBtns.length; j++) {
+                tabBtns[j].classList.remove('active');
+            }
+            for (var j = 0; j < tabContents.length; j++) {
+                tabContents[j].classList.remove('active');
+            }
+            this.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            
+            // Initialize charts when statistics tab is shown
+            if (tabName === 'statistics') {
+                setTimeout(initializeCharts, 100);
+            }
+        };
+    }
+    
+    // ==================== Expand/Collapse Controls ====================
+    var expandBtns = document.querySelectorAll('.expand-btn');
+    
+    for (var i = 0; i < expandBtns.length; i++) {
+        expandBtns[i].onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            var action = this.getAttribute('data-action');
+            var targetId = this.getAttribute('data-target');
+            var container = document.getElementById(targetId);
+            
+            if (!container) {
+                return;
+            }
+            
+            var details = container.querySelectorAll('details');
+            
+            if (action === 'expand-all') {
+                for (var j = 0; j < details.length; j++) {
+                    details[j].open = true;
+                }
+            } else if (action === 'collapse-all') {
+                for (var j = 0; j < details.length; j++) {
+                    details[j].open = false;
+                }
+            } else if (action === 'expand-level1') {
+                var cats = container.querySelectorAll('.category-section');
+                var rules = container.querySelectorAll('.rule-section');
+                var files = container.querySelectorAll('.rule-file-section');
+                for (var j = 0; j < cats.length; j++) cats[j].open = true;
+                for (var j = 0; j < rules.length; j++) rules[j].open = true;
+                for (var j = 0; j < files.length; j++) files[j].open = false;
+            } else if (action === 'collapse-level1') {
+                var cats = container.querySelectorAll('.category-section');
+                var rules = container.querySelectorAll('.rule-section');
+                for (var j = 0; j < cats.length; j++) cats[j].open = true;
+                for (var j = 0; j < rules.length; j++) rules[j].open = false;
+            }
+        };
+    }
+    
+    // ==================== Severity Filtering ====================
+    function applySeverityFilters() {
+        var filterBtns = document.querySelectorAll('.filter-btn.active');
+        var activeFilters = [];
+        for (var i = 0; i < filterBtns.length; i++) {
+            activeFilters.push(filterBtns[i].getAttribute('data-severity'));
         }
-    });
-}
-
-// Expand/collapse controls
-document.querySelectorAll('.expand-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const action = btn.dataset.action;
-        const target = btn.dataset.target;
-        const container = document.getElementById(target);
         
-        if (action === 'expand-all') {
-            container.querySelectorAll('details').forEach(d => d.open = true);
-        } else if (action === 'collapse-all') {
-            container.querySelectorAll('details').forEach(d => d.open = false);
-        } else if (action === 'expand-level1') {
-            container.querySelectorAll('.category-section').forEach(d => d.open = true);
-            container.querySelectorAll('.rule-section').forEach(d => d.open = true);
-            container.querySelectorAll('.rule-file-section').forEach(d => d.open = false);
-        } else if (action === 'collapse-level1') {
-            container.querySelectorAll('.category-section').forEach(d => d.open = true);
-            container.querySelectorAll('.rule-section').forEach(d => d.open = false);
+        // Filter individual issues
+        var issues = document.querySelectorAll('.issue');
+        for (var i = 0; i < issues.length; i++) {
+            var severity = issues[i].getAttribute('data-severity');
+            if (activeFilters.indexOf(severity) !== -1) {
+                issues[i].classList.remove('hidden-by-filter');
+            } else {
+                issues[i].classList.add('hidden-by-filter');
+            }
         }
-    });
-});
-
-// Rule documentation modal
-const ruleDocsData = JSON.parse(document.getElementById('rule-docs-data').textContent);
-
-document.querySelectorAll('.rule-help-link').forEach(link => {
-    link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const ruleId = link.dataset.ruleId;
-        showRuleDocsModal(ruleId);
-    });
-});
-
-function showRuleDocsModal(ruleId) {
-    const modal = document.getElementById('rule-docs-modal');
-    const title = document.getElementById('rule-docs-title');
-    const body = document.getElementById('rule-docs-body');
-    
-    title.textContent = ruleId;
-    
-    const content = ruleDocsData[ruleId] || 'No documentation available.';
-    body.innerHTML = simpleMarkdown(content);
-    
-    modal.classList.add('show');
-}
-
-function closeRuleDocsModal() {
-    document.getElementById('rule-docs-modal').classList.remove('show');
-}
-
-// Close modal on outside click
-document.getElementById('rule-docs-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'rule-docs-modal') {
-        closeRuleDocsModal();
-    }
-});
-
-// Simple markdown renderer
-function simpleMarkdown(text) {
-    return text
-        .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-        .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
-        .replace(/\\*(.*?)\\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/```([\\s\\S]*?)```/g, '<pre>$1</pre>')
-        .replace(/\\n/g, '<br>');
-}
-
-// Initialize charts when statistics tab is shown
-document.querySelector('[data-tab="statistics"]').addEventListener('click', initCharts);
-
-let chartsInitialized = false;
-function initCharts() {
-    if (chartsInitialized) return;
-    chartsInitialized = true;
-    
-    // Severity chart
-    if (typeof severityData !== 'undefined') {
-        new Chart(document.getElementById('severity-chart'), {
-            type: 'doughnut',
-            data: {
-                labels: severityData.labels,
-                datasets: [{
-                    data: severityData.data,
-                    backgroundColor: severityData.colors
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: { legend: { position: 'bottom' } }
+        
+        // Hide file sections with no visible issues (By File tab)
+        var fileSections = document.querySelectorAll('#files .file-section');
+        for (var i = 0; i < fileSections.length; i++) {
+            var section = fileSections[i];
+            var visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+            if (visibleIssues.length === 0) {
+                section.classList.add('hidden-by-filter');
+            } else {
+                section.classList.remove('hidden-by-filter');
             }
-        });
-    }
-    
-    // Top rules chart
-    if (typeof topRulesData !== 'undefined') {
-        new Chart(document.getElementById('top-rules-chart'), {
-            type: 'bar',
-            data: {
-                labels: topRulesData.labels,
-                datasets: [{
-                    label: 'Issues',
-                    data: topRulesData.data,
-                    backgroundColor: '#8b5cf6'
-                }]
-            },
-            options: {
-                responsive: true,
-                indexAxis: 'y',
-                plugins: { legend: { display: false } }
+            updateSectionBadges(section, visibleIssues);
+        }
+        
+        // Hide rule-file sections
+        var ruleFileSections = document.querySelectorAll('.rule-file-section');
+        for (var i = 0; i < ruleFileSections.length; i++) {
+            var section = ruleFileSections[i];
+            var visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+            if (visibleIssues.length === 0) {
+                section.classList.add('hidden-by-filter');
+            } else {
+                section.classList.remove('hidden-by-filter');
             }
-        });
+            updateSectionBadges(section, visibleIssues);
+        }
+        
+        // Hide rule sections
+        var ruleSections = document.querySelectorAll('.rule-section');
+        for (var i = 0; i < ruleSections.length; i++) {
+            var section = ruleSections[i];
+            var visibleFileSections = section.querySelectorAll('.rule-file-section:not(.hidden-by-filter)');
+            var visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+            if (visibleFileSections.length === 0) {
+                section.classList.add('hidden-by-filter');
+            } else {
+                section.classList.remove('hidden-by-filter');
+            }
+            var countSpan = section.querySelector('.rule-count');
+            if (countSpan) {
+                countSpan.innerHTML = generateBadgesHtml(visibleIssues) + ' (' + visibleIssues.length + ' occurrence(s))';
+            }
+        }
+        
+        // Hide category sections
+        var categorySections = document.querySelectorAll('.category-section');
+        for (var i = 0; i < categorySections.length; i++) {
+            var section = categorySections[i];
+            var visibleRuleSections = section.querySelectorAll('.rule-section:not(.hidden-by-filter)');
+            var visibleIssues = section.querySelectorAll('.issue:not(.hidden-by-filter)');
+            if (visibleRuleSections.length === 0) {
+                section.classList.add('hidden-by-filter');
+            } else {
+                section.classList.remove('hidden-by-filter');
+            }
+            var badgesSpan = section.querySelector('.category-badges');
+            var countSpan = section.querySelector('.category-count');
+            if (badgesSpan) badgesSpan.innerHTML = generateBadgesHtml(visibleIssues);
+            if (countSpan) countSpan.textContent = '(' + visibleIssues.length + ' issue(s) in ' + visibleRuleSections.length + ' rule(s))';
+        }
+        
+        // Update summary stats
+        var visibleErrors = document.querySelectorAll('#files .issue.error:not(.hidden-by-filter)').length;
+        var visibleWarnings = document.querySelectorAll('#files .issue.warning:not(.hidden-by-filter)').length;
+        var visibleInfos = document.querySelectorAll('#files .issue.info:not(.hidden-by-filter)').length;
+        var totalVisible = visibleErrors + visibleWarnings + visibleInfos;
+        
+        var errorStat = document.querySelector('.stat.error .stat-value');
+        var warningStat = document.querySelector('.stat.warning .stat-value');
+        var infoStat = document.querySelector('.stat.info .stat-value');
+        
+        if (errorStat) errorStat.textContent = visibleErrors;
+        if (warningStat) warningStat.textContent = visibleWarnings;
+        if (infoStat) infoStat.textContent = visibleInfos;
+        
+        var statusBadge = document.querySelector('.status-badge');
+        if (statusBadge) {
+            if (totalVisible === 0) {
+                statusBadge.textContent = 'All Clear!';
+                statusBadge.className = 'status-badge success';
+            } else {
+                statusBadge.textContent = totalVisible + ' Issue(s) Found';
+                statusBadge.className = 'status-badge ' + (visibleErrors > 0 ? 'error' : 'warning');
+            }
+        }
+        
+        var summarySection = document.querySelector('.summary');
+        if (summarySection) {
+            summarySection.classList.remove('success', 'error', 'warning');
+            if (totalVisible === 0) summarySection.classList.add('success');
+            else if (visibleErrors > 0) summarySection.classList.add('error');
+            else summarySection.classList.add('warning');
+        }
+        
+        if (chartsInitialized) {
+            updateChartsWithFilter(visibleErrors, visibleWarnings, visibleInfos);
+        }
     }
     
-    // Category chart
-    if (typeof categoryData !== 'undefined') {
-        new Chart(document.getElementById('category-chart'), {
-            type: 'pie',
-            data: {
-                labels: categoryData.labels,
-                datasets: [{
-                    data: categoryData.data,
-                    backgroundColor: [
-                        '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', 
-                        '#ef4444', '#ec4899', '#6366f1', '#14b8a6'
+    function updateSectionBadges(section, visibleIssues) {
+        var badgesSpan = section.querySelector('.file-badges');
+        if (badgesSpan) {
+            badgesSpan.innerHTML = generateBadgesHtml(visibleIssues);
+        }
+    }
+    
+    function generateBadgesHtml(issues) {
+        var errors = 0, warnings = 0, infos = 0;
+        for (var i = 0; i < issues.length; i++) {
+            if (issues[i].classList.contains('error')) errors++;
+            else if (issues[i].classList.contains('warning')) warnings++;
+            else if (issues[i].classList.contains('info')) infos++;
+        }
+        var badges = '';
+        if (errors > 0) badges += '<span class="badge error">' + errors + ' E</span>';
+        if (warnings > 0) badges += '<span class="badge warning">' + warnings + ' W</span>';
+        if (infos > 0) badges += '<span class="badge info">' + infos + ' I</span>';
+        return badges;
+    }
+    
+    var filterBtns = document.querySelectorAll('.filter-btn');
+    for (var i = 0; i < filterBtns.length; i++) {
+        filterBtns[i].onclick = function() {
+            this.classList.toggle('active');
+            applySeverityFilters();
+        };
+    }
+    
+    // Apply filters on page load
+    applySeverityFilters();
+    
+    // ==================== Rule Documentation Modal ====================
+    var ruleDocsDataEl = document.getElementById('rule-docs-data');
+    var ruleDocsData = ruleDocsDataEl ? JSON.parse(ruleDocsDataEl.textContent) : {};
+    
+    var helpLinks = document.querySelectorAll('.rule-help-link');
+    for (var i = 0; i < helpLinks.length; i++) {
+        helpLinks[i].onclick = function(e) {
+            e.preventDefault();
+            var ruleId = this.getAttribute('data-rule-id');
+            showRuleDocsModal(ruleId);
+        };
+    }
+    
+    window.showRuleDocsModal = function(ruleId) {
+        var modal = document.getElementById('rule-docs-modal');
+        var title = document.getElementById('rule-docs-title');
+        var body = document.getElementById('rule-docs-body');
+        title.textContent = ruleId;
+        var content = ruleDocsData[ruleId] || 'No documentation available.';
+        body.innerHTML = simpleMarkdown(content);
+        modal.classList.add('show');
+    };
+    
+    window.closeRuleDocsModal = function() {
+        document.getElementById('rule-docs-modal').classList.remove('show');
+    };
+    
+    var modal = document.getElementById('rule-docs-modal');
+    if (modal) {
+        modal.onclick = function(e) {
+            if (e.target.id === 'rule-docs-modal') closeRuleDocsModal();
+        };
+    }
+    
+    function simpleMarkdown(text) {
+        return text
+            .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+            .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+            .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+            .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+            .replace(/\\*(.*?)\\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/```([\\s\\S]*?)```/g, '<pre>$1</pre>')
+            .replace(/\\n/g, '<br>');
+    }
+    
+    // ==================== Charts (matching original html.py) ====================
+    var chartsInitialized = false;
+    window.linterCharts = window.linterCharts || {};
+    
+    var colors = {
+        error: '#dc3545',
+        warning: '#ffc107',
+        info: '#17a2b8',
+        primary: '#8b5cf6',
+        secondary: '#a855f7',
+        success: '#28a745'
+    };
+    
+    function initializeCharts() {
+        if (chartsInitialized) return;
+        if (typeof Chart === 'undefined') return;
+        
+        var dataElement = document.getElementById('chart-data');
+        if (!dataElement) return;
+        
+        var data = JSON.parse(dataElement.textContent);
+        chartsInitialized = true;
+        
+        // Severity Pie Chart
+        var severityPieCtx = document.getElementById('severityPieChart');
+        if (severityPieCtx) {
+            window.linterCharts.severityPie = new Chart(severityPieCtx, {
+                type: 'pie',
+                data: {
+                    labels: data.severity.labels,
+                    datasets: [{
+                        data: data.severity.values,
+                        backgroundColor: data.severity.colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { padding: 15, usePointStyle: true }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    var total = context.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                                    var percentage = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': ' + context.raw + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Severity Doughnut Chart
+        var doughnutCtx = document.getElementById('severityDoughnutChart');
+        if (doughnutCtx) {
+            window.linterCharts.severityDoughnut = new Chart(doughnutCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.severity.labels,
+                    datasets: [{
+                        data: data.severity.values,
+                        backgroundColor: data.severity.colors,
+                        borderWidth: 3,
+                        borderColor: '#fff',
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { padding: 15, usePointStyle: true }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Category Stacked Bar Chart
+        var categoryCtx = document.getElementById('categoryBarChart');
+        if (categoryCtx && data.categoryLabels.length > 0) {
+            window.linterCharts.categoryBar = new Chart(categoryCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.categoryLabels,
+                    datasets: [
+                        {
+                            label: 'Errors',
+                            data: data.categoryErrors,
+                            backgroundColor: colors.error,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Warnings',
+                            data: data.categoryWarnings,
+                            backgroundColor: colors.warning,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Info',
+                            data: data.categoryInfos,
+                            backgroundColor: colors.info,
+                            borderRadius: 4
+                        }
                     ]
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: { legend: { position: 'bottom' } }
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true }
+                    },
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+        
+        // Top Rules Horizontal Stacked Bar Chart
+        var topRulesCtx = document.getElementById('topRulesChart');
+        if (topRulesCtx && data.topRuleLabels.length > 0) {
+            window.linterCharts.topRules = new Chart(topRulesCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.topRuleLabels,
+                    datasets: [
+                        {
+                            label: 'Errors',
+                            data: data.topRuleErrors || [],
+                            backgroundColor: colors.error,
+                            borderRadius: 0
+                        },
+                        {
+                            label: 'Warnings',
+                            data: data.topRuleWarnings || [],
+                            backgroundColor: colors.warning,
+                            borderRadius: 0
+                        },
+                        {
+                            label: 'Info',
+                            data: data.topRuleInfos || [],
+                            backgroundColor: colors.info,
+                            borderRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' } },
+                        y: { stacked: true, grid: { display: false }, ticks: { font: { family: 'monospace', size: 10 } } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    var idx = context[0].dataIndex;
+                                    return data.topRuleLabels[idx];
+                                },
+                                afterTitle: function(context) {
+                                    var idx = context[0].dataIndex;
+                                    var errors = data.topRuleErrors ? data.topRuleErrors[idx] : 0;
+                                    var warnings = data.topRuleWarnings ? data.topRuleWarnings[idx] : 0;
+                                    var infos = data.topRuleInfos ? data.topRuleInfos[idx] : 0;
+                                    return 'Total: ' + (errors + warnings + infos) + ' issues';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Top Files Stacked Bar Chart
+        var topFilesCtx = document.getElementById('topFilesChart');
+        if (topFilesCtx && data.topFileLabels.length > 0) {
+            window.linterCharts.topFiles = new Chart(topFilesCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.topFileLabels,
+                    datasets: [
+                        {
+                            label: 'Errors',
+                            data: data.topFileErrors || [],
+                            backgroundColor: colors.error,
+                            borderRadius: 0
+                        },
+                        {
+                            label: 'Warnings',
+                            data: data.topFileWarnings || [],
+                            backgroundColor: colors.warning,
+                            borderRadius: 0
+                        },
+                        {
+                            label: 'Info',
+                            data: data.topFileInfos || [],
+                            backgroundColor: colors.info,
+                            borderRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { stacked: true, beginAtZero: true },
+                        x: {
+                            stacked: true,
+                            ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                afterTitle: function(context) {
+                                    var idx = context[0].dataIndex;
+                                    var errors = data.topFileErrors ? data.topFileErrors[idx] : 0;
+                                    var warnings = data.topFileWarnings ? data.topFileWarnings[idx] : 0;
+                                    var infos = data.topFileInfos ? data.topFileInfos[idx] : 0;
+                                    return 'Total: ' + (errors + warnings + infos) + ' issues';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Health Gauge Chart
+        var healthCtx = document.getElementById('healthGauge');
+        if (healthCtx) {
+            var errorWeight = 10;
+            var warningWeight = 3;
+            var infoWeight = 1;
+            
+            var infos = data.infos || (data.totalIssues - data.errors - data.warnings);
+            var weightedScore = (data.errors * errorWeight) + (data.warnings * warningWeight) + (infos * infoWeight);
+            
+            var maxExpectedScore = data.filesScanned * 50;
+            var healthScore = Math.max(0, 100 - (weightedScore / Math.max(maxExpectedScore, 1)) * 100);
+            healthScore = Math.min(100, Math.round(healthScore));
+            
+            var healthValueEl = document.getElementById('healthValue');
+            if (healthValueEl) {
+                healthValueEl.textContent = healthScore;
+                if (healthScore >= 80) healthValueEl.style.color = '#28a745';
+                else if (healthScore >= 50) healthValueEl.style.color = '#ffc107';
+                else healthValueEl.style.color = '#dc3545';
             }
-        });
+            
+            window.linterCharts.healthGauge = new Chart(healthCtx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [healthScore, 100 - healthScore],
+                        backgroundColor: [
+                            healthScore >= 80 ? '#28a745' : healthScore >= 50 ? '#ffc107' : '#dc3545',
+                            '#e9ecef'
+                        ],
+                        borderWidth: 0,
+                        circumference: 180,
+                        rotation: 270
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
+                    }
+                }
+            });
+        }
     }
     
-    // Top files chart
-    if (typeof topFilesData !== 'undefined') {
-        new Chart(document.getElementById('top-files-chart'), {
-            type: 'bar',
-            data: {
-                labels: topFilesData.labels,
-                datasets: [{
-                    label: 'Issues',
-                    data: topFilesData.data,
-                    backgroundColor: '#3b82f6'
-                }]
-            },
-            options: {
-                responsive: true,
-                indexAxis: 'y',
-                plugins: { legend: { display: false } }
+    function updateChartsWithFilter(errors, warnings, infos) {
+        var charts = window.linterCharts;
+        if (!charts) return;
+        
+        var dataElement = document.getElementById('chart-data');
+        var originalData = dataElement ? JSON.parse(dataElement.textContent) : null;
+        var totalIssues = errors + warnings + infos;
+        
+        // Update pie chart
+        if (charts.severityPie) {
+            charts.severityPie.data.datasets[0].data = [errors, warnings, infos];
+            charts.severityPie.update('none');
+        }
+        
+        // Update doughnut chart
+        if (charts.severityDoughnut) {
+            charts.severityDoughnut.data.datasets[0].data = [errors, warnings, infos];
+            charts.severityDoughnut.update('none');
+        }
+        
+        // Recalculate category data from visible issues
+        var categoryData = {};
+        var visibleCategorySections = document.querySelectorAll('.category-section:not(.hidden-by-filter)');
+        for (var i = 0; i < visibleCategorySections.length; i++) {
+            var cat = visibleCategorySections[i];
+            var catName = cat.querySelector('.category-name');
+            if (catName) {
+                var name = catName.textContent.replace(/^[📁\\s]+/, '').trim();
+                var catIssues = cat.querySelectorAll('.issue:not(.hidden-by-filter)');
+                var catErrors = 0, catWarnings = 0, catInfos = 0;
+                for (var j = 0; j < catIssues.length; j++) {
+                    if (catIssues[j].classList.contains('error')) catErrors++;
+                    else if (catIssues[j].classList.contains('warning')) catWarnings++;
+                    else if (catIssues[j].classList.contains('info')) catInfos++;
+                }
+                if (catErrors + catWarnings + catInfos > 0) {
+                    categoryData[name] = { errors: catErrors, warnings: catWarnings, infos: catInfos };
+                }
             }
-        });
+        }
+        
+        // Update category bar chart
+        if (charts.categoryBar) {
+            var catLabels = Object.keys(categoryData);
+            var catErrors = [], catWarnings = [], catInfos = [];
+            for (var i = 0; i < catLabels.length; i++) {
+                catErrors.push(categoryData[catLabels[i]].errors);
+                catWarnings.push(categoryData[catLabels[i]].warnings);
+                catInfos.push(categoryData[catLabels[i]].infos);
+            }
+            charts.categoryBar.data.labels = catLabels;
+            charts.categoryBar.data.datasets[0].data = catErrors;
+            charts.categoryBar.data.datasets[1].data = catWarnings;
+            charts.categoryBar.data.datasets[2].data = catInfos;
+            charts.categoryBar.update('none');
+        }
+        
+        // Recalculate top rules data from visible issues
+        var ruleData = {};
+        var visibleRuleSections = document.querySelectorAll('.rule-section:not(.hidden-by-filter)');
+        for (var i = 0; i < visibleRuleSections.length; i++) {
+            var rule = visibleRuleSections[i];
+            var ruleIdEl = rule.querySelector('.rule-id');
+            if (ruleIdEl) {
+                var ruleId = ruleIdEl.textContent.trim();
+                var ruleIssues = rule.querySelectorAll('.issue:not(.hidden-by-filter)');
+                var ruleErrors = 0, ruleWarnings = 0, ruleInfos = 0;
+                for (var j = 0; j < ruleIssues.length; j++) {
+                    if (ruleIssues[j].classList.contains('error')) ruleErrors++;
+                    else if (ruleIssues[j].classList.contains('warning')) ruleWarnings++;
+                    else if (ruleIssues[j].classList.contains('info')) ruleInfos++;
+                }
+                var ruleTotal = ruleErrors + ruleWarnings + ruleInfos;
+                if (ruleTotal > 0) {
+                    ruleData[ruleId] = { total: ruleTotal, errors: ruleErrors, warnings: ruleWarnings, infos: ruleInfos };
+                }
+            }
+        }
+        
+        // Sort by total and take top 15
+        var sortedRules = Object.keys(ruleData).sort(function(a, b) {
+            return ruleData[b].total - ruleData[a].total;
+        }).slice(0, 15);
+        
+        // Update top rules chart
+        if (charts.topRules) {
+            var ruleLabels = sortedRules;
+            var ruleErrors = [], ruleWarnings = [], ruleInfos = [];
+            for (var i = 0; i < sortedRules.length; i++) {
+                ruleErrors.push(ruleData[sortedRules[i]].errors);
+                ruleWarnings.push(ruleData[sortedRules[i]].warnings);
+                ruleInfos.push(ruleData[sortedRules[i]].infos);
+            }
+            charts.topRules.data.labels = ruleLabels;
+            charts.topRules.data.datasets[0].data = ruleErrors;
+            charts.topRules.data.datasets[1].data = ruleWarnings;
+            charts.topRules.data.datasets[2].data = ruleInfos;
+            charts.topRules.update('none');
+        }
+        
+        // Recalculate top files data from visible issues
+        var fileData = {};
+        var visibleFileSections = document.querySelectorAll('#files .file-section:not(.hidden-by-filter)');
+        for (var i = 0; i < visibleFileSections.length; i++) {
+            var fileSec = visibleFileSections[i];
+            var filePathEl = fileSec.querySelector('.file-path');
+            if (filePathEl) {
+                var fullPath = filePathEl.textContent.trim();
+                var fileName = fullPath.split('/').pop();
+                var fileIssues = fileSec.querySelectorAll('.issue:not(.hidden-by-filter)');
+                var fileErrors = 0, fileWarnings = 0, fileInfos = 0;
+                for (var j = 0; j < fileIssues.length; j++) {
+                    if (fileIssues[j].classList.contains('error')) fileErrors++;
+                    else if (fileIssues[j].classList.contains('warning')) fileWarnings++;
+                    else if (fileIssues[j].classList.contains('info')) fileInfos++;
+                }
+                var fileTotal = fileErrors + fileWarnings + fileInfos;
+                if (fileTotal > 0) {
+                    fileData[fileName] = { total: fileTotal, errors: fileErrors, warnings: fileWarnings, infos: fileInfos };
+                }
+            }
+        }
+        
+        // Sort by total and take top 10
+        var sortedFiles = Object.keys(fileData).sort(function(a, b) {
+            return fileData[b].total - fileData[a].total;
+        }).slice(0, 10);
+        
+        // Update top files chart
+        if (charts.topFiles) {
+            var fileLabels = sortedFiles;
+            var fileErrors = [], fileWarnings = [], fileInfos = [];
+            for (var i = 0; i < sortedFiles.length; i++) {
+                fileErrors.push(fileData[sortedFiles[i]].errors);
+                fileWarnings.push(fileData[sortedFiles[i]].warnings);
+                fileInfos.push(fileData[sortedFiles[i]].infos);
+            }
+            charts.topFiles.data.labels = fileLabels;
+            charts.topFiles.data.datasets[0].data = fileErrors;
+            charts.topFiles.data.datasets[1].data = fileWarnings;
+            charts.topFiles.data.datasets[2].data = fileInfos;
+            charts.topFiles.update('none');
+        }
+        
+        // Update health gauge
+        if (charts.healthGauge && originalData) {
+            var errorWeight = 10;
+            var warningWeight = 3;
+            var infoWeight = 1;
+            
+            var weightedScore = (errors * errorWeight) + (warnings * warningWeight) + (infos * infoWeight);
+            var maxExpectedScore = originalData.filesScanned * 50;
+            var healthScore = Math.max(0, 100 - (weightedScore / Math.max(maxExpectedScore, 1)) * 100);
+            healthScore = Math.min(100, Math.round(healthScore));
+            
+            charts.healthGauge.data.datasets[0].data = [healthScore, 100 - healthScore];
+            charts.healthGauge.data.datasets[0].backgroundColor[0] = 
+                healthScore >= 80 ? '#28a745' : healthScore >= 50 ? '#ffc107' : '#dc3545';
+            charts.healthGauge.update('none');
+            
+            var healthValueEl = document.getElementById('healthValue');
+            if (healthValueEl) {
+                healthValueEl.textContent = healthScore;
+                healthValueEl.style.color = healthScore >= 80 ? '#28a745' : healthScore >= 50 ? '#ffc107' : '#dc3545';
+            }
+        }
+        
+        // Update ALL quick stats
+        var filesWithIssues = Object.keys(fileData).length;
+        var rulesTriggered = Object.keys(ruleData).length;
+        var categoriesAffected = Object.keys(categoryData).length;
+        var avgIssuesPerFile = filesWithIssues > 0 ? (totalIssues / filesWithIssues).toFixed(1) : '0.0';
+        var errorRate = totalIssues > 0 ? ((errors / totalIssues) * 100).toFixed(1) : '0.0';
+        
+        var qsTotalIssues = document.getElementById('qs-total-issues');
+        if (qsTotalIssues) qsTotalIssues.textContent = totalIssues;
+        
+        var qsFilesWithIssues = document.getElementById('qs-files-with-issues');
+        if (qsFilesWithIssues) qsFilesWithIssues.textContent = filesWithIssues;
+        
+        var qsRulesTriggered = document.getElementById('qs-rules-triggered');
+        if (qsRulesTriggered) qsRulesTriggered.textContent = rulesTriggered;
+        
+        var qsCategoriesAffected = document.getElementById('qs-categories-affected');
+        if (qsCategoriesAffected) qsCategoriesAffected.textContent = categoriesAffected;
+        
+        var qsAvgIssuesFile = document.getElementById('qs-avg-issues-file');
+        if (qsAvgIssuesFile) qsAvgIssuesFile.textContent = avgIssuesPerFile;
+        
+        var qsErrorRate = document.getElementById('qs-error-rate');
+        if (qsErrorRate) qsErrorRate.textContent = errorRate + '%';
     }
-}
+    
+})();
 </script>"""
