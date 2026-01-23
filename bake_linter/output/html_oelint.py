@@ -40,7 +40,7 @@ class OelintHtmlFormatter:
         self,
         output: Optional[TextIO] = None,
         verbose: bool = False,
-        title: str = "oelint-adv Report",
+        title: str = "oelint-adv Report by Bake Linter",
     ):
         self.output = output
         self.verbose = verbose
@@ -123,7 +123,7 @@ class OelintHtmlFormatter:
                     <span class="link-separator">•</span>
                     <a href="https://www.linkedin.com/in/c99-eduardo/" target="_blank" class="contact-link linkedin-link">💼 LinkedIn</a>
                 </p>
-                <p class="tool-info">Results from <a href="https://github.com/priv-kweihmann/oelint-adv" target="_blank">oelint-adv</a> - Advanced OELint for Yocto/OpenEmbedded</p>
+                <!-- <p class="tool-info">Results from <a href="https://github.com/priv-kweihmann/oelint-adv" target="_blank">oelint-adv</a> - Advanced OELint for Yocto/OpenEmbedded</p> -->
                 <!-- END: DO NOT REMOVE OR MODIFY THIS COPYRIGHT NOTICE -->
             </div>
         </header>
@@ -647,67 +647,125 @@ header h1 {
     margin: 5px 0;
 }
 
+/* Author/Copyright Section - Fancy animated gradient box */
 .copyright-section {
-    margin-top: 15px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255,255,255,0.2);
+    margin-top: 20px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 
+        0 8px 32px rgba(139, 92, 246, 0.4),
+        0 0 0 1px rgba(139, 92, 246, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    border: 3px solid;
+    border-image: linear-gradient(135deg, #8b5cf6, #06b6d4, #8b5cf6) 1;
+    animation: borderGlow 3s ease-in-out infinite;
+}
+
+.copyright-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    animation: rotate 10s linear infinite;
+    pointer-events: none;
+}
+
+.copyright-section > * {
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes borderGlow {
+    0%, 100% { 
+        box-shadow: 
+            0 8px 32px rgba(139, 92, 246, 0.4),
+            0 0 0 1px rgba(139, 92, 246, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    50% { 
+        box-shadow: 
+            0 8px 48px rgba(139, 92, 246, 0.6),
+            0 0 0 1px rgba(139, 92, 246, 0.5),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .copyright-main {
-    opacity: 0.95;
-    font-size: 0.95em;
-    margin: 0 0 8px 0;
+    font-size: 1.1em;
+    margin: 0 0 12px 0;
+    color: #f1f5f9;
 }
 
 .copyright-main a {
-    color: white;
+    color: #a855f7;
     text-decoration: none;
-    font-weight: 500;
+    font-weight: 600;
+    transition: color 0.2s, text-shadow 0.2s;
 }
 
 .copyright-main a:hover {
-    text-decoration: underline;
+    color: #c084fc;
+    text-shadow: 0 0 8px rgba(168, 85, 247, 0.5);
 }
 
 .author-link {
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
 
 .cv-link {
-    opacity: 0.9;
-    margin-left: 5px;
+    margin-left: 8px;
+    font-size: 0.95em;
 }
 
 .copyright-links {
-    opacity: 0.9;
-    font-size: 0.85em;
+    font-size: 0.9em;
     margin: 0;
     display: flex;
     justify-content: center;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
+    color: #94a3b8;
 }
 
 .contact-link {
-    color: white;
+    color: #94a3b8;
     text-decoration: none;
-    padding: 3px 8px;
-    border-radius: 4px;
-    transition: background-color 0.2s, transform 0.2s;
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .contact-link:hover {
-    background-color: rgba(255,255,255,0.15);
-    transform: translateY(-1px);
+    color: #f1f5f9;
+    background: rgba(139, 92, 246, 0.2);
+    border-color: rgba(139, 92, 246, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .linkedin-link:hover {
-    background-color: rgba(10, 102, 194, 0.4);
+    background: rgba(10, 102, 194, 0.3);
+    border-color: rgba(10, 102, 194, 0.5);
+    box-shadow: 0 4px 12px rgba(10, 102, 194, 0.3);
 }
 
 .link-separator {
-    opacity: 0.5;
+    color: #475569;
 }
 
 .tool-info {
