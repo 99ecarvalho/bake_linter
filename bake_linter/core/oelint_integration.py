@@ -186,6 +186,12 @@ class OelintAdvIntegration:
         """
         Check if oelint-adv is available.
         
+        Detection order:
+        1. Check if oelint-adv is already installed in current Python environment
+           (e.g., via pip install -e vendor/oelint-adv)
+        2. Check for vendored venv at vendor/oelint-adv/.venv/bin/python
+        3. Try importing from vendor path using PYTHONPATH
+        
         Returns:
             True if oelint-adv is found and can be executed.
         """
@@ -194,24 +200,41 @@ class OelintAdvIntegration:
 
         self._available = False
         
+        # First, check if oelint-adv is already installed in current Python
+        # (e.g., CI might do: pip install -e vendor/oelint-adv)
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__version__)"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                self._oelint_path = self.vendor_path if self.vendor_path.is_dir() else None
+                self._available = True
+                self._version = result.stdout.strip()
+                return self._available
+        except subprocess.TimeoutExpired:
+            pass
+        
         # Check if vendor path exists
         if not self.vendor_path.is_dir():
             return False
         
-        # Check for oelint_adv module
+        # Check for oelint_adv module in vendor
         oelint_module = self.vendor_path / "oelint_adv"
         if not oelint_module.is_dir():
             return False
         
-        # Check for venv Python
+        # Check for venv Python in vendor directory
         venv_python = self.vendor_path / ".venv" / "bin" / "python"
         if venv_python.is_file():
             self._venv_python = venv_python
             self._oelint_path = self.vendor_path
             self._available = True
         else:
-            # Try system Python with the module path
-            # Check if we can import oelint_adv
+            # Try current Python with the vendor module path added to PYTHONPATH
+            # Note: This only works if oelint-adv's dependencies are installed
             try:
                 result = subprocess.run(
                     [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__version__)"],
@@ -252,6 +275,11 @@ class OelintAdvIntegration:
         """
         Run oelint-adv command with the appropriate Python interpreter.
         
+        Priority:
+        1. Use vendored venv Python if available
+        2. Use current Python (sys.executable) - works if oelint-adv is installed
+           in current environment or can be found via PYTHONPATH
+        
         Args:
             args: Command line arguments for oelint-adv
             **kwargs: Additional arguments for subprocess.run
@@ -260,14 +288,21 @@ class OelintAdvIntegration:
             CompletedProcess result
         """
         if self._venv_python:
+            # Use the vendored venv's Python
             cmd = [str(self._venv_python), "-m", "oelint_adv"] + args
         else:
+            # Use current Python - oelint-adv should be installed or findable
             cmd = [sys.executable, "-m", "oelint_adv"] + args
-            kwargs.setdefault("env", {**os.environ, "PYTHONPATH": str(self.vendor_path)})
+            # Add vendor path to PYTHONPATH as fallback for finding the module
+            if self._oelint_path:
+                current_pythonpath = os.environ.get("PYTHONPATH", "")
+                new_pythonpath = f"{self._oelint_path}:{current_pythonpath}" if current_pythonpath else str(self._oelint_path)
+                kwargs.setdefault("env", {**os.environ, "PYTHONPATH": new_pythonpath})
         
         kwargs.setdefault("capture_output", True)
         kwargs.setdefault("text", True)
-        kwargs.setdefault("cwd", str(self.vendor_path))
+        if self._oelint_path:
+            kwargs.setdefault("cwd", str(self._oelint_path))
         
         return subprocess.run(cmd, **kwargs)
 
