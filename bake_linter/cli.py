@@ -281,7 +281,7 @@ def get_formatter(format_name: str, color: bool, verbose: bool, output: TextIO):
     return formatters[format_name]()
 
 
-def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False):
+def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False, debug: bool = False):
     """
     Run oelint-adv if available.
     
@@ -289,29 +289,41 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
         paths: Paths to lint
         exclude_patterns: Patterns to exclude
         quiet: Whether to suppress status messages
+        debug: Whether to enable debug output
         
     Returns:
         Tuple of (results, summary) or (None, None) if not available
     """
+    import os
+    
+    # Enable debug mode via environment variable if requested
+    if debug:
+        os.environ["BAKE_LINTER_DEBUG"] = "1"
+    
     from bake_linter.core.oelint_integration import get_oelint_integration
     
     integration = get_oelint_integration()
     
     if not integration.is_available():
+        if not quiet:
+            print("oelint-adv is not available, skipping...", file=sys.stderr)
         return None, None
     
     if not quiet:
         version = integration.get_version() or "unknown"
         print(f"Running oelint-adv ({version})...", file=sys.stderr)
     
-    results, summary, _stdout, _stderr = integration.run(
+    results, summary, _stdout, stderr = integration.run(
         paths=paths,
         exclude_patterns=exclude_patterns,
         mode="all",  # Use 'all' mode for comprehensive checking
     )
     
-    if not quiet and summary:
-        print(f"oelint-adv found {summary.total_issues} issue(s)", file=sys.stderr)
+    if not quiet:
+        if summary:
+            print(f"oelint-adv found {summary.total_issues} issue(s)", file=sys.stderr)
+        if stderr and not results and "not available" not in stderr.lower():
+            print(f"oelint-adv stderr: {stderr[:200]}", file=sys.stderr)
     
     return results, summary
 
@@ -400,10 +412,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     summary = engine.get_summary()
     
     # Run oelint-adv if available
+    # Enable debug mode in CI to help diagnose issues
     oelint_results, oelint_summary = run_oelint_adv(
         paths=args.paths,
         exclude_patterns=exclude_patterns if exclude_patterns else None,
         quiet=config.quiet,
+        debug=args.ci,  # Enable debug output in CI mode
     )
     
     # Output to stdout using the primary format

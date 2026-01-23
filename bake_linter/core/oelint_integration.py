@@ -199,40 +199,71 @@ class OelintAdvIntegration:
             return self._available
 
         self._available = False
+        debug = os.environ.get("BAKE_LINTER_DEBUG", "").lower() in ("1", "true", "yes")
+        
+        if debug:
+            print(f"[oelint-adv] Detection starting...", file=sys.stderr)
+            print(f"[oelint-adv] sys.executable: {sys.executable}", file=sys.stderr)
+            print(f"[oelint-adv] vendor_path: {self.vendor_path}", file=sys.stderr)
         
         # First, check if oelint-adv is already installed in current Python
         # (e.g., CI might do: pip install -e vendor/oelint-adv)
         try:
+            if debug:
+                print(f"[oelint-adv] Checking if installed in current Python...", file=sys.stderr)
             result = subprocess.run(
                 [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__version__)"],
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
+            if debug:
+                print(f"[oelint-adv] Import check returncode: {result.returncode}", file=sys.stderr)
+                if result.stdout:
+                    print(f"[oelint-adv] Import check stdout: {result.stdout.strip()}", file=sys.stderr)
+                if result.stderr:
+                    print(f"[oelint-adv] Import check stderr: {result.stderr.strip()}", file=sys.stderr)
             if result.returncode == 0:
                 self._oelint_path = self.vendor_path if self.vendor_path.is_dir() else None
                 self._available = True
                 self._version = result.stdout.strip()
+                if debug:
+                    print(f"[oelint-adv] ✓ Found installed in current Python: {self._version}", file=sys.stderr)
                 return self._available
         except subprocess.TimeoutExpired:
-            pass
+            if debug:
+                print(f"[oelint-adv] Import check timed out", file=sys.stderr)
+        except Exception as e:
+            if debug:
+                print(f"[oelint-adv] Import check failed: {e}", file=sys.stderr)
         
         # Check if vendor path exists
         if not self.vendor_path.is_dir():
+            if debug:
+                print(f"[oelint-adv] ✗ Vendor path does not exist: {self.vendor_path}", file=sys.stderr)
             return False
         
         # Check for oelint_adv module in vendor
         oelint_module = self.vendor_path / "oelint_adv"
         if not oelint_module.is_dir():
+            if debug:
+                print(f"[oelint-adv] ✗ oelint_adv module not found in vendor: {oelint_module}", file=sys.stderr)
             return False
+        
+        if debug:
+            print(f"[oelint-adv] Found oelint_adv module in vendor: {oelint_module}", file=sys.stderr)
         
         # Check for venv Python in vendor directory
         venv_python = self.vendor_path / ".venv" / "bin" / "python"
         if venv_python.is_file():
+            if debug:
+                print(f"[oelint-adv] ✓ Found vendored venv Python: {venv_python}", file=sys.stderr)
             self._venv_python = venv_python
             self._oelint_path = self.vendor_path
             self._available = True
         else:
+            if debug:
+                print(f"[oelint-adv] Vendored venv not found, trying PYTHONPATH fallback...", file=sys.stderr)
             # Try current Python with the vendor module path added to PYTHONPATH
             # Note: This only works if oelint-adv's dependencies are installed
             try:
@@ -244,12 +275,22 @@ class OelintAdvIntegration:
                     timeout=10,
                     env={**os.environ, "PYTHONPATH": str(self.vendor_path)},
                 )
+                if debug:
+                    print(f"[oelint-adv] PYTHONPATH fallback returncode: {result.returncode}", file=sys.stderr)
+                    if result.stderr:
+                        print(f"[oelint-adv] PYTHONPATH fallback stderr: {result.stderr.strip()}", file=sys.stderr)
                 if result.returncode == 0:
                     self._oelint_path = self.vendor_path
                     self._available = True
                     self._version = result.stdout.strip()
+                    if debug:
+                        print(f"[oelint-adv] ✓ Found via PYTHONPATH: {self._version}", file=sys.stderr)
             except subprocess.TimeoutExpired:
-                pass
+                if debug:
+                    print(f"[oelint-adv] PYTHONPATH fallback timed out", file=sys.stderr)
+        
+        if debug:
+            print(f"[oelint-adv] Detection result: available={self._available}", file=sys.stderr)
         
         return self._available
 
@@ -378,14 +419,33 @@ class OelintAdvIntegration:
         
         args.extend(file_list)
         
+        debug = os.environ.get("BAKE_LINTER_DEBUG", "").lower() in ("1", "true", "yes")
+        
+        if debug:
+            print(f"[oelint-adv] Running with {len(file_list)} files...", file=sys.stderr)
+            print(f"[oelint-adv] Command args (excluding files): {args[:args.index(file_list[0]) if file_list else len(args)]}", file=sys.stderr)
+            print(f"[oelint-adv] Using venv_python: {self._venv_python}", file=sys.stderr)
+            print(f"[oelint-adv] Using oelint_path: {self._oelint_path}", file=sys.stderr)
+        
         # Run the command
         try:
             result = self._run_command(args, timeout=600)  # 10 minute timeout
             stdout = result.stdout
             stderr = result.stderr
+            if debug:
+                print(f"[oelint-adv] Command returncode: {result.returncode}", file=sys.stderr)
+                print(f"[oelint-adv] stdout length: {len(stdout)} chars", file=sys.stderr)
+                print(f"[oelint-adv] stderr length: {len(stderr)} chars", file=sys.stderr)
+                if stderr:
+                    # Show first 500 chars of stderr for debugging
+                    print(f"[oelint-adv] stderr preview: {stderr[:500]}...", file=sys.stderr)
         except subprocess.TimeoutExpired:
+            if debug:
+                print(f"[oelint-adv] ✗ Command timed out after 10 minutes", file=sys.stderr)
             return [], OelintSummary(), "", "oelint-adv timed out after 10 minutes"
         except Exception as e:
+            if debug:
+                print(f"[oelint-adv] ✗ Command failed: {e}", file=sys.stderr)
             return [], OelintSummary(), "", f"Error running oelint-adv: {e}"
         
         # Parse results from stderr (oelint-adv outputs findings to stderr by default)
