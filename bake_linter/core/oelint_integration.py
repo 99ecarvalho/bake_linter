@@ -211,8 +211,9 @@ class OelintAdvIntegration:
         try:
             if debug:
                 print(f"[oelint-adv] Checking if installed in current Python...", file=sys.stderr)
+            # Check if oelint_adv can be imported - don't check __version__ as it may not exist
             result = subprocess.run(
-                [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__version__)"],
+                [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__file__)"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -226,9 +227,9 @@ class OelintAdvIntegration:
             if result.returncode == 0:
                 self._oelint_path = self.vendor_path if self.vendor_path.is_dir() else None
                 self._available = True
-                self._version = result.stdout.strip()
+                self._version = "installed"  # Version may not be available, just mark as installed
                 if debug:
-                    print(f"[oelint-adv] ✓ Found installed in current Python: {self._version}", file=sys.stderr)
+                    print(f"[oelint-adv] ✓ Found installed in current Python: {result.stdout.strip()}", file=sys.stderr)
                 return self._available
         except subprocess.TimeoutExpired:
             if debug:
@@ -268,7 +269,7 @@ class OelintAdvIntegration:
             # Note: This only works if oelint-adv's dependencies are installed
             try:
                 result = subprocess.run(
-                    [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__version__)"],
+                    [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__file__)"],
                     cwd=str(self.vendor_path),
                     capture_output=True,
                     text=True,
@@ -282,9 +283,9 @@ class OelintAdvIntegration:
                 if result.returncode == 0:
                     self._oelint_path = self.vendor_path
                     self._available = True
-                    self._version = result.stdout.strip()
+                    self._version = "installed"  # Version may not be available
                     if debug:
-                        print(f"[oelint-adv] ✓ Found via PYTHONPATH: {self._version}", file=sys.stderr)
+                        print(f"[oelint-adv] ✓ Found via PYTHONPATH: {result.stdout.strip()}", file=sys.stderr)
             except subprocess.TimeoutExpired:
                 if debug:
                     print(f"[oelint-adv] PYTHONPATH fallback timed out", file=sys.stderr)

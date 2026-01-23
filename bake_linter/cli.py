@@ -167,7 +167,7 @@ def create_parser() -> argparse.ArgumentParser:
     verbosity_mutex.add_argument(
         "--quiet", "-q",
         action="store_true",
-        help="Suppress non-error output",
+        help="Suppress rule findings output to stdout (config, output files, and summaries are still shown)",
     )
     
     # CI mode
@@ -305,13 +305,13 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
     integration = get_oelint_integration()
     
     if not integration.is_available():
-        if not quiet:
-            print("oelint-adv is not available, skipping...", file=sys.stderr)
+        # Always show oelint-adv availability status (quiet only suppresses findings)
+        print("oelint-adv is not available, skipping...", file=sys.stderr)
         return None, None
     
-    if not quiet:
-        version = integration.get_version() or "unknown"
-        print(f"Running oelint-adv ({version})...", file=sys.stderr)
+    # Always show oelint-adv status (quiet only suppresses findings)
+    version = integration.get_version() or "unknown"
+    print(f"Running oelint-adv ({version})...", file=sys.stderr)
     
     results, summary, _stdout, stderr = integration.run(
         paths=paths,
@@ -319,11 +319,11 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
         mode="all",  # Use 'all' mode for comprehensive checking
     )
     
-    if not quiet:
-        if summary:
-            print(f"oelint-adv found {summary.total_issues} issue(s)", file=sys.stderr)
-        if stderr and not results and "not available" not in stderr.lower():
-            print(f"oelint-adv stderr: {stderr[:200]}", file=sys.stderr)
+    # Always show oelint-adv summary (quiet only suppresses detailed findings)
+    if summary:
+        print(f"oelint-adv found {summary.total_issues} issue(s)", file=sys.stderr)
+    if stderr and not results and "not available" not in stderr.lower():
+        print(f"oelint-adv stderr: {stderr[:200]}", file=sys.stderr)
     
     return results, summary
 
@@ -349,12 +349,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Configuration error: {e}", file=sys.stderr)
         return ExitCode.RUNTIME_ERROR
     
-    # Report config file status (unless quiet mode)
-    if not args.quiet:
-        if config.config_file:
-            print(f"Using config: {config.config_file}")
-        else:
-            print("No config file found, using defaults.")
+    # Report config file status (quiet mode still shows this)
+    if config.config_file:
+        print(f"Using config: {config.config_file}")
+    else:
+        print("No config file found, using defaults.")
     
     # Merge CLI arguments
     config.merge_cli_args(
@@ -454,8 +453,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                         file_formatter.set_oelint_data(oelint_results, oelint_summary)
                     file_formatter.write(results, summary)
                 
-                if not config.quiet:
-                    print(f"\n{fmt.upper()} report written to: {filepath}", file=sys.stderr)
+                # Always show output file notifications (quiet only suppresses findings)
+                print(f"\n{fmt.upper()} report written to: {filepath}", file=sys.stderr)
                 
                 # For HTML output, also generate separate oelint-adv HTML file if results available
                 if fmt == "html" and oelint_results is not None and oelint_summary is not None:
@@ -471,8 +470,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                             )
                             oelint_formatter.write(oelint_results, oelint_summary)
                         
-                        if not config.quiet:
-                            print(f"oelint-adv HTML report written to: {oelint_filepath}", file=sys.stderr)
+                        # Always show oelint-adv file notification (quiet only suppresses findings)
+                        print(f"oelint-adv HTML report written to: {oelint_filepath}", file=sys.stderr)
                     except IOError as e:
                         print(f"Error writing oelint-adv HTML output to {oelint_filepath}: {e}", file=sys.stderr)
                         # Don't fail the whole run for this, just warn
