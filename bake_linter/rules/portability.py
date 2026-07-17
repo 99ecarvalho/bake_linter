@@ -64,7 +64,7 @@ class HardcodedCpuFlagsRule(BaseRule):
                     match = pattern.search(stripped)
                     if match:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Hardcoded CPU flag: {match.group()}",
                             context=stripped[:60],
@@ -173,7 +173,7 @@ class AbsoluteHostPathRule(BaseRule):
                         continue
                     
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Absolute host path may break cross-compilation",
                         context=stripped[:60],
@@ -230,7 +230,7 @@ class NonPortableSedRule(BaseRule):
                 for pattern, msg in self.GNU_SED_PATTERNS:
                     if pattern.search(stripped):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=msg,
                             context=stripped[:60],

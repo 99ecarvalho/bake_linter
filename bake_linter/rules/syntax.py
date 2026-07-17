@@ -66,7 +66,7 @@ class UnmatchedQuotesRule(BaseRule):
                         msg = f"Unmatched {quote_type} quote in variable assignment"
                         hint = f"Add missing closing {quote_type} quote"
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=msg,
                             context=stripped[:60],
@@ -123,7 +123,7 @@ class MissingLineContinuationRule(BaseRule):
                     # Line doesn't end with continuation or closing quote
                     # This might be an error
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Possible missing line continuation for '{var_name}'",
                         context=stripped[:60],
@@ -171,7 +171,7 @@ class TabsInPythonFunctionRule(BaseRule):
                 # Check for tabs
                 if '\t' in line and not stripped.startswith('#'):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Tab character in Python function (use spaces)",
                         context=stripped[:60],
@@ -236,7 +236,7 @@ class UnclosedVariableExpansionRule(BaseRule):
                 
                 if depth > 0:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Unclosed variable expansion ${...}",
                         context=stripped[:60],
@@ -350,7 +350,7 @@ class MixedOverrideSyntaxRule(BaseRule):
             # Report on the first old syntax line
             line_num, line_content = old_syntax_lines[0]
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=line_num,
                 message=f"Mixed override syntax: found {len(old_syntax_lines)} old (_) and {len(new_syntax_lines)} new (:) syntax uses",
                 context=line_content[:60],
@@ -427,7 +427,7 @@ class InvalidOverrideOrderingRule(BaseRule):
                         # Operation is not first - this is wrong order
                         operation = overrides[operation_index]
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Operation ':{operation}' should come BEFORE conditional overrides",
                             context=stripped[:60],

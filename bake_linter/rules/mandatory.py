@@ -43,13 +43,13 @@ class SummaryDescriptionRule(BaseRule):
         
         if not has_summary and not has_description:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Missing SUMMARY or DESCRIPTION variable",
             ))
         elif has_description and not has_summary:
             # Suggest using SUMMARY instead of DESCRIPTION
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Consider using SUMMARY instead of DESCRIPTION (SUMMARY is preferred)",
                 severity=Severity.INFO,
                 hint="SUMMARY is preferred over DESCRIPTION for brief recipe descriptions",
@@ -101,7 +101,7 @@ class SrcUriRule(BaseRule):
         
         if "SRC_URI" not in context.variables:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Missing SRC_URI variable",
                 hint="Add SRC_URI or confirm this recipe uses local/generated sources",
             ))
@@ -144,7 +144,7 @@ class HomepageRule(BaseRule):
         
         if "HOMEPAGE" not in context.variables:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Missing HOMEPAGE variable for open-source recipe",
             ))
         
@@ -183,7 +183,7 @@ class InheritCheck(BaseRule):
         if recipe_name.startswith("packagegroup-"):
             if "packagegroup" not in inherits:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     message="Recipe named 'packagegroup-*' should 'inherit packagegroup'",
                     hint="Add 'inherit packagegroup' to the recipe",
                 ))
@@ -192,7 +192,7 @@ class InheritCheck(BaseRule):
         if recipe_name.endswith("-image") or "-image-" in recipe_name:
             if "image" not in inherits and "core-image" not in inherits:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     message="Recipe named '*-image*' should inherit an image class",
                     hint="Add 'inherit core-image' or 'inherit image' to the recipe",
                 ))

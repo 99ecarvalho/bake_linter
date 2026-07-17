@@ -77,7 +77,7 @@ class PatchWithoutStriplevelRule(BaseRule):
                             
                             if not self.STRIPLEVEL_PATTERN.search(check_area):
                                 results.append(self.create_result(
-                                    file=context.path,
+                                    file=context,
                                     line=line_num,
                                     message="Patch without explicit striplevel",
                                     context=patch_uri[:50],
@@ -162,7 +162,7 @@ class SrcrevUnpinnedRule(BaseRule):
                 # Check if it's a dangerous value
                 if value in self.DANGEROUS_VALUES:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Unpinned SRCREV '{value}' causes non-reproducible builds",
                         context=stripped[:60],
@@ -173,7 +173,7 @@ class SrcrevUnpinnedRule(BaseRule):
                     # Could be a branch name
                     if not any(c in value for c in ['$', '{', '}']):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"SRCREV '{value}' appears to be a branch name, not a commit hash",
                             context=stripped[:60],

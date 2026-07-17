@@ -75,7 +75,7 @@ class MissingFilesextrapathsRule(BaseRule):
         
         if not has_filesextrapaths:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=file_uri_line,
                 message="SRC_URI adds files but FILESEXTRAPATHS is not set",
                 hint='Add: FILESEXTRAPATHS:prepend := "${THISDIR}/files:"',
@@ -137,7 +137,7 @@ class TaskOverrideWithoutSuffixRule(BaseRule):
                     # Check it's a common task
                     if task_name in self.COMMON_TASKS:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"'{task_name}()' completely overrides base recipe task",
                             context=stripped[:60],
@@ -177,7 +177,7 @@ class VersionSpecificBbappendRule(BaseRule):
         
         if self.VERSION_PATTERN.search(filename) and '%' not in filename:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message=f"Version-specific bbappend '{filename}' may break on version updates",
                 hint="Use recipe_%.bbappend unless version-specific changes are required",
@@ -219,7 +219,7 @@ class EmptyBbappendRule(BaseRule):
         
         if not has_content:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message="Empty .bbappend file (only comments or whitespace)",
                 hint="Remove unused .bbappend or add actual configuration",
@@ -273,7 +273,7 @@ class GlobalVariableInBbappendRule(BaseRule):
                 # Check for direct assignment or append
                 if re.match(rf'^{var}\s*[?+:]?=', stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Global variable '{var}' should not be set in .bbappend",
                         context=stripped[:60],

@@ -54,7 +54,7 @@ class PrintVsBbNoteRule(BaseRule):
             if '${@' in stripped:
                 if self.PRINT_PATTERN.search(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="print() in inline Python expression",
                         context=stripped[:60],
@@ -67,7 +67,7 @@ class PrintVsBbNoteRule(BaseRule):
             
             if in_python and self.PRINT_PATTERN.search(stripped):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="print() used instead of bb.note/bb.warn/bb.error",
                     context=stripped[:60],
@@ -135,7 +135,7 @@ class DirectVarAssignmentRule(BaseRule):
                         # Check if it's actually a d.setVar call (false positive)
                         if 'd.setVar' not in stripped:
                             results.append(self.create_result(
-                                file=context.path,
+                                file=context,
                                 line=line_num,
                                 message=f"Direct assignment to '{var}' in Python function",
                                 context=stripped[:60],
@@ -184,7 +184,7 @@ class AnonymousPythonIssuesRule(BaseRule):
                 # 1. Using raise without bb.fatal
                 if re.search(r'\braise\s+\w+', stripped) and 'bb.fatal' not in stripped:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="raise in anonymous Python - consider bb.fatal()",
                         context=stripped[:60],
@@ -194,7 +194,7 @@ class AnonymousPythonIssuesRule(BaseRule):
                 # 2. sys.exit() in anonymous Python
                 if 'sys.exit' in stripped:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="sys.exit() in anonymous Python function",
                         context=stripped[:60],

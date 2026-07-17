@@ -69,7 +69,7 @@ class GitRecipeWithoutSRCPVRule(BaseRule):
         # Flag if git recipe without SRCPV in PV
         if is_git_recipe and pv_line and not self.SRCPV_PATTERN.search(pv_value):
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=pv_line_num,
                 message="Git-based recipe without ${SRCPV} in PV",
                 context=pv_line[:60],
@@ -114,7 +114,7 @@ class UnconventionalSAssignmentRule(BaseRule):
             
             if self.S_WORKDIR_PATTERN.match(stripped):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Unconventional S = \"${WORKDIR}\" assignment",
                     context=stripped,
@@ -231,7 +231,7 @@ class UnusedVariableAssignmentRule(BaseRule):
         for var_name, line_num in assignments.items():
             if var_name not in references:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Variable '{var_name}' assigned but never referenced",
                     hint="Remove if unused or add ${" + var_name + "} reference",
@@ -287,7 +287,7 @@ class VariableRedefinitionRule(BaseRule):
                 first_line = assigns[0][0]
                 last_line = assigns[-1][0]
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=last_line,
                     message=f"Variable '{var_name}' redefined (first at line {first_line})",
                     hint="Use ?= for default, += to append, or remove duplicate",
@@ -338,7 +338,7 @@ class ExcessiveAppendPrependRule(BaseRule):
         for var_name, count in operations.items():
             if count > self.MAX_OPERATIONS:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=first_occurrence[var_name],
                     message=f"Variable '{var_name}' has {count} append/prepend operations",
                     hint="Consider simplifying with direct assignment",

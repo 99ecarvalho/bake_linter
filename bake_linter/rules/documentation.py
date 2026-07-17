@@ -60,7 +60,7 @@ class IdenticalSummaryDescriptionRule(BaseRule):
         if summary_value and description_value:
             if summary_value.strip() == description_value.strip():
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=description_line,
                     message="DESCRIPTION is identical to SUMMARY",
                     context=f"Both: \"{summary_value[:40]}...\"",
@@ -111,7 +111,7 @@ class MissingSummaryRule(BaseRule):
             
             if not inherits_classes:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=1,
                     message="Recipe missing SUMMARY",
                     hint="Add SUMMARY with brief package description",
@@ -156,7 +156,7 @@ class TruncatedDescriptionRule(BaseRule):
                         continue
                     
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"DESCRIPTION appears truncated ({len(desc)} chars)",
                         context=f'DESCRIPTION = "{desc}"',

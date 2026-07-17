@@ -72,7 +72,7 @@ class TaskFunctionOrderRule(BaseRule):
                 
                 if curr_idx > next_idx and curr_idx != -1 and next_idx != -1:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=next_line,
                         message=f"Task {next_task} defined after {curr_task} (non-standard order)",
                         hint=f"Convention: {next_task} should come before {curr_task}",
@@ -132,7 +132,7 @@ class PythonShellMixingRule(BaseRule):
             # Report on the later occurrence
             line_num = max(shell_tasks[task], python_tasks[task])
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=line_num,
                 message=f"Task '{task}' has both shell and Python definitions",
                 hint="Use consistent type: all shell or all Python",
@@ -191,7 +191,7 @@ class EmptyTaskOverrideRule(BaseRule):
                     # Task ended - check if empty
                     if not task_content:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=task_line,
                             message=f"Empty task override: {task_name}",
                             hint="Remove empty override or add implementation",

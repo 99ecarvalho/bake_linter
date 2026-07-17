@@ -55,7 +55,7 @@ class MissingBugtrackerRule(BaseRule):
         # Only flag if there's a HOMEPAGE but no BUGTRACKER
         if has_homepage and not has_bugtracker:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message="Recipe has HOMEPAGE but missing BUGTRACKER",
                 hint="Add BUGTRACKER = \"URL\" for upstream issue tracking",
@@ -98,7 +98,7 @@ class CompatibleMachineSyntaxRule(BaseRule):
                     # Simple machine name without anchors
                     if '|' not in regex_value and '*' not in regex_value and '.' not in regex_value:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message="COMPATIBLE_MACHINE without regex anchors may match unintended machines",
                             context=stripped[:60],
@@ -142,7 +142,7 @@ class MissingSectionRule(BaseRule):
         
         if not has_section:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message="Recipe missing SECTION classification",
                 hint="Add SECTION = \"category\" for package organization",

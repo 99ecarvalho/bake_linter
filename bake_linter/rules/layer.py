@@ -74,7 +74,7 @@ class LayerseriesCompatRule(BaseRule):
         # Check if LAYERSERIES_COMPAT is missing
         if layer_name and not layerseries_value:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message=f"Missing LAYERSERIES_COMPAT_{layer_name}",
                 hint=f'Add: LAYERSERIES_COMPAT_{layer_name} = "kirkstone langdale mickledore nanbield scarthgap"',
@@ -88,7 +88,7 @@ class LayerseriesCompatRule(BaseRule):
             
             if invalid_releases:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=layerseries_line,
                     message=f"Invalid Yocto release names: {', '.join(invalid_releases)}",
                     hint="Use valid release names: kirkstone, langdale, mickledore, etc.",
@@ -96,7 +96,7 @@ class LayerseriesCompatRule(BaseRule):
             
             if not releases:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=layerseries_line,
                     message="LAYERSERIES_COMPAT is empty",
                     hint="Add supported Yocto release names",

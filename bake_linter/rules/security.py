@@ -56,7 +56,7 @@ class InsecureUriRule(BaseRule):
             # Check for HTTP
             if self.HTTP_PATTERN.search(line):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Insecure HTTP URI detected; use HTTPS instead",
                     context=stripped[:80],
@@ -65,7 +65,7 @@ class InsecureUriRule(BaseRule):
             # Check for FTP
             elif self.FTP_PATTERN.search(line):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Insecure FTP URI detected; use HTTPS or FTPS instead",
                     context=stripped[:80],
@@ -74,7 +74,7 @@ class InsecureUriRule(BaseRule):
             # Check for git:// protocol
             elif self.GIT_PROTOCOL_PATTERN.search(line):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Insecure git:// protocol; use https:// for git repos",
                     context=stripped[:80],
@@ -132,7 +132,7 @@ class NoChecksumRule(BaseRule):
         
         if not has_checksum:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="SRC_URI has remote files but no checksums defined",
             ))
         
@@ -169,7 +169,7 @@ class InsecurePermissionsRule(BaseRule):
             for pattern, message in self.INSECURE_PATTERNS:
                 if pattern.search(line):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=message,
                         context=stripped[:60],
@@ -272,7 +272,7 @@ class HardcodedCredentialsRule(BaseRule):
             for pattern, message in self.CREDENTIAL_PATTERNS:
                 if pattern.search(line):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=message,
                         # Don't include the actual line content to avoid logging credentials
@@ -321,7 +321,7 @@ class DangerousRmRfRule(BaseRule):
             for pattern in self.DANGEROUS_PATTERNS:
                 if pattern.search(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Potentially dangerous rm -rf pattern",
                         context=stripped[:60],
@@ -375,7 +375,7 @@ class EvalUsageRule(BaseRule):
                 
                 if self.EVAL_PATTERN.match(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="eval usage can lead to code injection",
                         context=stripped[:60],
@@ -455,7 +455,7 @@ class BuildPathLeakageRule(BaseRule):
                     for pattern in self.BUILD_TIME_VARS:
                         if pattern.search(stripped):
                             results.append(self.create_result(
-                                file=context.path,
+                                file=context,
                                 line=line_num,
                                 message="Build path may leak into installed file",
                                 context=stripped[:60],
@@ -525,7 +525,7 @@ class SuidSgidBinaryRule(BaseRule):
                 
                 if is_suid_sgid:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="SUID/SGID binary detected - security review needed",
                         context=stripped[:60],

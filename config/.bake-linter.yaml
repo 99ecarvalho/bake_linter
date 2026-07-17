@@ -598,6 +598,12 @@ settings:
   # Maximum line length for STYLE002 rule
   max_line_length: 120
 
+  # Yocto release this project targets (the build configuration pins poky to
+  # this branch) -- passed through to oelint-adv's --release so its
+  # release-gated rules (e.g. oelint.vars.unpackdir, which needs styhead+)
+  # don't fire on variables/features that don't exist yet on this release.
+  oelint_release: scarthgap
+
   # Enable colored output (set to false for CI)
   color: true
 

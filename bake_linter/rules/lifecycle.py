@@ -39,6 +39,7 @@ class MissingUpstreamCheckRule(BaseRule):
         'UPSTREAM_CHECK_URI',
         'UPSTREAM_CHECK_REGEX',
         'UPSTREAM_CHECK_GITTAGREGEX',
+        'UPSTREAM_CHECK_COMMITS',
     ]
     
     # Skip recipes that typically don't need upstream checks
@@ -84,7 +85,7 @@ class MissingUpstreamCheckRule(BaseRule):
         # Only flag if recipe has SRC_URI but no upstream check
         if has_src_uri and not has_upstream_check:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message="Recipe lacks UPSTREAM_CHECK_* for version tracking",
                 hint='Add: UPSTREAM_CHECK_URI = "https://..." and UPSTREAM_CHECK_REGEX = "..."',

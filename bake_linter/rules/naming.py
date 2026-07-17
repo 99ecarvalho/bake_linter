@@ -116,7 +116,7 @@ class VariableNamingRule(BaseRule):
                     continue
                 
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Lowercase variable name '{var_name}' - BitBake variables should be UPPERCASE",
                     context=stripped[:60],
@@ -204,7 +204,7 @@ class RecipeNamingRule(BaseRule):
         
         if "__" in name_part or name_part != name_part.replace("_", "-"):
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message=f"Recipe name uses underscore; prefer hyphens (e.g., 'my-recipe' not 'my_recipe')",
                 hint="Rename recipe to use hyphens instead of underscores in the name portion",
                 severity=Severity.INFO,
@@ -215,7 +215,7 @@ class RecipeNamingRule(BaseRule):
             # Skip if version is optional for this recipe type
             if not self._is_version_optional(filename, context.content):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     message="Recipe filename missing version (expected: name_version.bb)",
                     hint="Rename recipe to include version, e.g., myrecipe_1.0.bb or myrecipe_git.bb",
                 ))
@@ -223,7 +223,7 @@ class RecipeNamingRule(BaseRule):
         # Check for uppercase in filename
         if filename != filename.lower():
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Recipe filename contains uppercase characters",
                 hint="Use lowercase for recipe filenames",
             ))
@@ -262,7 +262,7 @@ class InconsistentPNRule(BaseRule):
                 
                 if actual_pn and actual_pn != expected_pn:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=assignment.line,
                         message=f"PN ('{actual_pn}') differs from recipe filename ('{expected_pn}')",
                         hint="Either rename the recipe or remove explicit PN setting",

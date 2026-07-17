@@ -36,7 +36,7 @@ class TrailingWhitespaceRule(BaseRule):
         for line_num, line in enumerate(context.lines, start=1):
             if line.rstrip() != line.rstrip("\n\r"):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Line has trailing whitespace",
                 ))
@@ -67,7 +67,7 @@ class LongLineRule(BaseRule):
         for line_num, line in enumerate(context.lines, start=1):
             if len(line.rstrip()) > max_length:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Line exceeds {max_length} characters ({len(line.rstrip())} chars)",
                 ))
@@ -181,7 +181,7 @@ class HardcodedPathsRule(BaseRule):
                     # Generate helpful suggestion showing the replacement
                     matched_path = match.group(0)
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Hardcoded path '{matched_path}' should use {var_name}",
                         context=stripped[:60],
@@ -214,7 +214,7 @@ class TodoFixmeRule(BaseRule):
             if match:
                 marker = match.group(1).upper()
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"{marker} comment found",
                     context=line.strip()[:60],
@@ -246,7 +246,7 @@ class EmptyVariableRule(BaseRule):
                         continue
                     
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=assignment.line,
                         message=f"Empty assignment for '{var_name}'",
                         hint="Remove if intentionally empty, or add a comment explaining why",
@@ -278,7 +278,7 @@ class DuplicateInheritRule(BaseRule):
                 for cls in classes:
                     if cls in seen_classes:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Duplicate inherit of '{cls}' (first seen line {seen_classes[cls]})",
                             hint="Remove the duplicate inherit statement",
@@ -382,7 +382,7 @@ class PackageListFormatRule(BaseRule):
             after_quote = first_line[quote_pos + 1:].rstrip("\\").strip()
             if after_quote:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"First line of '{var_name}' should not contain packages",
                     context=first_line[:80],
@@ -405,7 +405,7 @@ class PackageListFormatRule(BaseRule):
                 before_quote = stripped.split('"')[0].rstrip("\\").strip()
                 if before_quote:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=current_line + 1,
                         message=f"Closing line of '{var_name}' should not contain packages",
                         context=stripped[:80],
@@ -431,7 +431,7 @@ class PackageListFormatRule(BaseRule):
                     if name != sorted_name:
                         pkg_name, pkg_line = packages[idx]
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=pkg_line,
                             message=f"Packages in '{var_name}' are not in alphabetical order",
                             context=f"'{pkg_name}' should come after previous packages alphabetically",
@@ -447,7 +447,7 @@ class PackageListFormatRule(BaseRule):
                 # Check if next line is non-empty (not blank)
                 if next_line.strip():
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=closing_line + 1,
                         message=f"Missing blank line after '{var_name}' closing quote",
                         hint="Add a blank line after the closing quote for readability",
@@ -489,7 +489,7 @@ class SystemdAutoEnableRule(BaseRule):
                 # Make sure it's not already using :${PN} or similar
                 if not re.match(r'^SYSTEMD_AUTO_ENABLE:[^\s=]+', stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="SYSTEMD_AUTO_ENABLE should have :${PN} suffix",
                         context=stripped[:60],
@@ -565,7 +565,7 @@ class InstallDirectoryTrailingSlashRule(BaseRule):
                     dir_var = match.group(1)
                     if dir_var in self.DIRECTORY_VARS:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Install to directory ${{{dir_var}}} should end with /",
                             context=stripped[:70],
@@ -680,7 +680,7 @@ class SystemdRedundantFilesRule(BaseRule):
             
             if not path_covered:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Service file '{service_name}' installed to non-standard location may not be packaged",
                     context=f"Installed to: {install_path}",
@@ -746,7 +746,7 @@ class HardcodedSystemdPathInFilesRule(BaseRule):
                 for pattern, replacement in self.HARDCODED_PATHS:
                     if pattern.search(line):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message="Hardcoded systemd path in FILES variable",
                             context=stripped[:70],
@@ -872,7 +872,7 @@ class VariableAssignmentSpacingRule(BaseRule):
                         issues.append("after")
                     
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Missing space {' and '.join(issues)} '{operator}' operator in assignment",
                         context=stripped[:60],
@@ -966,7 +966,7 @@ class SingleQuoteUsageRule(BaseRule):
                 operator = match.group(2)
                 
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Single quotes used in '{var_name}' assignment",
                     context=stripped[:60],
@@ -1056,7 +1056,7 @@ class TabInVariableDefinitionRule(BaseRule):
                     # Count tabs for reporting
                     tab_count = line.count('\t')
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Tab character(s) found in variable definition ({tab_count} tab{'s' if tab_count > 1 else ''})",
                         context=stripped[:60],
@@ -1179,7 +1179,7 @@ class MultilineContinuationAlignmentRule(BaseRule):
                     # Check if indent is too small (less than MIN_CONTINUATION_INDENT)
                     if actual_indent < self.MIN_CONTINUATION_INDENT:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Continuation line has insufficient indentation ({actual_indent} spaces)",
                             context=stripped[:60],
@@ -1192,7 +1192,7 @@ class MultilineContinuationAlignmentRule(BaseRule):
                     
                     if not is_closing_line and actual_indent != first_continuation_indent:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Inconsistent continuation indentation ({actual_indent} vs {first_continuation_indent} spaces)",
                             context=stripped[:60],
@@ -1269,7 +1269,7 @@ class PythonFunctionIndentationRule(BaseRule):
                 if '\t' in line:
                     tab_count = line.count('\t')
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Tab character(s) in Python function '{func_name}' ({tab_count} tab{'s' if tab_count > 1 else ''})",
                         context=stripped[:60],
@@ -1285,7 +1285,7 @@ class PythonFunctionIndentationRule(BaseRule):
                         # Don't flag continuation lines or closing braces
                         if not stripped.startswith('}') and not line.rstrip().endswith('\\'):
                             results.append(self.create_result(
-                                file=context.path,
+                                file=context,
                                 line=line_num,
                                 message=f"Python indentation not multiple of 4 spaces (found {relative_indent} relative spaces)",
                                 context=stripped[:60],
@@ -1444,7 +1444,7 @@ class RecipeVariableOrderRule(BaseRule):
                     next_cat = self._get_category(next_priority)
                     
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=curr_line,
                         message=f"'{curr_var}' ({curr_cat}) appears before '{next_var}' ({next_cat})",
                         context=f"Consider placing {next_var} before {curr_var}",
@@ -1457,7 +1457,7 @@ class RecipeVariableOrderRule(BaseRule):
                 # Variables with priority >= 50 should come after inherit
                 if priority >= 50 and line_num < inherit_line:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"'{var_name}' typically appears after 'inherit' statement",
                         hint="Move 'inherit' before build configuration and packaging variables",
@@ -1524,7 +1524,7 @@ class LicenseVariablesOrderRule(BaseRule):
         if license_line and lic_files_line:
             if lic_files_line < license_line:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=lic_files_line,
                     message="LIC_FILES_CHKSUM appears before LICENSE",
                     hint="Place LICENSE before LIC_FILES_CHKSUM per Yocto style guide",
@@ -1577,7 +1577,7 @@ class SourceVariablesOrderRule(BaseRule):
         # Check SRCREV before SRC_URI
         if src_uri_line and srcrev_line and srcrev_line < src_uri_line:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=srcrev_line,
                 message="SRCREV appears before SRC_URI",
                 hint="Place SRC_URI before SRCREV per Yocto style guide",
@@ -1586,7 +1586,7 @@ class SourceVariablesOrderRule(BaseRule):
         # Check S before SRC_URI
         if src_uri_line and s_line and s_line < src_uri_line:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=s_line,
                 message="S appears before SRC_URI",
                 hint="Place SRC_URI before S per Yocto style guide",
@@ -1595,7 +1595,7 @@ class SourceVariablesOrderRule(BaseRule):
         # Check S before SRCREV (if both exist)
         if srcrev_line and s_line and s_line < srcrev_line:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=s_line,
                 message="S appears before SRCREV",
                 hint="Place SRCREV before S per Yocto style guide",
@@ -1647,7 +1647,7 @@ class MetadataBeforeLicenseRule(BaseRule):
                 if stripped.startswith(meta_var) and '=' in stripped:
                     if line_num > license_line:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"'{meta_var}' appears after LICENSE (line {license_line})",
                             hint=f"Place {meta_var} before LICENSE per Yocto style guide",
@@ -1719,7 +1719,7 @@ class TaskOrderRule(BaseRule):
                 
                 if curr_order > next_order:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=curr_line,
                         message=f"'{curr_task}' appears before '{next_task}' (should be after)",
                         hint="Order tasks by execution sequence: configure → compile → install",

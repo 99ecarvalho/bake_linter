@@ -86,7 +86,7 @@ class CpInsteadOfInstallRule(BaseRule):
                         hint = "Use 'install -d' for dirs, 'install -m MODE' for files"
                     
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Using 'cp' instead of 'install' command",
                         context=stripped[:60],
@@ -170,7 +170,7 @@ class InstallWithoutModeRule(BaseRule):
                             continue
                         
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message="install command without explicit -m permission mode",
                             context=stripped[:60],
@@ -226,7 +226,7 @@ class MkdirInsteadOfInstallDRule(BaseRule):
                 
                 if self.MKDIR_PATTERN.match(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Using 'mkdir' instead of 'install -d'",
                         context=stripped[:60],
@@ -266,7 +266,7 @@ class UsrLocalInstallRule(BaseRule):
             
             if self.USR_LOCAL_PATTERN.search(line):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Installation to /usr/local is non-standard for Yocto",
                     context=stripped[:60],
@@ -391,7 +391,7 @@ class NonFHSPathRule(BaseRule):
                         # Check if it's FHS-compliant (variable or literal)
                         if not self._is_fhs_compliant(dest_path):
                             results.append(self.create_result(
-                                file=context.path,
+                                file=context,
                                 line=line_num,
                                 message=f"Installation to non-FHS path: {dest_path}",
                                 context=stripped[:60],

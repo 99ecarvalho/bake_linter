@@ -281,16 +281,17 @@ def get_formatter(format_name: str, color: bool, verbose: bool, output: TextIO):
     return formatters[format_name]()
 
 
-def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False, debug: bool = False):
+def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False, debug: bool = False, release: Optional[str] = None):
     """
     Run oelint-adv if available.
-    
+
     Args:
         paths: Paths to lint
         exclude_patterns: Patterns to exclude
         quiet: Whether to suppress status messages
         debug: Whether to enable debug output
-        
+        release: Yocto release to pass through to oelint-adv's --release flag
+
     Returns:
         Tuple of (results, summary) or (None, None) if not available
     """
@@ -317,6 +318,7 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
         paths=paths,
         exclude_patterns=exclude_patterns,
         mode="all",  # Use 'all' mode for comprehensive checking
+        release=release,
     )
     
     # Always show oelint-adv summary (quiet only suppresses detailed findings)
@@ -417,6 +419,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         exclude_patterns=exclude_patterns if exclude_patterns else None,
         quiet=config.quiet,
         debug=args.ci,  # Enable debug output in CI mode
+        release=config.oelint_release,
     )
     
     # Output to stdout using the primary format

@@ -48,7 +48,7 @@ class RdependsOnDevPackageRule(BaseRule):
                 matches = self.DEV_PACKAGE_PATTERN.findall(stripped)
                 for dev_pkg in matches:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Development package '{dev_pkg}' in RDEPENDS (should be build-time only)",
                         context=stripped[:60],
@@ -150,7 +150,7 @@ class FilesNotMatchingInstallRule(BaseRule):
             
             if not path_covered:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Installed path '{install_path}' may not be covered by FILES",
                     hint=f'Add: FILES:${{PN}} += "{install_path}"',
@@ -205,7 +205,7 @@ class WildcardBbappendOverreachRule(BaseRule):
             for pattern in self.VERSION_SPECIFIC_PATTERNS:
                 if pattern.search(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Wildcard bbappend with potentially version-specific content",
                         context=stripped[:60],
@@ -313,7 +313,7 @@ class FilesPackagesConsistencyRule(BaseRule):
                 continue
             
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=line_num,
                 message=f"FILES:{pkg_name} defined but '{pkg_name}' not in PACKAGES",
                 hint=f'Add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
@@ -419,7 +419,7 @@ class RdependsPackageExistenceRule(BaseRule):
             
             if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"RDEPENDS:{pkg_name} but '{pkg_name}' not defined in PACKAGES",
                     hint=f'Add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
@@ -485,7 +485,7 @@ class RrecommendsPackageValidityRule(BaseRule):
             
             if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"RRECOMMENDS:{pkg_name} but '{pkg_name}' not in PACKAGES",
                     hint=f'Verify package name or add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',

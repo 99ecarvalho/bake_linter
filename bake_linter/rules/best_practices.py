@@ -45,7 +45,7 @@ class DoFetchModificationRule(BaseRule):
             
             if self.DO_FETCH_PATTERN.match(stripped):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Modifying do_fetch is an anti-pattern",
                     context=stripped[:60],
@@ -98,7 +98,7 @@ class CleanupInConfigureRule(BaseRule):
                 
                 if self.RM_PATTERN.match(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="rm command in do_configure may be misplaced",
                         context=stripped[:60],
@@ -156,7 +156,7 @@ class MissingHomepageRule(BaseRule):
         
         if not has_homepage and suggested_url:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=1,
                 message="Recipe missing HOMEPAGE",
                 hint=f'Consider adding: HOMEPAGE = "{suggested_url}"',
@@ -209,7 +209,7 @@ class SedInDoInstallRule(BaseRule):
                 
                 if self.SED_PATTERN.match(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="sed -i in do_install modifies installed files",
                         context=stripped[:60],

@@ -74,7 +74,7 @@ class DeprecatedOverrideSyntaxRule(BaseRule):
                 # Check for _append, _prepend, _remove (definitely deprecated)
                 if override in ("append", "prepend", "remove"):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Deprecated '_{override}' syntax; use ':{override}' instead",
                         context=stripped[:80],
@@ -82,7 +82,7 @@ class DeprecatedOverrideSyntaxRule(BaseRule):
                     ))
                 elif override.startswith("${"):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Deprecated underscore override syntax; use colon instead",
                         context=stripped[:80],
@@ -124,7 +124,7 @@ class DeprecatedFunctionsRule(BaseRule):
             for old_func, replacement in self.DEPRECATED_FUNCTIONS.items():
                 if old_func in line:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Deprecated function '{old_func}'",
                         context=stripped[:80],
@@ -161,7 +161,7 @@ class DeprecatedVariablesRule(BaseRule):
                 if var_name == deprecated or var_name.startswith(deprecated):
                     for assignment in assignments:
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=assignment.line,
                             message=f"Deprecated variable '{var_name}'",
                             hint=hint,
@@ -211,7 +211,7 @@ class PythonTwoSyntaxRule(BaseRule):
                 for pattern, message in self.PYTHON2_PATTERNS:
                     if pattern.search(line):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=message,
                             context=stripped[:80],

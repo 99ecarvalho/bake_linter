@@ -51,7 +51,7 @@ class LicenseRequiredRule(BaseRule):
         # Check if LICENSE is defined
         if "LICENSE" not in context.variables:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Missing LICENSE variable",
                 hint=self.hint,
             ))
@@ -61,7 +61,7 @@ class LicenseRequiredRule(BaseRule):
                 value = assignment.value.strip()
                 if not value:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=assignment.line,
                         message="LICENSE variable is empty",
                         hint="Specify a valid license identifier",
@@ -96,7 +96,7 @@ class LicenseTypoRule(BaseRule):
                 assignments = context.variables[var_name]
                 for assignment in assignments:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=assignment.line,
                         message=f"Possible LICENSE typo: '{var_name}' should be 'LICENSE'",
                         context=f"{var_name} = \"{assignment.value}\"",
@@ -143,7 +143,7 @@ class LicFilesChkSumRule(BaseRule):
         # Check for LIC_FILES_CHKSUM
         if "LIC_FILES_CHKSUM" not in context.variables:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 message="Missing LIC_FILES_CHKSUM for non-CLOSED license",
                 hint=self.hint,
             ))

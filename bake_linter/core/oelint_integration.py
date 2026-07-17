@@ -354,30 +354,38 @@ class OelintAdvIntegration:
         exclude_patterns: Optional[List[str]] = None,
         mode: str = "all",
         extra_args: Optional[List[str]] = None,
+        release: Optional[str] = None,
     ) -> Tuple[List[OelintResult], OelintSummary, str, str]:
         """
         Run oelint-adv on the specified paths.
-        
+
         Args:
             paths: List of files or directories to lint
             exclude_patterns: Patterns to exclude (Note: oelint-adv doesn't have
                             native exclude support, so we filter results)
             mode: Testing mode ('fast' or 'all', default: 'all')
             extra_args: Additional command line arguments
-            
+            release: Yocto release name to validate against (e.g. "scarthgap").
+                    oelint-adv gates some rules by `valid_from_release` (e.g.
+                    oelint.vars.unpackdir requires "styhead"+); without this,
+                    it defaults to its own newest-supported release, which
+                    misfires those rules on projects targeting an older,
+                    still-supported release.
+
         Returns:
             Tuple of (results, summary, stdout, stderr)
         """
         if not self.is_available():
             return [], OelintSummary(), "", "oelint-adv is not available"
-        
+
         # Build command arguments
-        # Note: --release is not used, oelint-adv defaults to latest
         args = [
             "--mode", mode,
             "--quiet",  # Only output findings
             "--exit-zero",  # Don't fail on lint errors
         ]
+        if release:
+            args += ["--release", release]
         
         if extra_args:
             args.extend(extra_args)

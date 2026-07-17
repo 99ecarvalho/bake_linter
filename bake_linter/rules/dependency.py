@@ -73,7 +73,7 @@ class WrongDependencyTypeRule(BaseRule):
                     if match:
                         tool = match.group(0)
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Build-time tool '{tool}' should be in DEPENDS, not RDEPENDS",
                             context=stripped[:60],
@@ -151,7 +151,7 @@ class MissingPkgconfigInheritRule(BaseRule):
         # Only flag if uses pkgconfig and doesn't have inherit or pkgconfig-native
         if uses_pkgconfig and not inherits_pkgconfig and not has_pkgconfig_native:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=usage_line,
                 message="Recipe uses pkg-config but doesn't inherit pkgconfig",
                 hint="Add 'inherit pkgconfig' for proper cross-compilation setup",
@@ -208,7 +208,7 @@ class RrecommendsEssentialRule(BaseRule):
                     if match:
                         lib = match.group(0)
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Essential library '{lib}' should be in RDEPENDS, not RRECOMMENDS",
                             context=stripped[:60],

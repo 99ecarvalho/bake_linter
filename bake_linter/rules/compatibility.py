@@ -50,7 +50,7 @@ class DeprecatedCompatibleHostRule(BaseRule):
                 if '.*' in regex_value or '|' in regex_value:
                     if not regex_value.startswith('^'):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message="COMPATIBLE_HOST pattern missing ^ anchor",
                             context=stripped[:60],
@@ -111,7 +111,7 @@ class UnjustifiedMachineArchRule(BaseRule):
         
         if has_machine_arch and not has_justification:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=machine_arch_line,
                 message="PACKAGE_ARCH = \"${MACHINE_ARCH}\" without clear machine-specific code",
                 hint="Remove MACHINE_ARCH unless recipe has machine-specific content",

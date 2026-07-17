@@ -65,7 +65,7 @@ class SrcUriProtocolConsistencyRule(BaseRule):
         # Flag mixed protocols
         if len(git_protocols) > 1:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=src_uri_lines[0][0] if src_uri_lines else 1,
                 message=f"Mixed git protocols used: {', '.join(sorted(git_protocols))}",
                 hint="Standardize on protocol=https for all git sources",
@@ -73,7 +73,7 @@ class SrcUriProtocolConsistencyRule(BaseRule):
         
         if 'http' in http_protocols and 'https' in http_protocols:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=src_uri_lines[0][0] if src_uri_lines else 1,
                 message="Mixed HTTP and HTTPS protocols in SRC_URI",
                 hint="Use HTTPS for all HTTP sources",
@@ -136,7 +136,7 @@ class GitSrcrevValidityRule(BaseRule):
                 pass
             elif not self.VALID_SHA1_PATTERN.match(srcrev_value):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=srcrev_line,
                     message=f"Invalid SRCREV format: '{srcrev_value[:20]}...'",
                     hint="SRCREV should be 40-character SHA-1 hash or ${AUTOREV}",
@@ -147,7 +147,7 @@ class GitSrcrevValidityRule(BaseRule):
             # Only flag if it looks like a real recipe (not .inc)
             if str(context.path).endswith('.bb'):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=srcrev_line,
                     message="SRCREV defined but no git:// URI found",
                     hint="SRCREV is only applicable to git sources",
@@ -198,7 +198,7 @@ class VersionConstraintSyntaxRule(BaseRule):
             match = self.MISSING_PARENS.search(stripped)
             if match:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Version constraint missing parentheses: {match.group(0)}",
                     context=stripped[:60],
@@ -209,7 +209,7 @@ class VersionConstraintSyntaxRule(BaseRule):
             match = self.INVALID_OPERATOR.search(stripped)
             if match:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="Invalid version constraint operator",
                     context=stripped[:60],

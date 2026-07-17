@@ -81,7 +81,7 @@ class SystemdWithoutInheritRule(BaseRule):
             for pattern in self.SYSTEMD_PATTERNS:
                 if pattern.search(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="Systemd feature used without 'inherit systemd'",
                         context=stripped[:70],
@@ -163,7 +163,7 @@ class SystemdMissingServiceDeclarationRule(BaseRule):
         if not has_service_decl:
             for line_num, service_name in service_install_lines:
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message=f"Service '{service_name}' installed without SYSTEMD_SERVICE declaration",
                     hint=f"Add: SYSTEMD_SERVICE:${{PN}} = \"{service_name}\"",
@@ -347,7 +347,7 @@ class SystemdHardcodedPathsRule(BaseRule):
                     # or not in any recognized source context
                     if self._is_hardcoded_destination(line) or not self._is_source_path_context(line):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message="Hardcoded systemd path found",
                             context=stripped[:70],

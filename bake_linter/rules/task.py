@@ -85,7 +85,7 @@ class UnquotedVariableRule(BaseRule):
                         # Check if it's actually unquoted
                         if not self._is_properly_quoted(stripped, var, pos):
                             results.append(self.create_result(
-                                file=context.path,
+                                file=context,
                                 line=line_num,
                                 message=f"Shell variable ${var} should be quoted (use \"${var}\" or \"${{{var}}}\")",
                                 context=stripped[:60],
@@ -171,7 +171,7 @@ class SudoUsageRule(BaseRule):
             
             if in_task and self.SUDO_CMD_PATTERN.search(stripped):
                 results.append(self.create_result(
-                    file=context.path,
+                    file=context,
                     line=line_num,
                     message="sudo should not be used in Yocto tasks",
                     context=stripped[:60],
@@ -182,7 +182,7 @@ class SudoUsageRule(BaseRule):
             elif not in_task and 'sudo' in stripped.lower() and '=' in stripped:
                 if self.SUDO_CMD_PATTERN.search(stripped):
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message="sudo command found in recipe variable",
                         context=stripped[:60],
@@ -261,7 +261,7 @@ class NetworkAccessInCompileRule(BaseRule):
                 for pattern in self.NETWORK_PATTERNS:
                     if pattern.search(stripped):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message=f"Potential network access in {current_task}",
                             context=stripped[:60],

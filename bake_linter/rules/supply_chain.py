@@ -50,7 +50,7 @@ class UnpinnedBranchRule(BaseRule):
             for branch in matches:
                 if branch.lower() in self.MUTABLE_BRANCHES:
                     results.append(self.create_result(
-                        file=context.path,
+                        file=context,
                         line=line_num,
                         message=f"Mutable branch '{branch}' used in git URI",
                         context=stripped[:60],
@@ -106,7 +106,7 @@ class MissingLicenseChecksumInBbappendRule(BaseRule):
         
         if modifies_src_uri and not has_lic_check:
             results.append(self.create_result(
-                file=context.path,
+                file=context,
                 line=src_uri_line,
                 message="bbappend modifies SRC_URI without updating LIC_FILES_CHKSUM",
                 hint="Verify added sources have compatible licenses",
@@ -157,7 +157,7 @@ class UnreliableHostingRule(BaseRule):
                 for pattern in self.UNRELIABLE_HOSTS:
                     if pattern.search(stripped):
                         results.append(self.create_result(
-                            file=context.path,
+                            file=context,
                             line=line_num,
                             message="Download from potentially unreliable hosting service",
                             context=stripped[:60],
