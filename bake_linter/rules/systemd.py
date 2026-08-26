@@ -20,26 +20,30 @@ from bake_linter.rules.base import BaseRule
 class SystemdWithoutInheritRule(BaseRule):
     """
     Check for systemd usage without inherit systemd.
-    
-    Using systemd variables or paths without inheriting the systemd class
-    will cause build failures or unexpected behavior.
-    
+
+    Using the systemd class's packaging variables (SYSTEMD_SERVICE,
+    SYSTEMD_AUTO_ENABLE, SYSTEMD_PACKAGES) without inheriting the systemd
+    class will cause build failures or unexpected behavior.
+
+    Note: systemd_unitdir/systemd_system_unitdir/systemd_user_unitdir are
+    NOT included here - they're plain FHS path variables exported directly
+    by bitbake.conf (meta/conf/bitbake.conf), available regardless of
+    'inherit systemd'. A recipe can use those paths to manually install
+    files without ever touching the systemd class.
+
     Note: This rule only applies to .bb files. .bbappend files inherit
     everything from their base recipe, including inherit statements.
     """
-    
+
     rule_id = "SYSTEMD001"
     name = "Systemd Usage Without Inherit"
-    description = "Detects usage of systemd variables/paths without inherit systemd"
+    description = "Detects usage of systemd class packaging variables without inherit systemd"
     default_severity = Severity.ERROR
     groups = ["systemd"]
     hint = "Add 'inherit systemd' before using systemd features"
 
     # Systemd-related patterns that require inherit systemd
     SYSTEMD_PATTERNS = [
-        re.compile(r'\$\{systemd_system_unitdir\}'),
-        re.compile(r'\$\{systemd_user_unitdir\}'),
-        re.compile(r'\$\{systemd_unitdir\}'),
         re.compile(r'^SYSTEMD_SERVICE[_:]'),
         re.compile(r'^SYSTEMD_AUTO_ENABLE[_:]'),
         re.compile(r'^SYSTEMD_PACKAGES\s*[+?]?='),

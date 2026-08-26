@@ -132,18 +132,21 @@ class LicFilesChkSumRule(BaseRule):
             return []
         
         license_val = ""
+        license_line = None
         for assignment in context.variables["LICENSE"]:
             license_val = assignment.value.upper()
+            license_line = assignment.line
             break
-        
+
         # CLOSED licenses don't need checksum
         if "CLOSED" in license_val:
             return []
-        
+
         # Check for LIC_FILES_CHKSUM
         if "LIC_FILES_CHKSUM" not in context.variables:
             results.append(self.create_result(
                 file=context,
+                line=license_line,
                 message="Missing LIC_FILES_CHKSUM for non-CLOSED license",
                 hint=self.hint,
             ))
