@@ -355,6 +355,7 @@ class OelintAdvIntegration:
         mode: str = "all",
         extra_args: Optional[List[str]] = None,
         release: Optional[str] = None,
+        extra_machines: Optional[List[str]] = None,
     ) -> Tuple[List[OelintResult], OelintSummary, str, str]:
         """
         Run oelint-adv on the specified paths.
@@ -371,6 +372,11 @@ class OelintAdvIntegration:
                     it defaults to its own newest-supported release, which
                     misfires those rules on projects targeting an older,
                     still-supported release.
+            extra_machines: Custom BSP machine names (e.g. "qemuarm64") this project
+                    defines that oelint-adv's built-in MachinesKnown list doesn't
+                    recognize. Without these, oelint.vars.specific misfires on
+                    every :machine override of these names. Written to a temp
+                    constants-mod JSON file and passed via --constantmods.
 
         Returns:
             Tuple of (results, summary, stdout, stderr)
@@ -386,7 +392,16 @@ class OelintAdvIntegration:
         ]
         if release:
             args += ["--release", release]
-        
+
+        constantmods_file: Optional[str] = None
+        if extra_machines:
+            import json
+            import tempfile
+            fd, constantmods_file = tempfile.mkstemp(suffix=".json", prefix="oelint-constantmods-")
+            with os.fdopen(fd, "w") as f:
+                json.dump({"replacements": {"machines": list(extra_machines)}}, f)
+            args += ["--constantmods", f"+{constantmods_file}"]
+
         if extra_args:
             args.extend(extra_args)
         
@@ -456,7 +471,13 @@ class OelintAdvIntegration:
             if debug:
                 print(f"[oelint-adv] ✗ Command failed: {e}", file=sys.stderr)
             return [], OelintSummary(), "", f"Error running oelint-adv: {e}"
-        
+        finally:
+            if constantmods_file:
+                try:
+                    os.remove(constantmods_file)
+                except OSError:
+                    pass
+
         # Parse results from stderr (oelint-adv outputs findings to stderr by default)
         results = self._parse_output(stderr)
         

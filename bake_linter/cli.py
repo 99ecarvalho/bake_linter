@@ -281,7 +281,7 @@ def get_formatter(format_name: str, color: bool, verbose: bool, output: TextIO):
     return formatters[format_name]()
 
 
-def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False, debug: bool = False, release: Optional[str] = None):
+def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False, debug: bool = False, release: Optional[str] = None, extra_machines: Optional[List[str]] = None):
     """
     Run oelint-adv if available.
 
@@ -291,6 +291,9 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
         quiet: Whether to suppress status messages
         debug: Whether to enable debug output
         release: Yocto release to pass through to oelint-adv's --release flag
+        extra_machines: Custom BSP machine names to pass through to oelint-adv's
+                --constantmods, so oelint.vars.specific recognizes their
+                :machine overrides (see OelintAdvIntegration.run)
 
     Returns:
         Tuple of (results, summary) or (None, None) if not available
@@ -319,6 +322,7 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
         exclude_patterns=exclude_patterns,
         mode="all",  # Use 'all' mode for comprehensive checking
         release=release,
+        extra_machines=extra_machines,
     )
     
     # Always show oelint-adv summary (quiet only suppresses detailed findings)
@@ -420,6 +424,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         quiet=config.quiet,
         debug=args.ci,  # Enable debug output in CI mode
         release=config.oelint_release,
+        extra_machines=config.oelint_extra_machines,
     )
     
     # Output to stdout using the primary format

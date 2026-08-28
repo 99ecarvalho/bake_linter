@@ -604,6 +604,19 @@ settings:
   # don't fire on variables/features that don't exist yet on this release.
   oelint_release: scarthgap
 
+  # Custom BSP machine names this project defines under
+  # vendor/bsp/meta-example-bsp/conf/machine/ -- oelint-adv's built-in
+  # MachinesKnown list has no idea these exist, so its oelint.vars.specific
+  # rule flags every :machine override of these names (e.g.
+  # IMAGE_INSTALL:append:qemuarm64) as unknown. Passed through to oelint-adv's
+  # --constantmods so it recognizes them as valid override targets.
+  oelint_extra_machines:
+    - qemuarm64
+    - qemuarm
+    - qemux86-64
+    - qemux86
+    - qemuriscv64
+
   # Enable colored output (set to false for CI)
   color: true
 

@@ -81,7 +81,13 @@ class LinterConfig:
         # rules, e.g. oelint.vars.unpackdir, default to oelint-adv's own
         # newest-supported release otherwise -- see run_oelint_adv()).
         self.oelint_release: Optional[str] = None
-        
+        # Machine names this project's BSP defines that oelint-adv's built-in
+        # MachinesKnown list doesn't recognize -- without these, oelint.vars.specific
+        # misfires on every :machine override of these names (e.g. IMAGE_INSTALL:append:qemuarm64),
+        # since it treats an unrecognized override target as an error. Passed through to
+        # oelint-adv's --constantmods (see run_oelint_adv()).
+        self.oelint_extra_machines: List[str] = []
+
         # File patterns to exclude
         self.exclude_patterns: List[str] = []
         
@@ -208,6 +214,8 @@ class LinterConfig:
                 self.max_line_length = int(settings["max_line_length"])
             if "oelint_release" in settings:
                 self.oelint_release = str(settings["oelint_release"])
+            if "oelint_extra_machines" in settings:
+                self.oelint_extra_machines = [str(m) for m in settings["oelint_extra_machines"]]
             if "color" in settings:
                 self.color = bool(settings["color"])
         
