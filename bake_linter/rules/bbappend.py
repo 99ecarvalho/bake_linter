@@ -246,10 +246,18 @@ class GlobalVariableInBbappendRule(BaseRule):
     applicable_file_types = {"bbappend"}
 
     # Variables that should NOT be set in bbappend files
+    #
+    # PARALLEL_MAKE is deliberately NOT listed: it is a documented per-recipe
+    # variable, the supported way to limit or disable parallelism for a build
+    # system that cannot handle it. Poky sets it directly in recipes
+    # (glibc.inc, ovmf_git.bb, mtd-utils_git.bb, slang_2.3.3.bb,
+    # net-tools_2.10.bb, blktrace_git.bb, bash-completion_2.12.0.bb), so
+    # flagging it in a .bbappend was a false positive. BB_NUMBER_THREADS stays
+    # listed - that one really is build-wide.
     GLOBAL_VARIABLES = [
         'TMPDIR', 'DL_DIR', 'SSTATE_DIR', 'DEPLOY_DIR',
         'DISTRO', 'MACHINE', 'TCMODE', 'TCLIBC',
-        'BB_NUMBER_THREADS', 'PARALLEL_MAKE',
+        'BB_NUMBER_THREADS',
         'PACKAGE_CLASSES', 'EXTRA_IMAGE_FEATURES',
         'IMAGE_INSTALL', 'IMAGE_FEATURES',
         'DISTRO_FEATURES', 'MACHINE_FEATURES',

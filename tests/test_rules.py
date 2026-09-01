@@ -4719,8 +4719,49 @@ SRC_URI += "file://patch.patch"
         
         rule = GlobalVariableInBbappendRule()
         results = rule.check(context)
-        
+
         assert len(results) == 0
+
+    def test_parallel_make_in_bbappend_is_not_flagged(self):
+        """PARALLEL_MAKE is a documented per-recipe variable, the supported way
+        to limit parallelism for a build system that cannot handle it. Poky
+        sets it directly in recipes (glibc.inc, ovmf_git.bb, mtd-utils_git.bb,
+        slang_2.3.3.bb, net-tools_2.10.bb), so a .bbappend setting it is not a
+        misplaced global. BB_NUMBER_THREADS still is."""
+        from bake_linter.rules.bbappend import GlobalVariableInBbappendRule
+
+        content = '''PARALLEL_MAKE = "-j 1"
+'''
+        context = FileContext(
+            path=Path("recipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = GlobalVariableInBbappendRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_bb_number_threads_in_bbappend_still_flagged(self):
+        """The genuinely build-wide sibling of PARALLEL_MAKE stays flagged."""
+        from bake_linter.rules.bbappend import GlobalVariableInBbappendRule
+
+        content = '''BB_NUMBER_THREADS = "4"
+'''
+        context = FileContext(
+            path=Path("recipe_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = GlobalVariableInBbappendRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "BBAPPEND005"
 
 
 class TestLayerRules:
