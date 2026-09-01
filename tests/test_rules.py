@@ -3271,11 +3271,15 @@ DESCRIPTION = "This tool helps manage api-key rotation and secret handling"
 class TestCompatibilityRules:
     """Tests for compatibility rules."""
 
-    def test_deprecated_compatible_host(self):
-        """Test that COMPATIBLE_HOST without anchors is flagged."""
+    def test_unanchored_compatible_host_is_not_flagged(self):
+        """A missing ^ anchor is not a finding. BitBake matches the value with
+        re.match (base.bbclass: "if not re.match(need_host, this_host)"), which
+        is already anchored at the start, and poky writes unanchored values
+        throughout (kexec-tools, igt-gpu-tools, systemtap, grub2)."""
         from bake_linter.rules.compatibility import DeprecatedCompatibleHostRule
-        
+
         content = '''COMPATIBLE_HOST = "i.86.*-linux"
+COMPATIBLE_HOST = '(x86_64.*|i.86.*|arm.*|aarch64.*)-(linux.*|freebsd.*)'
 '''
         context = FileContext(
             path=Path("test_1.0.bb"),
@@ -3283,12 +3287,11 @@ class TestCompatibilityRules:
             lines=content.splitlines(keepends=True),
             variables={},
         )
-        
+
         rule = DeprecatedCompatibleHostRule()
         results = rule.check(context)
-        
-        assert len(results) == 1
-        assert results[0].rule_id == "COMPAT001"
+
+        assert results == []
 
     def test_unjustified_machine_arch(self):
         """Test that MACHINE_ARCH without justification is flagged."""

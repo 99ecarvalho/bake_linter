@@ -19,45 +19,38 @@ from bake_linter.rules.base import BaseRule
 
 class DeprecatedCompatibleHostRule(BaseRule):
     """
-    Check for deprecated COMPATIBLE_HOST patterns.
-    
-    COMPATIBLE_HOST should use proper regex syntax with anchors.
+    Check for improper COMPATIBLE_HOST patterns.
+
+    This rule used to require a leading ``^`` anchor. That was wrong on two
+    counts, so it no longer fires:
+
+    - BitBake matches the value with ``re.match``
+      (``meta/classes-global/base.bbclass``: ``if not re.match(need_host,
+      this_host)``), which is already anchored at the start. A leading ``^``
+      changes nothing.
+    - The vendored poky tree writes unanchored values throughout:
+      ``kexec-tools_2.0.28.bb``
+      (``'(x86_64.*|i.86.*|arm.*|aarch64.*|powerpc.*|mips.*)-(linux|freebsd.*)'``),
+      ``igt-gpu-tools_git.bb``, ``systemtap_git.inc``, ``grub2.inc``.
+
+    An unparenthesised alternation would be a genuine defect worth flagging
+    (``"x86_64|aarch64-linux"`` does not mean what it looks like), but the
+    vendored trees contain no instance of it, so nothing is implemented for it
+    here rather than guessing at a pattern. Do not restore the ``^``
+    requirement.
     """
-    
+
     rule_id = "COMPAT001"
     name = "Deprecated COMPATIBLE_HOST Syntax"
     description = "Detects deprecated or improper COMPATIBLE_HOST patterns"
     default_severity = Severity.WARNING
     groups = ["compatibility", "deprecated"]
-    hint = "Use modern regex syntax with anchors: ^(pattern)$"
+    hint = "Use a grouped regex, e.g. (x86_64.*|aarch64.*)-linux"
 
     COMPAT_HOST_PATTERN = re.compile(r'^COMPATIBLE_HOST\s*=\s*["\']([^"\']+)["\']')
 
     def check(self, context: FileContext) -> List[LintResult]:
-        results = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
-                continue
-            
-            match = self.COMPAT_HOST_PATTERN.match(stripped)
-            if match:
-                regex_value = match.group(1)
-                
-                # Check for missing anchors in complex patterns
-                if '.*' in regex_value or '|' in regex_value:
-                    if not regex_value.startswith('^'):
-                        results.append(self.create_result(
-                            file=context,
-                            line=line_num,
-                            message="COMPATIBLE_HOST pattern missing ^ anchor",
-                            context=stripped[:60],
-                            hint="Add ^ at start of regex for proper matching",
-                        ))
-        
-        return results
+        return []
 
 
 class UnjustifiedMachineArchRule(BaseRule):
