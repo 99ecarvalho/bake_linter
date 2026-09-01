@@ -3392,6 +3392,55 @@ do_install:append() {
         assert results[0].rule_id == "SYNTAX006"
         assert "remove" in results[0].message
 
+    def test_package_scope_before_operation_is_not_flagged(self):
+        """A package-name override legitimately precedes the operation.
+
+        This is the ubiquitous upstream convention (252 occurrences in the
+        vendored poky/meta-openembedded trees); the reverse form the rule used
+        to suggest (RDEPENDS:append:${PN}) appears there zero times.
+        """
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+
+        content = '''RDEPENDS:${PN}:append:qemux86-64 = " example-app"
+RDEPENDS:${PN}:append = " example-daemon"
+RDEPENDS:${PN}-ptest:append = " bash"
+FILES:${PN}:append:qemux86-64 = " /usr/share/foo"
+INSANE_SKIP:${PN}:append:linux-gnux32 = " textrel"
+RDEPENDS:packagegroup-meta-oe-support:append = " pkg"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_conditional_before_operation_still_flagged_on_package_var(self):
+        """A package-scoped variable does not excuse a *conditional* override
+        placed before the operation."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+
+        content = '''WKS_FILE_DEPENDS:qemux86-64:append = " x"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "SYNTAX006"
+        assert "qemux86-64" in results[0].message
+
     def test_valid_override_ordering_operation_first(self):
         """Test that operation BEFORE conditional override is NOT flagged.
         

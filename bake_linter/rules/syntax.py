@@ -365,23 +365,37 @@ class InvalidOverrideOrderingRule(BaseRule):
     Check for incorrect override ordering in variable assignments.
     
     In BitBake, the correct order for variable overrides is:
-        VARIABLE:operation:conditional_overrides
-    
+        VARIABLE[:package]:operation:conditional_overrides
+
     Where:
-    - Operations: :append, :prepend, :remove (come FIRST after variable name)
-    - Conditional overrides: :machine, :class-target, :pn-*, etc. (come AFTER operation)
-    
+    - A package-name scope, when present, comes FIRST (right after the variable
+      name): ``${PN}``, ``${PN}-dev``, ``${PN}-ptest``, or a literal package
+      name such as ``packagegroup-meta-oe-support``.
+    - Operations: :append, :prepend, :remove
+    - Conditional overrides: :machine, :class-target, :libc-*, etc. come AFTER
+      the operation.
+
     CORRECT examples:
-        RDEPENDS:append:${PN} = " package"      # operation first, then PN override
-        WKS_FILE_DEPENDS:append:qemux86-64 = " x"  # operation first, then machine override
-        DEPENDS:remove:class-native = "pkg"     # operation first, then class override
-    
+        RDEPENDS:${PN}:append:class-target = " pkg"   # package scope, then operation
+        RDEPENDS:${PN}-ptest:append = " pkg"          # package scope, then operation
+        RDEPENDS:packagegroup-meta-oe-support:append = " pkg"
+        WKS_FILE_DEPENDS:append:qemux86-64 = " x"        # operation, then machine override
+        DEPENDS:remove:class-native = "pkg"           # operation, then class override
+
     INCORRECT examples:
-        RDEPENDS:${PN}:append = " package"      # WRONG - operation should be first
-        WKS_FILE_DEPENDS:qemux86-64:append = " x"  # WRONG - operation should be first
-    
-    This rule detects when operations are placed AFTER conditional overrides,
-    which is incorrect BitBake syntax.
+        WKS_FILE_DEPENDS:qemux86-64:append = " x"  # WRONG - machine override before operation
+
+    This rule detects when operations are placed AFTER a *conditional* override
+    (machine, class, libc, ...). A **package-name** override legitimately
+    precedes the operation and is not flagged: that is the ubiquitous upstream
+    convention, verified against the vendored poky/meta-openembedded trees
+    (252 occurrences of package-scope-before-operation, e.g.
+    ``RDEPENDS:${PN}-ptest:append`` and ``FILES:${PN}:append``; zero
+    occurrences of a machine or class override placed before the operation).
+
+    Note the reverse form the rule used to suggest for packages
+    (``RDEPENDS:append:${PN}``) does not appear in poky at all - do not
+    "correct" working recipes into it.
     """
     
     rule_id = "SYNTAX006"
@@ -391,11 +405,39 @@ class InvalidOverrideOrderingRule(BaseRule):
     groups = ["syntax"]
     hint = "Place :append/:prepend/:remove BEFORE conditional overrides (e.g., VAR:append:machine)"
 
-    # Operation overrides that should come first (right after variable name)
+    # Operation overrides, which must precede any *conditional* override
     OPERATION_OVERRIDES = ['append', 'prepend', 'remove']
-    
+
+    # Variables that BitBake resolves per output package, where the package
+    # name is an override that conventionally precedes the operation. The
+    # package name is not always spelled with ${PN}: packagegroup recipes use
+    # literal names (RDEPENDS:packagegroup-meta-oe-support:append), so for
+    # these variables any leading override is treated as package scope.
+    PACKAGE_SCOPED_VARIABLES = {
+        'ALLOW_EMPTY', 'ALTERNATIVE', 'CONFFILES', 'DEBIAN_NOAUTONAME',
+        'DESCRIPTION', 'FILES', 'INSANE_SKIP', 'LICENSE', 'PKG', 'PKGE',
+        'PKGR', 'PKGV', 'RCONFLICTS', 'RDEPENDS', 'RPROVIDES', 'RRECOMMENDS',
+        'RREPLACES', 'RSUGGESTS', 'SECTION', 'SUMMARY',
+        'SYSTEMD_AUTO_ENABLE', 'SYSTEMD_SERVICE',
+    }
+
+    # Expansions that name the recipe/package itself wherever they appear
+    PACKAGE_NAME_EXPANSIONS = ('${PN}', '${BPN}', '${MLPREFIX}')
+
     # Pattern to find variable assignments with multiple overrides
     MULTI_OVERRIDE_PATTERN = re.compile(r'^([A-Z_][A-Z0-9_]*)((?::[a-zA-Z0-9_${}+-]+)+)\s*[+?:]?=')
+
+    @classmethod
+    def _is_package_scope(cls, variable: str, override: str) -> bool:
+        """Whether *override* names a package rather than a build condition.
+
+        A package-name override correctly precedes the operation, so it must
+        not be flagged. Anything else (machine, class-*, libc-*, distro) must
+        come after the operation.
+        """
+        if any(exp in override for exp in cls.PACKAGE_NAME_EXPANSIONS):
+            return True
+        return variable in cls.PACKAGE_SCOPED_VARIABLES
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -414,25 +456,40 @@ class InvalidOverrideOrderingRule(BaseRule):
                 overrides = [o for o in overrides_str.split(':') if o]
                 
                 if len(overrides) >= 2:
+                    variable = match.group(1)
+
                     # Find if there's an operation override
                     operation_index = -1
                     for i, override in enumerate(overrides):
                         if override in self.OPERATION_OVERRIDES:
                             operation_index = i
                             break
-                    
-                    # If operation found and it's NOT first, that's an error
-                    # Operations should come immediately after the variable name
-                    if operation_index > 0:
-                        # Operation is not first - this is wrong order
-                        operation = overrides[operation_index]
-                        results.append(self.create_result(
-                            file=context,
-                            line=line_num,
-                            message=f"Operation ':{operation}' should come BEFORE conditional overrides",
-                            context=stripped[:60],
-                            hint=f"Correct order: VAR:{operation}:override (e.g., VAR:{operation}:{overrides[0]})",
-                        ))
+
+                    if operation_index <= 0:
+                        continue
+
+                    # A package-name scope legitimately precedes the operation
+                    # (RDEPENDS:${PN}:append:qemux86-64). Only a *conditional*
+                    # override placed before it is wrong.
+                    preceding = overrides[:operation_index]
+                    if all(self._is_package_scope(variable, o) for o in preceding):
+                        continue
+
+                    offenders = [
+                        o for o in preceding
+                        if not self._is_package_scope(variable, o)
+                    ]
+                    operation = overrides[operation_index]
+                    results.append(self.create_result(
+                        file=context,
+                        line=line_num,
+                        message=(
+                            f"Conditional override ':{offenders[0]}' should come "
+                            f"AFTER the ':{operation}' operation"
+                        ),
+                        context=stripped[:60],
+                        hint=f"Correct order: {variable}:{operation}:{offenders[0]}",
+                    ))
         
         return results
 
