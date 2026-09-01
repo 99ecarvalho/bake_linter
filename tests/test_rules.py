@@ -71,19 +71,49 @@ class TestLicenseRules:
         assert "LICENSEX" in results[0].message
 
     def test_lic_files_chksum_warning(self):
-        """Test that missing LIC_FILES_CHKSUM for non-CLOSED is warned."""
+        """Missing LIC_FILES_CHKSUM is warned when the recipe fetches source:
+        that is what the checksum pins the licence text of."""
+        lines = [
+            'LICENSE = "MIT"\n',
+            'SRC_URI = "https://example.com/foo-1.0.tar.gz"\n',
+        ]
         context = FileContext(
             path=Path("test_1.0.bb"),
-            content='LICENSE = "MIT"',
-            lines=['LICENSE = "MIT"'],
-            variables={"LICENSE": [VariableAssignment("LICENSE", "MIT", 1)]},
+            content="".join(lines),
+            lines=lines,
+            variables={
+                "LICENSE": [VariableAssignment("LICENSE", "MIT", 1)],
+                "SRC_URI": [
+                    VariableAssignment(
+                        "SRC_URI", "https://example.com/foo-1.0.tar.gz", 2
+                    )
+                ],
+            },
         )
-        
+
         rule = LicFilesChkSumRule()
         results = rule.check(context)
-        
+
         assert len(results) == 1
         assert results[0].rule_id == "LICENSE003"
+
+    def test_lic_files_chksum_image_recipe_exempt(self):
+        """An image recipe fetches nothing, so there is no licence file to
+        checksum. 57 of the 60 image recipes in the vendored
+        poky/meta-openembedded trees set none, core-image-minimal.bb
+        (LICENSE = "MIT", inherit core-image) among them."""
+        lines = ['LICENSE = "MIT"\n', 'inherit core-image\n']
+        context = FileContext(
+            path=Path("myimage_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={"LICENSE": [VariableAssignment("LICENSE", "MIT", 1)]},
+        )
+
+        rule = LicFilesChkSumRule()
+        results = rule.check(context)
+
+        assert results == []
 
     def test_lic_files_chksum_closed_ok(self):
         """Test that CLOSED license doesn't need LIC_FILES_CHKSUM."""

@@ -142,6 +142,19 @@ class LicFilesChkSumRule(BaseRule):
         if "CLOSED" in license_val:
             return []
 
+        # LIC_FILES_CHKSUM pins the licence text of the *fetched* source, so it
+        # only applies when something is fetched. An image recipe fetches
+        # nothing: 57 of the 60 image recipes in the vendored
+        # poky/meta-openembedded trees set no LIC_FILES_CHKSUM, among them
+        # core-image-minimal.bb (LICENSE = "MIT", inherit core-image).
+        if "SRC_URI" not in context.variables:
+            return []
+        if any(
+            re.match(r'^inherit\b.*\b(?:core-image|image)\b', line.strip())
+            for line in context.lines
+        ):
+            return []
+
         # Check for LIC_FILES_CHKSUM
         if "LIC_FILES_CHKSUM" not in context.variables:
             results.append(self.create_result(
