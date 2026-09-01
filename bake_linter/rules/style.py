@@ -235,23 +235,43 @@ class EmptyVariableRule(BaseRule):
     default_severity = Severity.INFO
     groups = ["style"]
 
+    @staticmethod
+    def _is_override_scoped(context: FileContext, line_num: int) -> bool:
+        """Whether the assignment on *line_num* carries an override.
+
+        Read from the source line so this does not depend on how the parser
+        keys an overridden name.
+        """
+        if not line_num or line_num > len(context.lines):
+            return False
+        stripped = context.lines[line_num - 1].strip()
+        name_part = stripped.split('=', 1)[0]
+        return ':' in name_part
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         for var_name, assignments in context.variables.items():
             for assignment in assignments:
                 if not assignment.value.strip() and assignment.operator == "=":
                     # Skip known intentionally empty variables
                     if var_name in {"SRC_URI", "DEPENDS", "RDEPENDS"}:
                         continue
-                    
+
+                    # Blanking a variable under an override is the deliberate
+                    # way to exclude something for one machine/distro/class:
+                    # VAR:qemuarm64 = "" drops it there and nowhere else. The
+                    # vendored poky/meta-openembedded trees do this 218 times.
+                    if self._is_override_scoped(context, assignment.line):
+                        continue
+
                     results.append(self.create_result(
                         file=context,
                         line=assignment.line,
                         message=f"Empty assignment for '{var_name}'",
                         hint="Remove if intentionally empty, or add a comment explaining why",
                     ))
-        
+
         return results
 
 

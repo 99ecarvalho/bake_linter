@@ -440,6 +440,48 @@ SRC_URI += "file://config"
 class TestStyleRules:
     """Tests for style rules."""
 
+    def test_empty_assignment_under_override_is_not_flagged(self):
+        """Blanking a variable under an override is the deliberate way to
+        exclude something for one machine/distro/class: VAR:qemuarm64 = "" drops it
+        there and nowhere else. The vendored poky/meta-openembedded trees do
+        this 218 times."""
+        lines = ['DEBUG_TOOLS_PACKAGEGROUP:qemuarm64 = ""\n']
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={
+                "DEBUG_TOOLS_PACKAGEGROUP": [
+                    VariableAssignment(
+                        "DEBUG_TOOLS_PACKAGEGROUP", "", 1
+                    )
+                ]
+            },
+        )
+
+        rule = EmptyVariableRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_empty_assignment_without_override_still_flagged(self):
+        """An unconditional blank has no such justification."""
+        lines = ['SOME_THING = ""\n']
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={
+                "SOME_THING": [VariableAssignment("SOME_THING", "", 1)]
+            },
+        )
+
+        rule = EmptyVariableRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "STYLE005"
+
     def test_duplicate_inherit(self):
         """Test that duplicate inherit is flagged."""
         context = FileContext(
