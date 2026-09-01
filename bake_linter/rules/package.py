@@ -83,7 +83,19 @@ class FilesNotMatchingInstallRule(BaseRule):
     
     INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
     INSTALL_CMD_PATTERN = re.compile(r'install\s+.*\$\{D\}(/\S+)')
+    # Any per-package FILES assignment, including FILES:${PN}-dev,
+    # FILES:${PN}:append and the ptest variants
     FILES_PATTERN = re.compile(r'^FILES[_:]\$\{PN\}')
+
+    @staticmethod
+    def _normalise_path(token: str) -> str:
+        """Normalise a FILES entry or install path to a comparable form.
+
+        An install path captured from ``${D}/foo`` keeps a leading slash, while
+        a FILES entry is normally written as ``${dir}/foo`` without one, so
+        both sides are anchored the same way before comparing.
+        """
+        return '/' + token.strip().strip('"\'').strip('\\').lstrip('/')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -93,17 +105,29 @@ class FilesNotMatchingInstallRule(BaseRule):
         # Collect non-standard install paths
         custom_installs = []
         files_entries = []
-        
+        in_files = False
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
             if stripped.startswith("#"):
                 continue
             
-            # Collect FILES entries
+            # Collect FILES entries. A FILES assignment is usually written
+            # across several continuation lines, so the value has to be
+            # accumulated - reading only the first line saw an empty list and
+            # flagged every installed path in the recipe.
             if self.FILES_PATTERN.match(stripped):
-                files_entries.append(stripped)
-            
+                in_files = True
+            if in_files:
+                files_entries.extend(
+                    self._normalise_path(tok)
+                    for tok in stripped.split('=', 1)[-1].split()
+                    if tok not in ('\\', '"', '')
+                )
+                if not stripped.endswith('\\'):
+                    in_files = False
+
             # Track do_install
             if self.INSTALL_TASK_PATTERN.match(stripped):
                 in_do_install = True
@@ -122,7 +146,14 @@ class FilesNotMatchingInstallRule(BaseRule):
                 match = self.INSTALL_CMD_PATTERN.search(line)
                 if match:
                     install_path = match.group(1)
-                    
+
+                    # `find ... -exec install -d ${D}/dir/{} \;` expands {} per
+                    # match at build time, so the captured "path" is a shell
+                    # placeholder, not something FILES can name.
+                    if '{}' in install_path:
+                        continue
+
+
                     # Check if standard path
                     is_standard = False
                     for std_path in self.STANDARD_PATHS:
@@ -135,19 +166,26 @@ class FilesNotMatchingInstallRule(BaseRule):
         
         # Check custom installs against FILES
         for line_num, install_path in custom_installs:
+            installed = self._normalise_path(install_path)
             path_covered = False
-            for files_entry in files_entries:
-                if install_path in files_entry:
+            for entry in files_entries:
+                # The entry names the path itself, or a glob over it
+                if entry == installed or entry.rstrip('/*') == installed:
                     path_covered = True
                     break
-                # Check parent directory coverage
-                parts = install_path.split('/')
-                for i in range(2, len(parts)):
-                    parent = '/'.join(parts[:i])
-                    if parent in files_entry or f"{parent}/*" in files_entry:
-                        path_covered = True
-                        break
-            
+                # The entry covers a parent of the path
+                if installed.startswith(entry.rstrip('/*') + '/'):
+                    path_covered = True
+                    break
+                # The entry names something INSIDE the installed directory.
+                # Listing a directory's contents rather than the bare
+                # directory is the correct packaging pattern (packaging the
+                # directory itself would swallow the -dbg/-dev split), so an
+                # `install -d` whose contents are packaged is covered.
+                if entry.startswith(installed.rstrip('/') + '/'):
+                    path_covered = True
+                    break
+
             if not path_covered:
                 results.append(self.create_result(
                     file=context,

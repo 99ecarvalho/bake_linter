@@ -3628,9 +3628,125 @@ class TestPackageRules:
         
         rule = FilesNotMatchingInstallRule()
         results = rule.check(context)
-        
+
         assert len(results) >= 1
         assert results[0].rule_id == "PKG002"
+
+    def test_multiline_files_assignment_is_collected(self):
+        """A FILES value written across continuation lines must be read whole.
+
+        Reading only the first line saw an empty list and flagged every
+        installed path in the recipe.
+        """
+        from bake_linter.rules.package import FilesNotMatchingInstallRule
+
+        content = '''do_install() {
+    install -d ${D}/opt/custom
+    install -m 0755 mybin ${D}/opt/custom/mybin
+}
+
+FILES:${PN} = " \\
+    /opt/custom \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = FilesNotMatchingInstallRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_directory_whose_contents_are_packaged_is_covered(self):
+        """Listing a directory's contents rather than the bare directory is the
+        correct packaging pattern - packaging the directory itself would
+        swallow the -dbg/-dev split - so `install -d` of it is covered."""
+        from bake_linter.rules.package import FilesNotMatchingInstallRule
+
+        content = '''do_install() {
+    install -d ${D}/opt
+    touch ${D}/opt/install.log
+    install -d ${D}/usr/src/thing
+    install -m 0644 server.py ${D}/usr/src/thing/server.py
+}
+
+FILES:${PN} = " \\
+    /opt/install.log \\
+    /usr/src/thing/server.py \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = FilesNotMatchingInstallRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_uncovered_install_path_still_flagged(self):
+        """A path that FILES genuinely does not cover is still a finding."""
+        from bake_linter.rules.package import FilesNotMatchingInstallRule
+
+        content = '''do_install() {
+    install -d ${D}/opt/covered
+    install -m 0755 a ${D}/opt/covered/a
+    install -d ${D}/opt/forgotten
+    install -m 0755 b ${D}/opt/forgotten/b
+}
+
+FILES:${PN} = " \\
+    /opt/covered \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = FilesNotMatchingInstallRule()
+        results = rule.check(context)
+
+        assert len(results) >= 1
+        assert all(r.rule_id == "PKG002" for r in results)
+        assert all("forgotten" in r.message for r in results)
+
+    def test_find_exec_placeholder_is_not_a_path(self):
+        """`find ... -exec install -d ${D}/dir/{} \\;` expands {} per match at
+        build time, so the captured "path" is a shell placeholder that FILES
+        can never name."""
+        from bake_linter.rules.package import FilesNotMatchingInstallRule
+
+        content = '''do_install() {
+    install -d ${D}/usr/src/thing
+    ( cd ${WORKDIR}/git && find server -type d -exec install -d ${D}/usr/src/thing/{} \\; )
+    ( cd ${WORKDIR}/git && find server -type f -exec install -m 0644 {} ${D}/usr/src/thing/{} \\; )
+}
+
+FILES:${PN} = " \\
+    /usr/src/thing/server \\
+"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = FilesNotMatchingInstallRule()
+        results = rule.check(context)
+
+        assert results == []
 
     def test_wildcard_bbappend_overreach(self):
         """Test that wildcard bbappends with version-specific content are flagged."""
