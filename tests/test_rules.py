@@ -4776,6 +4776,70 @@ UPSTREAM_CHECK_URI = "https://example.com"
         # None of these special variables should be flagged
         assert len(results) == 0
 
+    def test_image_class_variables_are_not_unused(self):
+        """IMAGE_INSTALL/IMAGE_NAME and friends are consumed by image.bbclass
+        and image_types.bbclass, never by the image recipe itself."""
+        from bake_linter.rules.variables import UnusedVariableAssignmentRule
+
+        content = '''inherit core-image
+IMAGE_INSTALL = " packagegroup-core-boot"
+IMAGE_NAME = "myimage"
+IMAGE_FSTYPES = "wic.gz"
+WKS_FILE = "my.wks"
+'''
+        context = FileContext(
+            path=Path("myimage_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = UnusedVariableAssignmentRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_weak_default_assignment_is_not_unused(self):
+        """?= and ??= offer a default for the build system or another recipe to
+        consume or override; "never referenced here" is the expected shape of
+        such a declaration, not a finding."""
+        from bake_linter.rules.variables import UnusedVariableAssignmentRule
+
+        content = '''MY_BUILD_NUMBER ?= "000"
+MY_ARTIFACT_ID ??= ""
+'''
+        context = FileContext(
+            path=Path("myimage_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = UnusedVariableAssignmentRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_plain_unused_assignment_still_flagged(self):
+        """A hard assignment to a non-standard variable nothing reads is still
+        a finding."""
+        from bake_linter.rules.variables import UnusedVariableAssignmentRule
+
+        content = '''MY_FORGOTTEN_THING = "leftover"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = UnusedVariableAssignmentRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES003"
+
     def test_variable_redefinition(self):
         """Test that variable redefinition is flagged."""
         from bake_linter.rules.variables import VariableRedefinitionRule

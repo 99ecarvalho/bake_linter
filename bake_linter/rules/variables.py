@@ -173,7 +173,8 @@ class UnusedVariableAssignmentRule(BaseRule):
         
         # Upstream tracking (consumed by devtool/recipetool)
         'UPSTREAM_CHECK_URI', 'UPSTREAM_CHECK_REGEX',
-        'UPSTREAM_CHECK_GITTAGREGEX', 'UPSTREAM_VERSION_UNKNOWN',
+        'UPSTREAM_CHECK_GITTAGREGEX', 'UPSTREAM_CHECK_COMMITS',
+        'UPSTREAM_VERSION_UNKNOWN',
         
         # CVE tracking
         'CVE_PRODUCT', 'CVE_VERSION', 'CVE_CHECK_IGNORE',
@@ -199,9 +200,25 @@ class UnusedVariableAssignmentRule(BaseRule):
         # RAUC (consumed by rauc.bbclass)
         'RAUC_BUNDLE_COMPATIBLE', 'RAUC_BUNDLE_VERSION', 'RAUC_BUNDLE_DESCRIPTION',
         'RAUC_BUNDLE_FORMAT', 'RAUC_BUNDLE_SLOTS', 'RAUC_KEY_FILE', 'RAUC_CERT_FILE',
+
+        # Image construction (consumed by image.bbclass, image_types.bbclass
+        # and core-image.bbclass, never referenced by the image recipe itself)
+        'IMAGE_INSTALL', 'IMAGE_FEATURES', 'IMAGE_FSTYPES', 'IMAGE_NAME',
+        'IMAGE_BASENAME', 'IMAGE_LINGUAS', 'IMAGE_ROOTFS_SIZE',
+        'IMAGE_ROOTFS_EXTRA_SPACE', 'IMAGE_ROOTFS_ALIGNMENT',
+        'IMAGE_OVERHEAD_FACTOR', 'IMAGE_BOOT_FILES', 'IMAGE_CMD',
+        'IMAGE_POSTPROCESS_COMMAND', 'IMAGE_PREPROCESS_COMMAND',
+        'ROOTFS_POSTPROCESS_COMMAND', 'ROOTFS_PREPROCESS_COMMAND',
+        'PACKAGE_INSTALL', 'PACKAGE_EXCLUDE', 'NO_RECOMMENDATIONS',
+        'WKS_FILE', 'WKS_FILE_DEPENDS', 'WIC_CREATE_EXTRA_ARGS',
+        'EXTRA_IMAGE_FEATURES', 'IMAGE_TYPEDEP', 'IMAGE_TYPES',
     }
 
-    VAR_ASSIGNMENT_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*[?:]?=')
+    # An assignment made with ?= or ??= is a *default being offered*, for the
+    # build system or another recipe to consume or override. "Assigned but
+    # never referenced here" is the expected shape of such a declaration, not a
+    # finding.
+    VAR_ASSIGNMENT_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*(\?\?=|[?:]?=)')
     VAR_REFERENCE_PATTERN = re.compile(r'\$\{([A-Z][A-Z0-9_]*)\}')
 
     def check(self, context: FileContext) -> List[LintResult]:
@@ -220,7 +237,8 @@ class UnusedVariableAssignmentRule(BaseRule):
             match = self.VAR_ASSIGNMENT_PATTERN.match(stripped)
             if match:
                 var_name = match.group(1)
-                if var_name not in self.STANDARD_VARS:
+                is_default = match.group(2).startswith('?')
+                if var_name not in self.STANDARD_VARS and not is_default:
                     assignments[var_name] = line_num
             
             # Track references
