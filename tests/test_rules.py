@@ -1636,6 +1636,44 @@ class TestSecurityRules:
         assert len(results) == 1
         assert "git://" in results[0].message
 
+    def test_git_uri_with_explicit_secure_protocol_is_not_flagged(self):
+        """``git://`` is the bitbake fetcher scheme, not the wire protocol: the
+        transport comes from ``;protocol=`` (fetch2/git.py urldata_init). Poky
+        writes git://...;protocol=https 973 times, so the scheme alone is not a
+        finding."""
+        lines = [
+            'SRC_URI = "git://github.com/user/repo.git;protocol=https;branch=main"\n',
+            'SRC_URI += "git://git.example.com/org/thing.git;protocol=ssh;branch=master"\n',
+            'SRC_URI += "gitsm://example.com/sub.git;protocol=https;branch=main"\n',
+        ]
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={},
+        )
+
+        rule = InsecureUriRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_git_uri_with_plaintext_protocol_is_flagged(self):
+        """An explicit plaintext protocol is still a finding."""
+        lines = ['SRC_URI = "git://example.com/repo.git;protocol=git;branch=main"\n']
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={},
+        )
+
+        rule = InsecureUriRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "SECURITY001"
+
 
 class TestSystemdRules:
     """Tests for systemd-related rules."""

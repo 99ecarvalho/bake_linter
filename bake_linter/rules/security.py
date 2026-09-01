@@ -25,7 +25,11 @@ class InsecureUriRule(BaseRule):
     during the build process:
     - HTTP instead of HTTPS
     - FTP instead of HTTPS/FTPS
-    - git:// instead of https://
+    - a git fetch whose effective transport is the plaintext git daemon
+
+    Note ``git://`` alone is NOT insecure: in a bitbake SRC_URI it is the
+    *fetcher scheme*, and the wire protocol comes from the ``;protocol=``
+    parameter. ``git://host/repo;protocol=ssh`` transports over SSH.
     """
     
     rule_id = "SECURITY001"
@@ -43,6 +47,18 @@ class InsecureUriRule(BaseRule):
     
     # Pattern for unencrypted git protocol
     GIT_PROTOCOL_PATTERN = re.compile(r'git://(?!localhost|127\.|192\.168\.|10\.)')
+
+    # The transport of a bitbake git fetch comes from the ";protocol="
+    # parameter, not from the scheme (fetch2/git.py urldata_init:
+    # "if 'protocol' in ud.parm: ud.proto = ud.parm['protocol']", valid values
+    # git/file/ssh/http/https/rsync). Poky writes git://...;protocol=https 973
+    # times against 49 URIs with no protocol= at all, so the scheme by itself
+    # says nothing about security. Only an absent or plaintext protocol is
+    # actually insecure: bitbake falls back to the unencrypted "git" daemon
+    # protocol when the parameter is omitted.
+    GIT_SECURE_PROTOCOL_PATTERN = re.compile(
+        r'git(?:sm)?://\S*?;[^"\'\s]*protocol=(?:ssh|https|rsync|file)\b'
+    )
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -71,14 +87,21 @@ class InsecureUriRule(BaseRule):
                     context=stripped[:80],
                     hint="Change ftp:// to https:// or ftps://",
                 ))
-            # Check for git:// protocol
-            elif self.GIT_PROTOCOL_PATTERN.search(line):
+            # Check for a git fetch left on the plaintext daemon protocol.
+            # An explicit ;protocol=ssh/https/rsync/file is already secure.
+            elif (
+                self.GIT_PROTOCOL_PATTERN.search(line)
+                and not self.GIT_SECURE_PROTOCOL_PATTERN.search(line)
+            ):
                 results.append(self.create_result(
                     file=context,
                     line=line_num,
-                    message="Insecure git:// protocol; use https:// for git repos",
+                    message=(
+                        "git:// fetch has no ;protocol= parameter, so it "
+                        "falls back to the plaintext git daemon protocol"
+                    ),
                     context=stripped[:80],
-                    hint="Change git://github.com to https://github.com",
+                    hint="Add ;protocol=https (or ;protocol=ssh for an internal repo)",
                 ))
         
         return results
