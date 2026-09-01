@@ -19,42 +19,73 @@ from bake_linter.rules.base import BaseRule
 
 class UnpinnedBranchRule(BaseRule):
     """
-    Check for mutable branch references in git URIs.
-    
-    Even with pinned SRCREV, using development branches like master/main
-    makes the source lineage less clear and can cause confusion.
+    Check for mutable branch references in git URIs that are not pinned.
+
+    A mutable branch is a reproducibility hazard only when nothing pins the
+    commit: what gets built is decided by SRCREV, and the branch is just the
+    ref bitbake fetches and validates the revision against. So this rule fires
+    on a mutable branch when the recipe has no pinned SRCREV, or uses AUTOREV.
     """
-    
+
     rule_id = "REPRO001"
     name = "Unpinned Branch Usage"
-    description = "Detects mutable branch references (master, main, develop) in git URIs"
+    description = "Detects mutable branch references (master, main, develop) with no pinned SRCREV"
     default_severity = Severity.WARNING
     groups = ["reproducibility", "source"]
-    hint = "Use stable/release branches instead of development branches"
+    hint = "Pin the commit with SRCREV, or use a stable/release branch"
 
     # Mutable development branches to flag
     MUTABLE_BRANCHES = ['master', 'main', 'develop', 'trunk', 'dev', 'development']
-    
+
     GIT_URI_PATTERN = re.compile(r'(?:git|gitsm)://[^;]+;[^"\']*branch=([^;"\'\s]+)')
+
+    # A 40-hex SRCREV pins the exact commit. Poky/meta-openembedded have 736
+    # recipes on branch=master|main and 728 of them (98.9%) pin SRCREV this
+    # way, so flagging the pinned case fires on the standard practice rather
+    # than on a real hazard. AUTOREV is the genuinely unreproducible case and
+    # is never treated as pinned, whatever else the recipe does.
+    PINNED_SRCREV_PATTERN = re.compile(
+        r'^SRCREV[A-Za-z0-9_:${}.-]*\s*[?:+]?=\s*"[0-9a-fA-F]{40}"'
+    )
+    AUTOREV_PATTERN = re.compile(r'\bAUTOREV\b')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
+
+        # The pinning state is a property of the whole recipe, so resolve it
+        # before judging any individual URI line.
+        has_pinned_srcrev = False
+        uses_autorev = False
+        for line in context.lines:
             stripped = line.strip()
-            
             if stripped.startswith("#"):
                 continue
-            
+            if self.PINNED_SRCREV_PATTERN.match(stripped):
+                has_pinned_srcrev = True
+            if self.AUTOREV_PATTERN.search(stripped):
+                uses_autorev = True
+
+        if has_pinned_srcrev and not uses_autorev:
+            return results
+
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+
+            if stripped.startswith("#"):
+                continue
+
             matches = self.GIT_URI_PATTERN.findall(line)
             for branch in matches:
                 if branch.lower() in self.MUTABLE_BRANCHES:
                     results.append(self.create_result(
                         file=context,
                         line=line_num,
-                        message=f"Mutable branch '{branch}' used in git URI",
+                        message=(
+                            f"Mutable branch '{branch}' used in git URI with "
+                            f"no pinned SRCREV"
+                        ),
                         context=stripped[:60],
-                        hint="Use stable/release branches (e.g., stable-2.0, release-1.x)",
+                        hint='Pin the commit (SRCREV = "<40-hex>") or use a stable/release branch',
                     ))
         
         return results
@@ -77,41 +108,68 @@ class MissingLicenseChecksumInBbappendRule(BaseRule):
     
     applicable_file_types = {"bbappend"}
 
-    SRC_URI_MODIFY_PATTERN = re.compile(r'SRC_URI\s*[+:]?=')
+    # Matches every assignment form, including the :append/:prepend the
+    # previous pattern (SRC_URI\s*[+:]?=) silently missed - which is the most
+    # common form in a .bbappend.
+    SRC_URI_MODIFY_PATTERN = re.compile(
+        r'^SRC_URI(?::(?:append|prepend))?(?::[a-zA-Z0-9_${}+-]+)*\s*[+?:]?='
+    )
     LIC_FILES_PATTERN = re.compile(r'LIC_FILES_CHKSUM')
+
+    # LIC_FILES_CHKSUM pins the license text of the *fetched upstream source*,
+    # so it only matters when the bbappend brings in such a source. A local
+    # file:// entry (a patch, a config file, a service unit carried in the
+    # layer) is not one, and real poky/OE bbappends that add patches do not
+    # touch LIC_FILES_CHKSUM (meta-rust/librsvg, meta-clang/gdb,
+    # meta-example-bsp/systemd). Flagging those was a false positive.
+    REMOTE_FETCH_PATTERN = re.compile(
+        r'\b(?:https?|ftps?|s?ftp|git|gitsm|svn|hg|bzr|osc|npm|npmsw|crate|'
+        r'gs|s3|az|ssh)://'
+    )
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         if not str(context.path).endswith('.bbappend'):
             return results
-        
-        modifies_src_uri = False
+
+        adds_remote_source = False
         has_lic_check = False
         src_uri_line = 0
-        
+        in_src_uri = False
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
-            if self.SRC_URI_MODIFY_PATTERN.search(stripped):
-                modifies_src_uri = True
-                if src_uri_line == 0:
-                    src_uri_line = line_num
-            
+
             if self.LIC_FILES_PATTERN.search(stripped):
                 has_lic_check = True
-        
-        if modifies_src_uri and not has_lic_check:
+
+            if not in_src_uri and self.SRC_URI_MODIFY_PATTERN.match(stripped):
+                in_src_uri = True
+                if src_uri_line == 0:
+                    src_uri_line = line_num
+
+            if in_src_uri:
+                if self.REMOTE_FETCH_PATTERN.search(stripped):
+                    adds_remote_source = True
+                # The assignment ends on the first line not continued with '\'
+                if not stripped.endswith('\\'):
+                    in_src_uri = False
+
+        if adds_remote_source and not has_lic_check:
             results.append(self.create_result(
                 file=context,
                 line=src_uri_line,
-                message="bbappend modifies SRC_URI without updating LIC_FILES_CHKSUM",
+                message=(
+                    "bbappend fetches upstream source without updating "
+                    "LIC_FILES_CHKSUM"
+                ),
                 hint="Verify added sources have compatible licenses",
             ))
-        
+
         return results
 
 

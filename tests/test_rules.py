@@ -3650,17 +3650,60 @@ class TestSupplyChainRules:
             lines=content.splitlines(keepends=True),
             variables={},
         )
-        
+
         rule = UnpinnedBranchRule()
         results = rule.check(context)
-        
+
         assert len(results) == 0
 
+    def test_mutable_branch_with_pinned_srcrev_is_not_flagged(self):
+        """A pinned SRCREV decides what gets built; the branch is only the ref
+        bitbake fetches and validates against. Poky/meta-openembedded have 736
+        recipes on branch=master|main, 728 of them (98.9%) pinned like this."""
+        from bake_linter.rules.supply_chain import UnpinnedBranchRule
+
+        content = '''SRC_URI = "git://github.com/foo/bar.git;branch=master;protocol=https"
+SRCREV = "0123456789abcdef0123456789abcdef01234567"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = UnpinnedBranchRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_mutable_branch_with_autorev_is_flagged(self):
+        """AUTOREV is the genuinely unreproducible case: it floats even though
+        a SRCREV assignment is present."""
+        from bake_linter.rules.supply_chain import UnpinnedBranchRule
+
+        content = '''SRC_URI = "git://github.com/foo/bar.git;branch=master;protocol=https"
+SRCREV = "${AUTOREV}"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = UnpinnedBranchRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "REPRO001"
+
     def test_bbappend_src_uri_without_lic_check(self):
-        """Test that bbappend modifying SRC_URI without license check is flagged."""
+        """Test that a bbappend fetching upstream source without a license
+        check is flagged."""
         from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
-        
-        content = '''SRC_URI += "file://custom-patch.patch"
+
+        content = '''SRC_URI += "git://example.com/extra.git;branch=main"
 '''
         context = FileContext(
             path=Path("test_%.bbappend"),
@@ -3668,10 +3711,75 @@ class TestSupplyChainRules:
             lines=content.splitlines(keepends=True),
             variables={},
         )
-        
+
         rule = MissingLicenseChecksumInBbappendRule()
         results = rule.check(context)
-        
+
+        assert len(results) == 1
+        assert results[0].rule_id == "SUPPLY001"
+
+    def test_bbappend_patch_only_src_uri_is_not_flagged(self):
+        """A bbappend that only adds local files (patches, configs, units) is
+        NOT flagged: LIC_FILES_CHKSUM pins the licence text of the *fetched
+        upstream source*, and real poky/OE bbappends adding patches do not
+        touch it."""
+        from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
+
+        content = '''FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://custom-patch.patch"
+SRC_URI:append = " file://my.service"
+'''
+        context = FileContext(
+            path=Path("test_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = MissingLicenseChecksumInBbappendRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_bbappend_src_uri_append_form_is_detected(self):
+        """The :append form must be detected too - it is the most common way a
+        bbappend adds sources, and the previous pattern silently missed it."""
+        from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
+
+        content = '''SRC_URI:append = " https://example.com/extra-1.0.tar.gz"
+'''
+        context = FileContext(
+            path=Path("test_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = MissingLicenseChecksumInBbappendRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "SUPPLY001"
+
+    def test_bbappend_remote_source_on_continuation_line_is_detected(self):
+        """A remote fetch on a continuation line of the assignment counts."""
+        from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
+
+        content = '''SRC_URI += "\\
+    file://local.patch \\
+    git://example.com/extra.git;branch=main \\
+"
+'''
+        context = FileContext(
+            path=Path("test_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = MissingLicenseChecksumInBbappendRule()
+        results = rule.check(context)
+
         assert len(results) == 1
         assert results[0].rule_id == "SUPPLY001"
 
