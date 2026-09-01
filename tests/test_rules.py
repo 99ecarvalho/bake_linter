@@ -4878,9 +4878,56 @@ CFLAGS:prepend = "D "
         
         rule = ExcessiveAppendPrependRule()
         results = rule.check(context)
-        
+
         assert len(results) == 1
         assert results[0].rule_id == "VARIABLES005"
+
+    def test_appends_in_distinct_override_scopes_are_not_excessive(self):
+        """Operations under different overrides apply under different
+        conditions and cannot be collapsed into one another, nor into a direct
+        assignment, so they are counted per override scope."""
+        from bake_linter.rules.variables import ExcessiveAppendPrependRule
+
+        content = '''IMAGE_INSTALL:append:qemuarm64 = " a"
+IMAGE_INSTALL:append:qemux86-64 = " b"
+IMAGE_INSTALL:append:qemuarm = " c"
+IMAGE_INSTALL:append:qemuriscv64 = " d"
+IMAGE_INSTALL:append:qemux86 = " e"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = ExcessiveAppendPrependRule()
+        results = rule.check(context)
+
+        assert results == []
+
+    def test_appends_in_same_override_scope_still_flagged(self):
+        """Four mergeable operations on the same scope remain a finding."""
+        from bake_linter.rules.variables import ExcessiveAppendPrependRule
+
+        content = '''IMAGE_INSTALL:append:qemuarm64 = " a"
+IMAGE_INSTALL:append:qemuarm64 = " b"
+IMAGE_INSTALL:append:qemuarm64 = " c"
+IMAGE_INSTALL:append:qemuarm64 = " d"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = ExcessiveAppendPrependRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].rule_id == "VARIABLES005"
+        assert "qemuarm64" in results[0].message
 
 
 class TestFunctionRules:

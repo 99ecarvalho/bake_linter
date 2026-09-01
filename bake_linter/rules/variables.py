@@ -331,35 +331,48 @@ class ExcessiveAppendPrependRule(BaseRule):
     
     MAX_OPERATIONS = 3
 
-    APPEND_PREPEND_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)[:_](append|prepend)')
+    # The trailing overrides are captured because they decide mergeability:
+    # IMAGE_INSTALL:append:qemuarm64 and IMAGE_INSTALL:append:qemux86-64 apply under
+    # different conditions and cannot be collapsed into one another, nor into a
+    # direct assignment. Only operations sharing the same override scope are
+    # candidates for simplification, so the count is per scope, not per
+    # variable name.
+    APPEND_PREPEND_PATTERN = re.compile(
+        r'^([A-Z][A-Z0-9_]*)[:_](append|prepend)((?:[:_][a-zA-Z0-9_${}+-]+)*)'
+    )
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        operations = {}  # var_name -> count
-        first_occurrence = {}  # var_name -> line_num
-        
+
+        operations = {}  # (var_name, overrides) -> count
+        first_occurrence = {}  # (var_name, overrides) -> line_num
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
+
             match = self.APPEND_PREPEND_PATTERN.match(stripped)
             if match:
-                var_name = match.group(1)
-                if var_name not in operations:
-                    operations[var_name] = 0
-                    first_occurrence[var_name] = line_num
-                operations[var_name] += 1
-        
-        for var_name, count in operations.items():
+                key = (match.group(1), match.group(3) or '')
+                if key not in operations:
+                    operations[key] = 0
+                    first_occurrence[key] = line_num
+                operations[key] += 1
+
+        for key, count in operations.items():
             if count > self.MAX_OPERATIONS:
+                var_name, overrides = key
+                scope = f"{var_name}{overrides}" if overrides else var_name
                 results.append(self.create_result(
                     file=context,
-                    line=first_occurrence[var_name],
-                    message=f"Variable '{var_name}' has {count} append/prepend operations",
+                    line=first_occurrence[key],
+                    message=(
+                        f"'{scope}' has {count} append/prepend operations in "
+                        f"the same override scope"
+                    ),
                     hint="Consider simplifying with direct assignment",
                 ))
-        
+
         return results
