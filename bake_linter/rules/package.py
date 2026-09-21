@@ -86,6 +86,11 @@ class FilesNotMatchingInstallRule(BaseRule):
     # Any per-package FILES assignment, including FILES:${PN}-dev,
     # FILES:${PN}:append and the ptest variants
     FILES_PATTERN = re.compile(r'^FILES[_:]\$\{PN\}')
+    # A hard assignment to FILES:${PN}. In a .bbappend this replaces the base
+    # recipe's value, so the complete set is visible in the file being read.
+    # ':append', ':prepend', '+=' and the conditional operators only add to a
+    # value the base recipe owns, and that half is never in this file.
+    FILES_HARD_ASSIGN_PATTERN = re.compile(r'^FILES[_:]\$\{PN\}\s*:?=')
 
     @staticmethod
     def _normalise_path(token: str) -> str:
@@ -99,9 +104,27 @@ class FilesNotMatchingInstallRule(BaseRule):
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
+
+        # A .bbappend holds a fragment of a recipe. The FILES that covers its
+        # installs lives in the base recipe, which is not in this file and is
+        # not resolved here, so coverage cannot be judged from an append that
+        # only adds to FILES. Judging anyway reports every install to a
+        # non-standard path in every such bbappend, and the hint it prints
+        # ("add FILES:${PN} += ...") is actively wrong advice when the base
+        # recipe already covers the path - base-files, for one, sets
+        # FILES:${PN} = "/".
+        #
+        # A hard assignment is different: it replaces the base value, so the
+        # whole set is here and an uncovered install is a real finding.
+        if context.file_type == "bbappend" and not any(
+            self.FILES_HARD_ASSIGN_PATTERN.match(line.strip())
+            for line in context.lines
+        ):
+            return results
+
         in_do_install = False
         brace_depth = 0
-        
+
         # Collect non-standard install paths
         custom_installs = []
         files_entries = []
