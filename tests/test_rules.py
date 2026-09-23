@@ -600,10 +600,19 @@ ANOTHER_VAR = "value"
         assert len(blank_issues) >= 1
 
     def test_systemd_auto_enable_without_pn(self):
-        """Test that SYSTEMD_AUTO_ENABLE without :${PN} is flagged."""
+        """An unsuffixed SYSTEMD_AUTO_ENABLE is flagged only when ambiguous.
+
+        systemd.bbclass reads it through get_package_var, which falls back to
+        the unsuffixed name, so the bare form works and is the dominant idiom
+        upstream. It is ambiguous only when a recipe ships services in more
+        than one package. Scope detail lives in
+        tests/test_style008_systemd_auto_enable_scope.py.
+        """
         from bake_linter.rules.style import SystemdAutoEnableRule
         
         content = '''inherit systemd
+SYSTEMD_SERVICE:${PN} = "a.service"
+SYSTEMD_SERVICE:${PN}-extra = "b.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 '''
         context = FileContext(
@@ -618,7 +627,7 @@ SYSTEMD_AUTO_ENABLE = "enable"
         
         assert len(results) == 1
         assert results[0].rule_id == "STYLE008"
-        assert ":${PN}" in results[0].message
+        assert "every systemd package" in results[0].message
 
     def test_systemd_auto_enable_with_pn_ok(self):
         """Test that SYSTEMD_AUTO_ENABLE:${PN} passes."""

@@ -478,44 +478,79 @@ class PackageListFormatRule(BaseRule):
 
 class SystemdAutoEnableRule(BaseRule):
     """
-    Check that SYSTEMD_AUTO_ENABLE has the :${PN} suffix.
-    
-    The correct syntax is SYSTEMD_AUTO_ENABLE:${PN} = "enable"
-    not just SYSTEMD_AUTO_ENABLE = "enable".
+    Check that SYSTEMD_AUTO_ENABLE names its package when it is ambiguous.
+
+    An unsuffixed SYSTEMD_AUTO_ENABLE is NOT an error. systemd.bbclass reads it
+    through get_package_var, which falls back to the unsuffixed variable when no
+    per-package one is set:
+
+        def get_package_var(d, var, pkg):
+            val = (d.getVar('%s:%s' % (var, pkg)) or "").strip()
+            if val == "":
+                val = (d.getVar(var) or "").strip()
+            return val
+
+    So the bare form works, and it is the dominant idiom: poky itself uses it in
+    seven recipes against one that suffixes it.
+
+    It becomes ambiguous only when a recipe ships systemd services in more than
+    one package, because then one bare value silently applies to all of them,
+    which is rarely what the author meant. That is the only case this rule
+    reports.
     """
-    
+
     rule_id = "STYLE008"
     name = "SYSTEMD_AUTO_ENABLE Package Suffix"
-    description = "Check that SYSTEMD_AUTO_ENABLE uses :${PN} suffix"
+    description = "Check that SYSTEMD_AUTO_ENABLE names its package when the recipe has more than one systemd package"
     default_severity = Severity.WARNING
     groups = ["style", "systemd"]
-    hint = "Use SYSTEMD_AUTO_ENABLE:${PN} instead of SYSTEMD_AUTO_ENABLE"
+    hint = "Use SYSTEMD_AUTO_ENABLE:<pkg> when more than one package ships services"
 
-    # Pattern to match SYSTEMD_AUTO_ENABLE without :${PN}
-    PATTERN = re.compile(r'^SYSTEMD_AUTO_ENABLE\s*[+?]?=')
+    # Pattern to match SYSTEMD_AUTO_ENABLE without a package suffix
+    PATTERN = re.compile(r'^SYSTEMD_AUTO_ENABLE\s*[+?:]?=')
+
+    # The package a SYSTEMD_SERVICE assignment targets: the token right after
+    # the first colon, stopping before any further override (:append, :qemuarm).
+    SERVICE_PKG_PATTERN = re.compile(
+        r'^SYSTEMD_SERVICE:((?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z0-9_.+-])+)'
+    )
+
+    def _systemd_packages(self, context: FileContext) -> set:
+        """Distinct packages this recipe declares systemd services for."""
+        packages = set()
+        for line in context.lines:
+            match = self.SERVICE_PKG_PATTERN.match(line.strip())
+            if match:
+                packages.add(match.group(1))
+        return packages
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
+        # One package, or none declared here, means the bare form is
+        # unambiguous and correct. Reporting it would contradict both
+        # systemd.bbclass and upstream convention.
+        if len(self._systemd_packages(context)) < 2:
+            return results
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             # Skip comments
             if stripped.startswith("#"):
                 continue
-            
-            # Check for SYSTEMD_AUTO_ENABLE without package suffix
+
             if self.PATTERN.match(stripped):
-                # Make sure it's not already using :${PN} or similar
+                # Already package-qualified: nothing to say.
                 if not re.match(r'^SYSTEMD_AUTO_ENABLE:[^\s=]+', stripped):
                     results.append(self.create_result(
                         file=context,
                         line=line_num,
-                        message="SYSTEMD_AUTO_ENABLE should have :${PN} suffix",
+                        message="SYSTEMD_AUTO_ENABLE applies to every systemd package in this recipe",
                         context=stripped[:60],
-                        hint="Change to SYSTEMD_AUTO_ENABLE:${PN} = ...",
+                        hint="Name the package: SYSTEMD_AUTO_ENABLE:<pkg> = ...",
                     ))
-        
+
         return results
 
 
