@@ -422,7 +422,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
 | PORT001 | Hardcoded CPU Flags | Warning | Detect hardcoded -march/-mtune flags |
-| PORT002 | Absolute Host Paths | Error | Detect /usr/lib, /home, etc. in recipes |
+| PORT002 | Absolute Host Paths | Warning | Detect host paths in build flags, configure options and build tasks |
 | PORT003 | Non-Portable Sed | Info | Detect GNU-specific sed features |
 
 ### Documentation Rules

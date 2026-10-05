@@ -1,6 +1,6 @@
 # PORT002 - Absolute Host Paths
 
-**Severity:** error
+**Severity:** warning
 
 **Category:** portability
 
@@ -10,7 +10,13 @@
 
 ## Description
 
-Detects absolute host filesystem paths in recipes
+Detects absolute host paths where they affect the build:
+
+- compiler and linker search paths in flag variables (`CFLAGS`, `LDFLAGS`, ...), `EXTRA_OECONF`, `EXTRA_OECMAKE`, `EXTRA_OEMAKE`, `EXTRA_OEMESON`, `PACKAGECONFIG` and the `do_configure`/`do_compile` bodies: `-I/`, `-isystem /`, `-L/`, `-Wl,-rpath-link=/`, `PKG_CONFIG_PATH=/`;
+- autotools, CMake and Meson directory options set to `/usr`, `/opt`, `/home`, `/lib` or `/etc` in the same places (`--prefix=/usr/local`, `--with-foo-include=/usr/include`, `-DFOO_LIB_DIR=/usr/lib`);
+- `install`, `cp`, `mkdir` or `touch` in `do_install` writing to an absolute path that is not below `${D}`.
+
+Elsewhere an absolute path usually names a location on the target (`pkg_postinst` scripts, `ALTERNATIVE_*`, documentation variables) and is not reported. Sysroot relative paths (`-I=/usr/include`) and `sed` expressions that rewrite a host path out of a generated file are fine, and native recipes are skipped.
 
 ## Example of Bad Code
 
@@ -58,7 +64,7 @@ This rule can be configured in `.bake-linter.yaml`:
 rules:
   PORT002:
     enabled: true  # or false to disable
-    severity: error  # override severity (error, warning, info)
+    severity: warning  # override severity (error, warning, info)
     # options:
     #   key: value  # Add rule-specific options if any
 ```

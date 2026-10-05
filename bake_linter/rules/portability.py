@@ -82,34 +82,64 @@ class HardcodedCpuFlagsRule(BaseRule):
 
 class AbsoluteHostPathRule(BaseRule):
     """
-    Check for absolute host filesystem paths in recipes.
+    Check for absolute host filesystem paths where they affect the build.
     
-    Absolute paths like /usr/lib or /home/user break sysroot isolation
-    and cause cross-compilation failures.
+    A compiler or linker search path such as -I/usr/include or -L/usr/lib
+    makes the build pick up the build host's headers and libraries instead of
+    the sysroot's, and a configure, CMake or Meson path option set to
+    /usr/lib or /opt bypasses ${libdir}, ${prefix} and friends. An install
+    command in do_install that does not write below ${D} writes to the build
+    host.
     
-    Excludes documentation variables (SUMMARY, DESCRIPTION, etc.) which
-    may contain path-like strings as descriptive text.
+    Only build-affecting places are checked: the flag and configure option
+    variables, PACKAGECONFIG, and the do_configure, do_compile and do_install
+    bodies. Elsewhere an absolute path usually names a location on the target
+    (pkg_postinst scripts, ALTERNATIVE_*, documentation, sed expressions
+    rewriting installed files), which is not a host path at all. Sysroot
+    relative paths (-I=/usr/include) are fine.
     """
     
     rule_id = "PORT002"
     name = "Absolute Host Paths"
-    description = "Detects absolute host filesystem paths in recipes"
-    default_severity = Severity.ERROR
+    description = "Detects absolute host paths in build flags, configure options and build tasks"
+    default_severity = Severity.WARNING
     groups = ["portability", "cross-compile", "sysroot"]
     hint = "Use Yocto variables like ${STAGING_DIR_TARGET} instead"
 
-    # Host paths that should never appear in recipes
-    HOST_PATH_PATTERNS = [
-        re.compile(r'["\s=]/usr/include\b'),
-        re.compile(r'["\s=]/usr/lib(?:32|64)?\b'),
-        re.compile(r'["\s=]/usr/local\b'),
-        re.compile(r'["\s=]/lib(?:32|64)?\b(?!/firmware)'),  # Allow /lib/firmware
-        re.compile(r'["\s=]/opt\b'),
-        re.compile(r'["\s=]/home/\w+'),
-        re.compile(r'["\s=]/root/'),
-        re.compile(r'["\s=]/etc\b(?!/init\.d)'),  # Allow /etc/init.d in install
+    # Host locations a build-affecting path option should not name
+    HOST_DIRS = r'/(?:usr|opt|home|lib(?:32|64)?|etc)\b'
+
+    BUILD_PATH_PATTERNS = [
+        # Compiler and linker search paths (but not -I=/usr: sysroot relative)
+        re.compile(r'(?<![\w-])(?:-I|-isystem\s*|-L|-Wl,-rpath-link[=,])/'),
+        re.compile(r'\bPKG_CONFIG_PATH=/'),
+        # Autotools directory options
+        re.compile(r'(?<![\w-])--(?:prefix|exec-prefix|(?:bin|sbin|libexec|sysconf|'
+                   r'sharedstate|localstate|lib|include|oldinclude|data|dataroot|'
+                   r'info|locale|man|doc)dir)=' + HOST_DIRS),
+        re.compile(r'(?<![\w-])--with-[\w-]*(?:include|lib|dir|prefix)[\w-]*=' + HOST_DIRS),
+        # CMake and Meson directory options
+        re.compile(r'(?<![\w-])-D\w*(?:INCLUDE|LIB|PREFIX|DIR)\w*(?::\w+)?=' + HOST_DIRS,
+                   re.IGNORECASE),
     ]
     
+    # do_install writing outside ${D}: install/cp/mkdir/touch to /usr, /etc...
+    HOST_WRITE_PATTERN = re.compile(
+        r'^(?:install|cp|mkdir|touch)\s.*\s["\']?/(?:usr|etc|opt|lib|var|bin|sbin)\b')
+
+    # A sed command, or an -e expression continuing one
+    SED_PATTERN = re.compile(r'(?:^|[|;&\s])sed\s|^-e\s')
+
+    # Variables whose value goes to the compiler, linker or configure step
+    BUILD_VARIABLES = {
+        'CFLAGS', 'CPPFLAGS', 'CXXFLAGS', 'LDFLAGS',
+        'TARGET_CFLAGS', 'TARGET_CPPFLAGS', 'TARGET_CXXFLAGS', 'TARGET_LDFLAGS',
+        'EXTRA_OECONF', 'EXTRA_OECMAKE', 'EXTRA_OEMAKE', 'EXTRA_OEMESON',
+        'EXTRA_OESCONS', 'PACKAGECONFIG', 'PACKAGECONFIG_CONFARGS',
+    }
+    BUILD_TASKS = ('do_configure', 'do_compile')
+    INSTALL_TASK = 'do_install'
+
     # Contexts where host paths are acceptable
     ACCEPTABLE_CONTEXTS = [
         'TOOLCHAIN_HOST_TASK',
@@ -118,73 +148,43 @@ class AbsoluteHostPathRule(BaseRule):
         'native.bbclass',
         '-native',
     ]
-    
-    # Documentation/metadata variables (paths here are just text, not code)
-    DOCUMENTATION_VARS = {
-        'SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER',
-        'AUTHOR', 'MAINTAINER', 'LICENSE', 'SECTION',
-    }
-    
-    # Pattern to detect variable assignment
-    VAR_ASSIGN_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*[+?:]?=')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_task = False
-        is_native = '-native' in str(context.path)
+        if '-native' in str(context.path):
+            return results
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
-            if stripped.startswith("#"):
+            if not stripped or stripped.startswith("#"):
                 continue
-            
-            # Skip if this is clearly native recipe context
-            if is_native or any(ctx in stripped for ctx in self.ACCEPTABLE_CONTEXTS):
+            if any(ctx in stripped for ctx in self.ACCEPTABLE_CONTEXTS):
                 continue
-            
-            # Skip documentation/metadata variables (they contain text, not code)
-            var_match = self.VAR_ASSIGN_PATTERN.match(stripped)
-            if var_match:
-                var_name = var_match.group(1)
-                if var_name in self.DOCUMENTATION_VARS:
-                    continue
-            
-            # Track task context
-            if re.match(r'^(do_\w+|fakeroot\s+do_\w+)\s*\(\)\s*\{', stripped):
-                in_task = True
+            # A sed expression that rewrites a host path out of a Makefile
+            # (s:-I/usr/include:-I${STAGING_INCDIR}:) is the fix, not a use
+            if self.SED_PATTERN.search(stripped):
                 continue
-            
-            if in_task and stripped == '}':
-                in_task = False
+
+            owner = context.owner_base(line_num)
+            function = owner[len("FUNC:"):].split(':', 1)[0] if owner.startswith("FUNC:") else None
+
+            if owner in self.BUILD_VARIABLES or function in self.BUILD_TASKS:
+                found = any(p.search(stripped) for p in self.BUILD_PATH_PATTERNS)
+            elif function == self.INSTALL_TASK:
+                found = ('${D}' not in stripped
+                         and bool(self.HOST_WRITE_PATTERN.search(stripped)))
+            else:
                 continue
-            
-            # Skip lines with ${D} or ${STAGING_*} - these are target filesystem paths
-            # This handles cases like: sed ... ${D}/usr/lib/... or install ... ${D}/etc/...
-            if '${D}' in stripped or '${STAGING_' in stripped:
-                continue
-            
-            # Skip lines that are primarily sed/echo with quoted runtime paths
-            # (runtime paths inside sed substitution strings are for target, not host)
-            if re.match(r'^\s*(sed|echo)\s+-', stripped):
-                continue
-            
-            # Check for host paths
-            for pattern in self.HOST_PATH_PATTERNS:
-                match = pattern.search(stripped)
-                if match:
-                    # Skip if referencing ${D}/usr, ${STAGING_DIR}, etc.
-                    if '${' in stripped[:stripped.find(match.group())+1]:
-                        continue
-                    
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="Absolute host path may break cross-compilation",
-                        context=stripped[:60],
-                        hint="Use ${D}, ${STAGING_DIR_TARGET}, etc.",
-                    ))
-                    break
+
+            if found:
+                results.append(self.create_result(
+                    file=context,
+                    line=line_num,
+                    message="Absolute host path may break cross-compilation",
+                    context=stripped[:60],
+                    hint="Use ${D}, ${STAGING_DIR_TARGET}, ${libdir}, etc.",
+                ))
         
         return results
 

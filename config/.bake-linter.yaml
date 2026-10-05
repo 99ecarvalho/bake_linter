@@ -323,7 +323,7 @@ rules:
 
   PORT002:
     enabled: true
-    severity: error
+    severity: warning
     # description: Absolute Host Paths
 
   PORT003:

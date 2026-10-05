@@ -4689,7 +4689,7 @@ class TestPortabilityRules:
         
         assert len(results) == 1
         assert results[0].rule_id == "PORT002"
-        assert results[0].severity == Severity.ERROR
+        assert results[0].severity == Severity.WARNING
 
     def test_yocto_variable_path_ok(self):
         """Test that ${D}${libdir} passes."""
