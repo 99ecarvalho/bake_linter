@@ -107,6 +107,59 @@ class FilesNotMatchingInstallRule(BaseRule):
         """
         return '/' + token.strip().strip('"\'').strip('\\').lstrip('/')
 
+    GLOB_CHARS = re.compile(r'[*?\[]')
+
+    @staticmethod
+    def _glob_regex(pattern: str) -> "re.Pattern":
+        """Translate a FILES glob into a regex. As in glob.glob, which
+        package.bbclass uses to expand FILES, '*' and '?' do not cross '/'."""
+        out, i = [], 0
+        while i < len(pattern):
+            char = pattern[i]
+            if char == '*':
+                out.append('[^/]*')
+            elif char == '?':
+                out.append('[^/]')
+            elif char == '[' and ']' in pattern[i + 1:]:
+                end = pattern.index(']', i + 1)
+                out.append('[' + pattern[i + 1:end].replace('\\', '\\\\') + ']')
+                i = end
+            else:
+                out.append(re.escape(char))
+            i += 1
+        return re.compile(''.join(out) + r'\Z')
+
+    @classmethod
+    def _covers(cls, entry: str, installed: str) -> bool:
+        """Whether the FILES *entry* packages the *installed* path."""
+        installed = installed.rstrip('/') or '/'
+        if not cls.GLOB_CHARS.search(entry):
+            entry = entry.rstrip('/') or '/'
+            # The entry names the path, or a directory above it (a packaged
+            # directory brings its contents)
+            if installed == entry or installed.startswith(entry.rstrip('/') + '/'):
+                return True
+            # The entry names something INSIDE the installed directory.
+            # Listing a directory's contents rather than the bare directory
+            # is the correct packaging pattern (packaging the directory
+            # itself would swallow the -dbg/-dev split), so an `install -d`
+            # whose contents are packaged is covered.
+            return entry.startswith(installed + '/')
+
+        # A glob covers the path when it matches the path or a directory
+        # above it.
+        regex = cls._glob_regex(entry.rstrip('/'))
+        parts = installed.split('/')
+        for depth in range(2, len(parts) + 1):
+            if regex.match('/'.join(parts[:depth])):
+                return True
+        # Or when it selects contents of the installed directory: its literal
+        # directory prefix lies inside the path (/opt/foo/*.so for an
+        # `install -d ${D}/opt/foo`).
+        literal = entry[:cls.GLOB_CHARS.search(entry).start()]
+        literal_dir = literal.rsplit('/', 1)[0]
+        return literal_dir == installed or literal_dir.startswith(installed + '/')
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
 
@@ -182,37 +235,22 @@ class FilesNotMatchingInstallRule(BaseRule):
                         continue
 
 
-                    # Check if standard path
-                    is_standard = False
-                    for std_path in self.STANDARD_PATHS:
-                        if std_path in line or install_path.startswith(std_path.replace('${', '').replace('}', '')):
-                            is_standard = True
-                            break
-                    
+                    # Standard locations are packaged by the default FILES.
+                    # Compare the path's prefix: a standard directory name
+                    # deeper in the path (/opt/foo/lib/x) does not count.
+                    location = install_path.strip('"\'').strip('/') + '/'
+                    is_standard = any(
+                        location.startswith(std_path.strip('/') + '/')
+                        for std_path in self.STANDARD_PATHS
+                    )
+
                     if not is_standard:
                         custom_installs.append((line_num, install_path))
         
         # Check custom installs against FILES
         for line_num, install_path in custom_installs:
             installed = self._normalise_path(install_path)
-            path_covered = False
-            for entry in files_entries:
-                # The entry names the path itself, or a glob over it
-                if entry == installed or entry.rstrip('/*') == installed:
-                    path_covered = True
-                    break
-                # The entry covers a parent of the path
-                if installed.startswith(entry.rstrip('/*') + '/'):
-                    path_covered = True
-                    break
-                # The entry names something INSIDE the installed directory.
-                # Listing a directory's contents rather than the bare
-                # directory is the correct packaging pattern (packaging the
-                # directory itself would swallow the -dbg/-dev split), so an
-                # `install -d` whose contents are packaged is covered.
-                if entry.startswith(installed.rstrip('/') + '/'):
-                    path_covered = True
-                    break
+            path_covered = any(self._covers(entry, installed) for entry in files_entries)
 
             if not path_covered:
                 results.append(self.create_result(
