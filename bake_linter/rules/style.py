@@ -15,6 +15,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from typing import List
 
@@ -793,6 +794,23 @@ class SystemdRedundantFilesRule(BaseRule):
         '/etc/systemd/system',
     ]
 
+    @staticmethod
+    def _covered_by_files(install_path: str, service_name: str, tokens: List[str]) -> bool:
+        """Whether a FILES glob packages the service installed at
+        *install_path* (a directory, or the file itself). FILES entries are
+        globs, and a matched directory is packaged with its contents."""
+        # ${D}/${datadir}/x is ${D}${datadir}/x: the slash is redundant
+        path = re.sub(r'^/+(?=\$\{)', '', install_path).rstrip('/')
+        candidates = {path, f"{path}/{service_name.rsplit('/', 1)[-1]}"}
+        for token in tokens:
+            token = token.rstrip('/')
+            for candidate in candidates:
+                if fnmatch.fnmatchcase(candidate, token):
+                    return True
+                if candidate.startswith(token + '/'):
+                    return True
+        return False
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
@@ -844,12 +862,21 @@ class SystemdRedundantFilesRule(BaseRule):
             # Collect FILES entries
             if re.match(r'FILES[_:]\$\{PN\}', stripped):
                 files_entries.append(stripped)
-        
+
+        # FILES values as package.bbclass reads them: whole logical
+        # assignments (continuation lines included), one glob per token
+        files_tokens = []
+        for assignment in context.structure.assignments:
+            if assignment.base == "FILES" or assignment.name.startswith("FILES_${PN}"):
+                files_tokens.extend(assignment.value.split())
+
         # Check if service installs are covered by FILES
         for line_num, service_name, install_path in service_installs:
             # Check if this path is covered by any FILES entry
-            path_covered = False
+            path_covered = self._covered_by_files(install_path, service_name, files_tokens)
             for files_entry in files_entries:
+                if path_covered:
+                    break
                 # Check if the install path or service name appears in FILES
                 if install_path in files_entry or service_name in files_entry:
                     path_covered = True
