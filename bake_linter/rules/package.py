@@ -368,13 +368,24 @@ _STANDARD_SUFFIXES = ['', '-dev', '-dbg', '-doc', '-staticdev', '-locale',
 # Classes that auto-create packages: class name -> package suffix
 _CLASS_PACKAGES = {
     'lib_package': '-bin',
+    'bash-completion': '-bash-completion',
+    'gnome-help': '-help',
+    'breakpad': '-breakpad',
 }
 
-# PACKAGES built from Python: the list is not knowable statically
+# PACKAGES built from Python: the list is not knowable statically.
+# do_split_packages() adds every package it splits off to PACKAGES, and
+# the functions PACKAGESPLITFUNCS names run to do the same. A
+# populate_packages:prepend that only sets RRECOMMENDS leaves it alone.
 _PYTHON_PACKAGES_PATTERN = re.compile(
-    r"""d\.(?:setVar|appendVar|prependVar)\(\s*['"]PACKAGES['"]""")
+    r"""d\.(?:setVar|appendVar|prependVar)\(\s*['"]PACKAGES['"]"""
+    r'|do_split_packages|PACKAGESPLITFUNCS')
 _VARIABLE_REF_PATTERN = re.compile(r'\$\{([\w-]+)\}')
+# A reference left after expansion, other than an inline ${@...} expression
+_UNEXPANDED_PATTERN = re.compile(r'\$\{(?!@)')
 _NAME_PATTERN = re.compile(r'[\w${}.+-]+')
+# Overrides that operate on a variable rather than name a package
+_OPERATION_OVERRIDES = {'append', 'prepend', 'remove'}
 
 
 def _base_pn(pn: str) -> str:
@@ -467,11 +478,23 @@ def _declared_packages(context: FileContext) -> Optional[_PackageList]:
         if a.flag:
             continue
         if a.base in ('PACKAGES', 'PACKAGE_BEFORE_PN'):
+            value = package_list.expand(a.value)
+            if _UNEXPANDED_PATTERN.search(value):
+                # Names a package through a variable set elsewhere (a
+                # class, the distro): the list is not knowable here
+                return None
             # Names inside an inline expression count too:
             # ${@bb.utils.contains('PACKAGECONFIG', 'x', '${PN}-x', '', d)}
-            packages.update(_NAME_PATTERN.findall(package_list.expand(a.value)))
+            packages.update(_NAME_PATTERN.findall(value))
         elif a.base == 'PACKAGES_DYNAMIC':
             package_list.dynamic.extend(package_list.expand(a.value).split())
+
+    # packagegroup.bbclass adds -dbg, -dev and (with the ptest distro
+    # feature) -ptest flavours of every package in PACKAGES
+    if ('packagegroup' in context.inherits
+            and variables.get('PACKAGEGROUP_DISABLE_COMPLEMENTARY') != '1'):
+        for package in list(packages):
+            packages.update(package + s for s in ('-dbg', '-dev', '-ptest'))
 
     # BBCLASSEXTEND variants rename every package: foo-dev becomes
     # foo-native-dev or nativesdk-foo-dev
@@ -491,15 +514,20 @@ def _declared_packages(context: FileContext) -> Optional[_PackageList]:
 class FilesPackagesConsistencyRule(BaseRule):
     """
     Check that FILES entries correspond to packages in PACKAGES.
-    
+
     Each FILES:${PN}-foo must have corresponding ${PN}-foo in PACKAGES.
-    
-    IMPORTANT: This rule recognizes multiple ways to add packages:
+    BitBake ignores FILES of a package that is never created, so the files
+    it names end up in another package or are not shipped at all.
+
+    The package list is read the way BitBake builds it (see PKG005):
     - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
     - PACKAGE_BEFORE_PN += "..." (auto-adds to PACKAGES before ${PN})
-    - PACKAGES_DYNAMIC = "..." (dynamic package generation)
+    - PACKAGES_DYNAMIC = "..." (regular expressions)
+    - Inherited classes that auto-create packages (ptest, lib_package, ...)
+    - Values held in local variables, ${PN} or the literal recipe name
+    - Required or included files
     """
-    
+
     rule_id = "PKG004"
     name = "FILES and PACKAGES Consistency"
     description = "Verifies FILES entries match packages defined in PACKAGES"
@@ -507,90 +535,34 @@ class FilesPackagesConsistencyRule(BaseRule):
     groups = ["packaging", "consistency"]
     hint = "Add missing package to PACKAGES or remove orphaned FILES"
 
-    FILES_PATTERN = re.compile(r'^FILES[_:]([\w${}-]+)')
-    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
-    PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
-    PACKAGES_DYNAMIC_PATTERN = re.compile(r'^PACKAGES_DYNAMIC\s*[+=:]+')
-    
-    # Standard auto-generated packages
-    STANDARD_PACKAGES = [
-        '${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc', '${PN}-staticdev',
-        '${PN}-locale', '${PN}-src', '${PN}-lic',
-    ]
-
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        files_packages: List[tuple] = []  # (line_num, package_name)
-        packages_list: List[str] = []
-        dynamic_patterns: List[str] = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        package_list = _declared_packages(context)
+        if package_list is None:
+            return results
+
+        # FILES:<package>. FILES_SOLIBSDEV and the like are variables of
+        # their own, not FILES of a package.
+        for a in context.structure.assignments:
+            if a.base != 'FILES' or not a.overrides:
                 continue
-            
-            # Collect FILES entries
-            match = self.FILES_PATTERN.match(stripped)
-            if match:
-                pkg_name = match.group(1)
-                files_packages.append((line_num, pkg_name))
-            
-            # Collect PACKAGES entries (=, +=, =+, :=)
-            if self.PACKAGES_PATTERN.match(stripped):
-                # Extract package names
-                value = stripped.split('=', 1)[1] if '=' in stripped else ''
-                packages_list.extend(re.findall(r'[\w${}-]+', value))
-            
-            # Collect PACKAGE_BEFORE_PN entries (auto-adds to PACKAGES)
-            if self.PACKAGE_BEFORE_PN_PATTERN.match(stripped):
-                value = stripped.split('=', 1)[1] if '=' in stripped else ''
-                packages_list.extend(re.findall(r'[\w${}-]+', value))
-            
-            # Collect PACKAGES_DYNAMIC patterns
-            if self.PACKAGES_DYNAMIC_PATTERN.match(stripped):
-                value = stripped.split('=', 1)[1] if '=' in stripped else ''
-                # Extract patterns (may be regex-like)
-                dynamic_patterns.extend(re.findall(r'[\w${}\-.*^]+', value))
-        
-        # Check each FILES entry
-        for line_num, pkg_name in files_packages:
-            # Skip standard packages
-            if pkg_name in self.STANDARD_PACKAGES:
+            package = a.overrides[0]
+            if package in _OPERATION_OVERRIDES:
+                continue  # FILES:append, the variable itself
+            name = package_list.expand(package)
+            if '${' in name:
+                continue  # Names a variable this file does not set
+            if package_list.declares(name):
                 continue
-            
-            # Check if package is in PACKAGES or PACKAGE_BEFORE_PN
-            if pkg_name in packages_list:
-                continue
-            
-            # Check if any pattern contains package name
-            if any(pkg_name in p for p in packages_list):
-                continue
-            
-            # Check if matched by PACKAGES_DYNAMIC pattern
-            is_dynamic = False
-            for dyn_pattern in dynamic_patterns:
-                # Convert BitBake dynamic pattern to regex
-                # e.g., "${PN}-locale-.*" or "lib.*"
-                regex_pattern = dyn_pattern.replace('${PN}', r'.*').replace('.', r'\.').replace('*', '.*')
-                try:
-                    if re.match(regex_pattern, pkg_name):
-                        is_dynamic = True
-                        break
-                except re.error:
-                    pass  # Invalid regex, skip
-            
-            if is_dynamic:
-                continue
-            
+
             results.append(self.create_result(
                 file=context,
-                line=line_num,
-                message=f"FILES:{pkg_name} defined but '{pkg_name}' not in PACKAGES",
-                hint=f'Add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
+                line=a.line,
+                message=f"FILES:{package} defined but '{package}' not in PACKAGES",
+                hint=f'Add: PACKAGES += "{package}" or PACKAGE_BEFORE_PN += "{package}"',
             ))
-        
+
         return results
 
 
