@@ -140,13 +140,33 @@ class SrcrevUnpinnedRule(BaseRule):
     # Pattern for recipe names that are expected to track HEAD
     DEV_RECIPE_PATTERN = re.compile(r'[-_](git|dev|snapshot|trunk|tip)\.bb$')
 
+    # Revisions of the other fetchers that use SRCREV: an svn revision is a
+    # number, an hg changeset id may be abbreviated (12 hex digits or more)
+    SVN_URI = re.compile(r'\bsvn://')
+    HG_URI = re.compile(r'\bhg://')
+    SVN_REVISION = re.compile(r'^\d+$')
+    HG_REVISION = re.compile(r'^[a-f0-9]{12,40}$')
+
+    def _fixed_revision_patterns(self, context: FileContext) -> List[re.Pattern]:
+        """Patterns of a pinned revision for the fetchers SRC_URI uses."""
+        src_uri = " ".join(
+            a.value for a in context.structure.assignments if a.base == "SRC_URI")
+        patterns = [self.SHA_PATTERN]
+        if self.SVN_URI.search(src_uri):
+            patterns.append(self.SVN_REVISION)
+        if self.HG_URI.search(src_uri):
+            patterns.append(self.HG_REVISION)
+        return patterns
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         # Skip development recipes that are expected to use AUTOREV
         if self.DEV_RECIPE_PATTERN.search(str(context.path)):
             return results
-        
+
+        fixed_revisions = self._fixed_revision_patterns(context)
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
@@ -174,7 +194,8 @@ class SrcrevUnpinnedRule(BaseRule):
                         hint="Pin to specific commit: SRCREV = \"<40-char-sha1>\"",
                     ))
                 # Check if it looks like a branch name (not a SHA)
-                elif value and not self.SHA_PATTERN.match(value) and not value.startswith('${'):
+                elif (value and not any(p.match(value) for p in fixed_revisions)
+                      and not value.startswith('${')):
                     # Could be a branch name
                     if not any(c in value for c in ['$', '{', '}']):
                         results.append(self.create_result(
