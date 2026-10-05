@@ -17,7 +17,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 from __future__ import annotations
 
 import re
-from typing import List, Set, Tuple
+from typing import Dict, List
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
@@ -38,52 +38,51 @@ class SrcUriProtocolConsistencyRule(BaseRule):
     groups = ["source", "consistency"]
     hint = "Standardize on secure protocols (HTTPS) for consistency"
 
-    GIT_PROTOCOL_PATTERN = re.compile(r'git://[^;]+;[^"\']*protocol=(\w+)')
-    HTTP_PATTERN = re.compile(r'https?://[^\s;]+')
+    URI_PATTERN = re.compile(r'^(?P<scheme>[a-z][a-z0-9+.-]*)://', re.I)
+    GIT_PROTOCOL_PARAM = re.compile(r';protocol=([^;]+)')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        git_protocols: Set[str] = set()
-        http_protocols: Set[str] = set()
-        src_uri_lines: List[Tuple[int, str]] = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        # Only SRC_URI is fetched; URLs in HOMEPAGE, MIRRORS etc. say nothing
+        # about how sources are fetched. Each URI is classified on its own:
+        # a git fetch by its ;protocol= (the plaintext git daemon when
+        # missing, as in fetch2/git.py), an http(s) fetch by its scheme.
+        git_protocols: Dict[str, int] = {}
+        http_protocols: Dict[str, int] = {}
+
+        for assignment in context.structure.assignments:
+            if assignment.base != "SRC_URI" or assignment.flag is not None:
                 continue
-            
-            if 'SRC_URI' in stripped or 'git://' in stripped or 'http' in stripped.lower():
-                src_uri_lines.append((line_num, stripped))
-                
-                # Check git protocols
-                git_matches = self.GIT_PROTOCOL_PATTERN.findall(stripped)
-                git_protocols.update(git_matches)
-                
-                # Check HTTP vs HTTPS
-                if 'http://' in stripped.lower():
-                    http_protocols.add('http')
-                if 'https://' in stripped.lower():
-                    http_protocols.add('https')
-        
+            for token in assignment.value.split():
+                match = self.URI_PATTERN.match(token)
+                if not match:
+                    continue
+                scheme = match.group("scheme").lower()
+                if scheme in ("git", "gitsm"):
+                    protocol = self.GIT_PROTOCOL_PARAM.search(token)
+                    git_protocols.setdefault(
+                        protocol.group(1) if protocol else "git", assignment.line)
+                elif scheme in ("http", "https"):
+                    http_protocols.setdefault(scheme, assignment.line)
+
         # Flag mixed protocols
         if len(git_protocols) > 1:
             results.append(self.create_result(
                 file=context,
-                line=src_uri_lines[0][0] if src_uri_lines else 1,
+                line=min(git_protocols.values()),
                 message=f"Mixed git protocols used: {', '.join(sorted(git_protocols))}",
                 hint="Standardize on protocol=https for all git sources",
             ))
-        
+
         if 'http' in http_protocols and 'https' in http_protocols:
             results.append(self.create_result(
                 file=context,
-                line=src_uri_lines[0][0] if src_uri_lines else 1,
+                line=http_protocols['http'],
                 message="Mixed HTTP and HTTPS protocols in SRC_URI",
                 hint="Use HTTPS for all HTTP sources",
             ))
-        
+
         return results
 
 
