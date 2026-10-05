@@ -554,14 +554,18 @@ class TestStyleRules:
         assert results == []
 
     def test_empty_assignment_without_override_still_flagged(self):
-        """An unconditional blank has no such justification."""
-        lines = ['SOME_THING = ""\n']
+        """An unconditional blank of a value the recipe set has no such
+        justification."""
+        lines = ['SOME_THING = "x"\n', 'SOME_THING = ""\n']
         context = FileContext(
             path=Path("test_1.0.bb"),
             content="".join(lines),
             lines=lines,
             variables={
-                "SOME_THING": [VariableAssignment("SOME_THING", "", 1)]
+                "SOME_THING": [
+                    VariableAssignment("SOME_THING", "x", 1),
+                    VariableAssignment("SOME_THING", "", 2),
+                ]
             },
         )
 

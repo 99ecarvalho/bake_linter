@@ -328,6 +328,19 @@ class EmptyVariableRule(BaseRule):
         name_part = stripped.split('=', 1)[0]
         return ':' in name_part
 
+    @staticmethod
+    def _set_before(context: FileContext, var_name: str, line_num: int) -> bool:
+        """Whether *var_name* is assigned in this file before *line_num*, or
+        in a file it includes (that BitBake could resolve here)."""
+        if any(a.base == var_name and a.line < line_num
+               for a in context.structure.assignments):
+            return True
+        return any(
+            a.base == var_name
+            for included in context.included_files or []
+            for a in included.structure.assignments
+        )
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
 
@@ -343,6 +356,14 @@ class EmptyVariableRule(BaseRule):
                     # VAR:qemuarm64 = "" drops it there and nowhere else, a
                     # common idiom in oe-core and meta-openembedded.
                     if self._is_override_scoped(context, assignment.line):
+                        continue
+
+                    # Clearing a variable this recipe does not set itself
+                    # (PARALLEL_MAKE, FILES_SOLIBSDEV, DEV_PKG_DEPENDENCY:
+                    # bitbake.conf or class defaults), or declaring one
+                    # empty before appending to it, is deliberate. Only a
+                    # value the recipe set and then blanks is suspicious.
+                    if not self._set_before(context, var_name, assignment.line):
                         continue
 
                     results.append(self.create_result(

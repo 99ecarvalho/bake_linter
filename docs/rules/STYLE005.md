@@ -15,9 +15,17 @@ Flag empty variable assignments
 ## Example of Bad Code
 
 ```bitbake
+EXTRA_OECONF = "--enable-foo"
+...
 EXTRA_OECONF = ""
-# No comment or intent; value is empty
+# No comment or intent; the value set above is thrown away
 ```
+
+Only a variable this recipe (or a file it requires or includes) sets and
+then blanks is reported. Clearing a bitbake.conf or class default
+(`PARALLEL_MAKE = ""`, `FILES_SOLIBSDEV = ""`), declaring a variable empty
+before appending to it, and blanking under an override
+(`VAR:qemuarm64 = ""`) are deliberate and not reported.
 
 ## Why This Is Bad
 
