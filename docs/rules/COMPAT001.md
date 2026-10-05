@@ -1,4 +1,4 @@
-# COMPAT001 - Deprecated COMPATIBLE_HOST Syntax
+# COMPAT001 - Ungrouped COMPATIBLE_HOST Alternation
 
 **Severity:** warning
 
@@ -10,25 +10,30 @@
 
 ## Description
 
-Detects deprecated or improper COMPATIBLE_HOST patterns
+Detects a top-level `|` in COMPATIBLE_HOST that splits the whole pattern
 
 ## Example of Bad Code
 
 ```bitbake
-COMPATIBLE_HOST = "linux|cygwin"
+COMPATIBLE_HOST = "x86_64|aarch64-linux"
 ```
 
 ## Why This Is Bad
 
-The pipe syntax `|` is deprecated. Modern Yocto uses regular expressions in `COMPATIBLE_HOST` and `INCOMPATIBLE_HOST` patterns.
+BitBake matches `COMPATIBLE_HOST` against the host triplet with `re.match`.
+A `|` outside any group splits the whole regex, so the value above means
+"starts with `x86_64`, or starts with `aarch64-linux`", not
+"`x86_64` or `aarch64`, followed by `-linux`".
 
 ## How to Fix It
 
 ```bitbake
-COMPATIBLE_HOST = "(linux|cygwin).*"
+COMPATIBLE_HOST = "(x86_64|aarch64).*-linux"
 ```
 
-Use regex patterns instead of pipe syntax. Ensure patterns are anchored or appropriately constructed for the target platform triplet.
+Group the alternatives. A top-level `|` is fine when every branch is a
+complete triplet pattern, such as `"x86_64.*-linux|aarch64.*-linux"`. A
+leading `^` is not needed: `re.match` is already anchored at the start.
 
 ## Inline Suppression
 

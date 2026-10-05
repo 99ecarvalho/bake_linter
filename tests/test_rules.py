@@ -3429,6 +3429,49 @@ COMPATIBLE_HOST = '(x86_64.*|i.86.*|arm.*|aarch64.*)-(linux.*|freebsd.*)'
 
         assert results == []
 
+    def test_ungrouped_compatible_host_alternation_is_flagged(self):
+        """A top-level | splits the whole regex: "x86_64|aarch64-linux" means
+        x86_64-anything or aarch64-linux, not (x86_64|aarch64)-linux."""
+        from bake_linter.rules.compatibility import DeprecatedCompatibleHostRule
+
+        content = '''COMPATIBLE_HOST = "x86_64|aarch64-linux"
+COMPATIBLE_HOST = "linux|cygwin"
+COMPATIBLE_HOST:libc-musl = "x86_64.*|aarch64.*-linux"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        results = DeprecatedCompatibleHostRule().check(context)
+
+        assert [r.line for r in results] == [1, 2, 3]
+        assert all(r.rule_id == "COMPAT001" for r in results)
+
+    def test_grouped_or_complete_compatible_host_alternation_ok(self):
+        """Alternatives inside a group, inside a character class, or where
+        every branch is a complete triplet pattern are fine, as are
+        :append/:remove fragments."""
+        from bake_linter.rules.compatibility import DeprecatedCompatibleHostRule
+
+        content = '''COMPATIBLE_HOST = "(x86_64|aarch64).*-linux"
+COMPATIBLE_HOST = "x86_64.*-linux|aarch64.*-linux"
+COMPATIBLE_HOST = "[a|b]86.*-linux"
+COMPATIBLE_HOST:append = "|riscv64"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        results = DeprecatedCompatibleHostRule().check(context)
+
+        assert results == []
+
     def test_unjustified_machine_arch(self):
         """Test that MACHINE_ARCH without justification is flagged."""
         from bake_linter.rules.compatibility import UnjustifiedMachineArchRule

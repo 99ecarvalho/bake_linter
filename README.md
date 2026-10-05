@@ -385,7 +385,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 ### Compatibility Rules
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
-| COMPAT001 | Deprecated COMPATIBLE_HOST | Warning | Detect improper COMPATIBLE_HOST patterns |
+| COMPAT001 | Ungrouped COMPATIBLE_HOST Alternation | Warning | Detect a top-level alternation that splits the whole COMPATIBLE_HOST pattern |
 | COMPAT002 | Unjustified MACHINE_ARCH | Warning | Detect MACHINE_ARCH without justification |
 
 ### Supply Chain/Reproducibility Rules

@@ -67,7 +67,7 @@ rules:
   COMPAT001:
     enabled: true
     severity: warning
-    # description: Deprecated COMPATIBLE_HOST Syntax
+    # description: Ungrouped COMPATIBLE_HOST Alternation
 
   COMPAT002:
     enabled: true

@@ -24,38 +24,88 @@ from bake_linter.rules.base import BaseRule
 
 class DeprecatedCompatibleHostRule(BaseRule):
     """
-    Check for improper COMPATIBLE_HOST patterns.
+    Check for a top-level alternation in COMPATIBLE_HOST.
 
-    This rule used to require a leading ``^`` anchor. That was wrong on two
-    counts, so it no longer fires:
+    BitBake matches the value against the host triplet with ``re.match``
+    (``meta/classes-global/base.bbclass``: ``if not re.match(need_host,
+    this_host)``). A ``|`` outside any group splits the *whole* regex, so
+    ``"x86_64|aarch64-linux"`` means "starts with x86_64, or starts with
+    aarch64-linux", not "(x86_64 or aarch64)-linux". The intended form groups
+    the alternatives: ``"(x86_64|aarch64).*-linux"``.
 
-    - BitBake matches the value with ``re.match``
-      (``meta/classes-global/base.bbclass``: ``if not re.match(need_host,
-      this_host)``), which is already anchored at the start. A leading ``^``
-      changes nothing.
-    - The vendored poky tree writes unanchored values throughout:
-      ``kexec-tools_2.0.28.bb``
-      (``'(x86_64.*|i.86.*|arm.*|aarch64.*|powerpc.*|mips.*)-(linux|freebsd.*)'``),
-      ``igt-gpu-tools_git.bb``, ``systemtap_git.inc``, ``grub2.inc``.
+    A top-level alternation is accepted when every branch is a complete
+    triplet pattern (contains a ``-``), e.g. ``"x86_64.*-linux|aarch64.*-linux"``.
 
-    An unparenthesised alternation would be a genuine defect worth flagging
-    (``"x86_64|aarch64-linux"`` does not mean what it looks like), but the
-    vendored trees contain no instance of it, so nothing is implemented for it
-    here rather than guessing at a pattern. Do not restore the ``^``
-    requirement.
+    A leading ``^`` is not required: ``re.match`` is already anchored at the
+    start, and poky writes unanchored values throughout (kexec-tools,
+    igt-gpu-tools, systemtap, grub2).
     """
 
     rule_id = "COMPAT001"
-    name = "Deprecated COMPATIBLE_HOST Syntax"
-    description = "Detects deprecated or improper COMPATIBLE_HOST patterns"
+    name = "Ungrouped COMPATIBLE_HOST Alternation"
+    description = "Detects a top-level | in COMPATIBLE_HOST that splits the whole pattern"
     default_severity = Severity.WARNING
-    groups = ["compatibility", "deprecated"]
-    hint = "Use a grouped regex, e.g. (x86_64.*|aarch64.*)-linux"
+    groups = ["compatibility"]
+    hint = "Group the alternatives, e.g. (x86_64|aarch64).*-linux"
 
-    COMPAT_HOST_PATTERN = re.compile(r'^COMPATIBLE_HOST\s*=\s*["\']([^"\']+)["\']')
+    # Assignments that set the whole value; :append/:prepend/:remove fragments
+    # are not complete patterns and are skipped.
+    COMPAT_HOST_PATTERN = re.compile(
+        r'^COMPATIBLE_HOST(?::(?!append\b|prepend\b|remove\b)[\w${}+-]+)*'
+        r'\s*(?:\?\?|\?|:)?=\s*(["\'])(.*?)\1'
+    )
+
+    @staticmethod
+    def _top_level_branches(pattern: str) -> List[str]:
+        """Split *pattern* on ``|`` outside groups, classes and escapes."""
+        branches, current = [], []
+        depth, in_class, escaped = 0, False, False
+        for char in pattern:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif in_class:
+                in_class = char != "]"
+            elif char == "[":
+                in_class = True
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth = max(depth - 1, 0)
+            elif char == "|" and depth == 0:
+                branches.append("".join(current))
+                current = []
+                continue
+            current.append(char)
+        branches.append("".join(current))
+        return branches
 
     def check(self, context: FileContext) -> List[LintResult]:
-        return []
+        results = []
+
+        for line_num, line in enumerate(context.lines, start=1):
+            stripped = line.strip()
+            match = self.COMPAT_HOST_PATTERN.match(stripped)
+            if not match:
+                continue
+
+            branches = self._top_level_branches(match.group(2))
+            if len(branches) < 2 or all("-" in b for b in branches):
+                continue
+
+            results.append(self.create_result(
+                file=context,
+                line=line_num,
+                message=(
+                    f"COMPATIBLE_HOST \"{match.group(2)}\" has a top-level '|', "
+                    "which splits the whole pattern instead of one part of it"
+                ),
+                context=stripped[:80],
+                hint=self.hint,
+            ))
+
+        return results
 
 
 class UnjustifiedMachineArchRule(BaseRule):
