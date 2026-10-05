@@ -23,15 +23,17 @@ AUTHOR = "Platform Team <platform@example.com>"
 
 # Temporary during migration from old syntax to new syntax
 # Will be fixed in sprint 2024-Q2 as part of JIRA-1234
-# nolint: DEPRECATED001
+# The rest of the file already uses the new syntax, so the mix is
+# reported too (SYNTAX005)
+# nolint: DEPRECATED001, SYNTAX005
 PACKAGECONFIG_append = " extra-features"
 
 # This is a valid use of /usr/local for optional add-on tools
 # that are not part of the core system. Discussed with architect.
-# nolint: INSTALL004
+# A suppression covers one line, so each install line carries its own.
 do_install:append() {
-    install -d ${D}/usr/local/example-addons
-    install -m 0755 ${WORKDIR}/addon.sh ${D}/usr/local/example-addons/
+    install -d ${D}/usr/local/example-addons  # nolint: INSTALL004
+    install -m 0755 ${WORKDIR}/addon.sh ${D}/usr/local/example-addons/  # nolint: INSTALL004
 }
 
 # Git repository uses 'trunk' instead of 'master' - can't change upstream
