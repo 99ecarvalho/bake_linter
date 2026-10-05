@@ -77,12 +77,12 @@ bake-linter --enable LICENSE001,MANDATORY001 --disable STYLE001 .
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success - no issues found |
-| 1 | Errors found |
-| 2 | Warnings found (no errors) |
+| 0 | Success - no issues found (or info only) |
+| 1 | Warnings found (no errors) |
+| 2 | Errors found |
 | 3 | Runtime/configuration error |
 
-Use `--warnings-as-errors` to treat warnings as errors (exit code 1).
+Use `--warnings-as-errors` to treat warnings as errors (exit code 2).
 
 ## Configuration
 

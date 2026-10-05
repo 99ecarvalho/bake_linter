@@ -190,7 +190,7 @@ def create_parser() -> argparse.ArgumentParser:
     ci_group.add_argument(
         "--warnings-as-errors",
         action="store_true",
-        help="Treat warnings as errors (exit code 1 for warnings)",
+        help="Treat warnings as errors (exit code 2 for warnings)",
     )
     
     # Filtering

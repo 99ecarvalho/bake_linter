@@ -108,9 +108,16 @@ if [ $LINT_EXIT_CODE -eq 0 ]; then
 elif [ $LINT_EXIT_CODE -eq 1 ]; then
     echo -e "${YELLOW}${BOLD}⚠ Warnings found (commit allowed)${NC}"
     exit 0
-else
+elif [ $LINT_EXIT_CODE -eq 2 ]; then
     echo -e "${RED}${BOLD}✗ Errors found - commit blocked${NC}"
     echo ""
     echo -e "Fix the issues above or bypass with: ${BOLD}git commit --no-verify${NC}"
+    exit 1
+else
+    # 3 is a configuration or runtime error; anything else is a crash.
+    # Block: the recipes were not checked.
+    echo -e "${RED}${BOLD}✗ Linter failed (exit code ${LINT_EXIT_CODE}) - commit blocked${NC}"
+    echo ""
+    echo -e "Fix the linter setup or bypass with: ${BOLD}git commit --no-verify${NC}"
     exit 1
 fi
