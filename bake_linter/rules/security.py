@@ -16,7 +16,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
@@ -33,8 +33,10 @@ class InsecureUriRule(BaseRule):
     - a git fetch whose effective transport is the plaintext git daemon
 
     Note ``git://`` alone is NOT insecure: in a bitbake SRC_URI it is the
-    *fetcher scheme*, and the wire protocol comes from the ``;protocol=``
-    parameter. ``git://host/repo;protocol=ssh`` transports over SSH.
+    *fetcher scheme* (as is ``gitsm://``), and the wire protocol comes from
+    the ``;protocol=`` parameter. ``git://host/repo;protocol=ssh`` transports
+    over SSH; a missing parameter, or ``git``, ``http`` or ``rsync``, is
+    plaintext. Each git URI on a line is checked on its own.
     """
     
     rule_id = "SECURITY001"
@@ -50,20 +52,37 @@ class InsecureUriRule(BaseRule):
     # Pattern for unencrypted FTP
     FTP_PATTERN = re.compile(r'ftp://(?!localhost|127\.|192\.168\.|10\.)')
     
-    # Pattern for unencrypted git protocol
-    GIT_PROTOCOL_PATTERN = re.compile(r'git://(?!localhost|127\.|192\.168\.|10\.)')
+    # A git or gitsm fetch URI, up to the end of its parameters
+    GIT_URI_PATTERN = re.compile(
+        r'\bgit(?:sm)?://(?!localhost|127\.|192\.168\.|10\.)[^"\'\s\\]*'
+    )
+    GIT_PROTOCOL_PARAM = re.compile(r';protocol=([^;"\'\s\\]+)')
 
     # The transport of a bitbake git fetch comes from the ";protocol="
     # parameter, not from the scheme (fetch2/git.py urldata_init:
-    # "if 'protocol' in ud.parm: ud.proto = ud.parm['protocol']", valid values
-    # git/file/ssh/http/https/rsync). Poky writes git://...;protocol=https 973
-    # times against 49 URIs with no protocol= at all, so the scheme by itself
-    # says nothing about security. Only an absent or plaintext protocol is
-    # actually insecure: bitbake falls back to the unencrypted "git" daemon
-    # protocol when the parameter is omitted.
-    GIT_SECURE_PROTOCOL_PATTERN = re.compile(
-        r'git(?:sm)?://\S*?;[^"\'\s]*protocol=(?:ssh|https|rsync|file)\b'
-    )
+    # "if 'protocol' in ud.parm: ud.proto = ud.parm['protocol']"). Poky
+    # overwhelmingly writes git://...;protocol=https, so the scheme by itself
+    # says nothing about security. Without the parameter bitbake falls back to
+    # the plaintext git daemon protocol; git, http and rsync are plaintext too.
+    GIT_SECURE_PROTOCOLS = {"ssh", "https", "file"}
+
+    def _insecure_git_message(self, line: str) -> Optional[str]:
+        """Why the first insecure git/gitsm URI on *line* is insecure, if any."""
+        for match in self.GIT_URI_PATTERN.finditer(line):
+            uri = match.group(0)
+            scheme = uri.split("://", 1)[0]
+            protocol = self.GIT_PROTOCOL_PARAM.search(uri)
+            if protocol is None:
+                return (
+                    f"{scheme}:// fetch has no ;protocol= parameter, so it "
+                    "falls back to the plaintext git daemon protocol"
+                )
+            if protocol.group(1) not in self.GIT_SECURE_PROTOCOLS:
+                return (
+                    f"{scheme}:// fetch uses the plaintext "
+                    f";protocol={protocol.group(1)} transport"
+                )
+        return None
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -92,22 +111,18 @@ class InsecureUriRule(BaseRule):
                     context=stripped[:80],
                     hint="Change ftp:// to https:// or ftps://",
                 ))
-            # Check for a git fetch left on the plaintext daemon protocol.
-            # An explicit ;protocol=ssh/https/rsync/file is already secure.
-            elif (
-                self.GIT_PROTOCOL_PATTERN.search(line)
-                and not self.GIT_SECURE_PROTOCOL_PATTERN.search(line)
-            ):
-                results.append(self.create_result(
-                    file=context,
-                    line=line_num,
-                    message=(
-                        "git:// fetch has no ;protocol= parameter, so it "
-                        "falls back to the plaintext git daemon protocol"
-                    ),
-                    context=stripped[:80],
-                    hint="Add ;protocol=https (or ;protocol=ssh for an internal repo)",
-                ))
+            # Check for a git fetch on a plaintext transport. An explicit
+            # ;protocol=ssh/https/file is secure.
+            else:
+                message = self._insecure_git_message(line)
+                if message:
+                    results.append(self.create_result(
+                        file=context,
+                        line=line_num,
+                        message=message,
+                        context=stripped[:80],
+                        hint="Use ;protocol=https (or ;protocol=ssh for a private repo)",
+                    ))
         
         return results
 

@@ -1752,9 +1752,9 @@ class TestSecurityRules:
 
     def test_git_uri_with_explicit_secure_protocol_is_not_flagged(self):
         """``git://`` is the bitbake fetcher scheme, not the wire protocol: the
-        transport comes from ``;protocol=`` (fetch2/git.py urldata_init). Poky
-        writes git://...;protocol=https 973 times, so the scheme alone is not a
-        finding."""
+        transport comes from ``;protocol=`` (fetch2/git.py urldata_init), and
+        poky overwhelmingly writes git://...;protocol=https, so the scheme
+        alone is not a finding."""
         lines = [
             'SRC_URI = "git://github.com/user/repo.git;protocol=https;branch=main"\n',
             'SRC_URI += "git://git.example.com/org/thing.git;protocol=ssh;branch=master"\n',
@@ -1787,6 +1787,53 @@ class TestSecurityRules:
 
         assert len(results) == 1
         assert results[0].rule_id == "SECURITY001"
+        assert ";protocol=git" in results[0].message
+        assert "no ;protocol=" not in results[0].message
+
+    def test_git_uri_with_rsync_protocol_is_flagged(self):
+        """The rsync daemon protocol is plaintext."""
+        lines = ['SRC_URI = "git://example.com/repo.git;protocol=rsync;branch=main"\n']
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={},
+        )
+
+        results = InsecureUriRule().check(context)
+
+        assert len(results) == 1
+        assert ";protocol=rsync" in results[0].message
+
+    def test_gitsm_uri_without_protocol_is_flagged(self):
+        lines = ['SRC_URI = "gitsm://example.com/repo.git;branch=main"\n']
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={},
+        )
+
+        results = InsecureUriRule().check(context)
+
+        assert len(results) == 1
+        assert results[0].message.startswith("gitsm://")
+
+    def test_secure_git_uri_does_not_excuse_another_on_the_same_line(self):
+        lines = [
+            'SRC_URI = "git://example.com/a.git;protocol=https;branch=main '
+            'git://example.com/b.git;branch=main"\n'
+        ]
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={},
+        )
+
+        results = InsecureUriRule().check(context)
+
+        assert len(results) == 1
 
 
 class TestSystemdRules:

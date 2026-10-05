@@ -124,9 +124,9 @@ class MissingLicenseChecksumInBbappendRule(BaseRule):
     # LIC_FILES_CHKSUM pins the license text of the *fetched upstream source*,
     # so it only matters when the bbappend brings in such a source. A local
     # file:// entry (a patch, a config file, a service unit carried in the
-    # layer) is not one, and real poky/OE bbappends that add patches do not
-    # touch LIC_FILES_CHKSUM (meta-rust/librsvg, meta-clang/gdb,
-    # meta-example-bsp/systemd). Flagging those was a false positive.
+    # layer) is not one, and real bbappends that add patches do not touch
+    # LIC_FILES_CHKSUM (e.g. meta-clang's gdb bbappend). Flagging those was a
+    # false positive.
     REMOTE_FETCH_PATTERN = re.compile(
         r'\b(?:https?|ftps?|s?ftp|git|gitsm|svn|hg|bzr|osc|npm|npmsw|crate|'
         r'gs|s3|az|ssh)://'
