@@ -224,45 +224,38 @@ class RrecommendsEssentialRule(BaseRule):
     groups = ["dependency"]
     hint = "Move essential dependencies to RDEPENDS"
 
-    # Libraries that are typically essential (not optional)
-    ESSENTIAL_PATTERNS = [
-        re.compile(r'\blibssl\b'),
-        re.compile(r'\blibcrypto\b'),
-        re.compile(r'\blibpthread\b'),
-        re.compile(r'\blibrt\b'),
-        re.compile(r'\blibdl\b'),
-        re.compile(r'\blibm\b'),
-        re.compile(r'\blibc\b'),
-        re.compile(r'\bglibc\b'),
-        re.compile(r'\bmusl\b'),
-        re.compile(r'\blibstdc\+\+\b'),
-        re.compile(r'\blibgcc\b'),
-        re.compile(r'\bzlib\b'),
-    ]
-    
-    RRECOMMENDS_PATTERN = re.compile(r'^RRECOMMENDS[_:]')
+    # Libraries that are typically essential (not optional), matched as
+    # whole package names (glibc-thread-db is not glibc)
+    ESSENTIAL_PACKAGES = {
+        "libssl", "libcrypto", "libpthread", "librt", "libdl", "libm", "libc",
+        "glibc", "musl", "libstdc++", "libgcc", "zlib",
+    }
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        # The packages in the value only: the variable name may carry an
+        # override such as :libc-glibc
+        for assignment in context.structure.assignments:
+            if assignment.base != "RRECOMMENDS" or assignment.flag is not None:
                 continue
-            
-            if self.RRECOMMENDS_PATTERN.match(stripped):
-                for pattern in self.ESSENTIAL_PATTERNS:
-                    match = pattern.search(stripped)
-                    if match:
-                        lib = match.group(0)
-                        results.append(self.create_result(
-                            file=context,
-                            line=line_num,
-                            message=f"Essential library '{lib}' should be in RDEPENDS, not RRECOMMENDS",
-                            context=stripped[:60],
-                            hint=f"Move '{lib}' to RDEPENDS as it's required for operation",
-                        ))
-                        break
-        
+            if "remove" in assignment.overrides:
+                continue
+            lib = next((t for t in assignment.value.split()
+                        if t in self.ESSENTIAL_PACKAGES), None)
+            if lib is None:
+                continue
+            line_num = next(
+                (n for n in range(assignment.line, assignment.end_line + 1)
+                 if lib in context.lines[n - 1].split("=", 1)[-1].replace('"', " ").split()),
+                assignment.line,
+            )
+            results.append(self.create_result(
+                file=context,
+                line=line_num,
+                message=f"Essential library '{lib}' should be in RDEPENDS, not RRECOMMENDS",
+                context=context.lines[line_num - 1].strip()[:60],
+                hint=f"Move '{lib}' to RDEPENDS as it's required for operation",
+            ))
+
         return results
