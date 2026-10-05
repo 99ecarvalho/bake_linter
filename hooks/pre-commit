@@ -5,11 +5,11 @@
 # Git pre-commit hook for Bake Linter
 # Lints staged .bb, .bbappend, and .inc files before commit
 #
-# Installation:
-#   ln -sf ../../tools/bake_linter/hooks/pre-commit .git/hooks/pre-commit
-#   chmod +x .git/hooks/pre-commit
+# Installation, from inside the repository whose recipes you want linted:
+#   /path/to/bake_linter/hooks/install-hooks.sh
 #
-# Or run: tools/bake_linter/hooks/install-hooks.sh
+# or link it by hand:
+#   ln -sf /path/to/bake_linter/hooks/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"
 #
 
 set -euo pipefail
@@ -26,9 +26,10 @@ else
     RED='' GREEN='' YELLOW='' BLUE='' BOLD='' NC=''
 fi
 
-# Get repository root
-REPO_ROOT=$(git rev-parse --show-toplevel)
-LINTER_DIR="${REPO_ROOT}/tools/bake_linter"
+# The bake_linter checkout this hook belongs to: the hook is installed as a
+# symlink, so resolve it to find the checkout next to the real file.
+HOOK_PATH=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+LINTER_DIR=$(cd "$(dirname "$HOOK_PATH")/.." && pwd)
 
 # Get staged recipe files (only added, copied, modified, renamed)
 STAGED_RECIPES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(bb|bbappend|inc)$' || true)
@@ -55,9 +56,9 @@ elif [ -f "${LINTER_DIR}/.venv/bin/bake-linter" ]; then
 elif [ -f "${LINTER_DIR}/bake_linter/cli.py" ]; then
     # Fallback: run directly with Python
     if [ -f "${LINTER_DIR}/.venv/bin/python" ]; then
-        LINTER_CMD="${LINTER_DIR}/.venv/bin/python -m bake_linter"
+        LINTER_CMD="${LINTER_DIR}/.venv/bin/python -m bake_linter.cli"
     else
-        LINTER_CMD="python3 -m bake_linter"
+        LINTER_CMD="python3 -m bake_linter.cli"
     fi
     export PYTHONPATH="${LINTER_DIR}:${PYTHONPATH:-}"
 else

@@ -2,16 +2,20 @@
 # Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
 # SPDX-License-Identifier: LGPL-3.0-or-later
 #
-# Install Bake Linter git hooks
+# Install the Bake Linter pre-commit hook into a git repository.
+#
+# Usage: install-hooks.sh [REPO]
+#   REPO defaults to the repository containing the current directory.
 #
 
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REPO_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
-HOOKS_DIR="${REPO_ROOT}/.git/hooks"
+TARGET=${1:-.}
+REPO_ROOT=$(git -C "$TARGET" rev-parse --show-toplevel)
+HOOKS_DIR=$(cd "$REPO_ROOT" && mkdir -p "$(git rev-parse --git-path hooks)" && cd "$(git rev-parse --git-path hooks)" && pwd)
 
-echo "Installing Bake Linter git hooks..."
+echo "Installing Bake Linter git hooks into ${REPO_ROOT}..."
 echo ""
 
 # Install pre-commit hook
@@ -20,7 +24,7 @@ if [ -f "${HOOKS_DIR}/pre-commit" ] && [ ! -L "${HOOKS_DIR}/pre-commit" ]; then
     mv "${HOOKS_DIR}/pre-commit" "${HOOKS_DIR}/pre-commit.backup"
 fi
 
-ln -sf "../../tools/bake_linter/hooks/pre-commit" "${HOOKS_DIR}/pre-commit"
+ln -sf "${SCRIPT_DIR}/pre-commit" "${HOOKS_DIR}/pre-commit"
 chmod +x "${SCRIPT_DIR}/pre-commit"
 
 echo "✓ pre-commit hook installed"

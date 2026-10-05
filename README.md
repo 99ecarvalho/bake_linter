@@ -18,8 +18,9 @@ Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
 ## Installation
 
 ```bash
-# Navigate to the linter directory
-cd tools/bake_linter
+# Clone with the oelint-adv submodule
+git clone --recurse-submodules https://github.com/99ecarvalho/bake_linter.git
+cd bake_linter
 
 # (Optional) Create and activate a virtual environment
 python3 -m venv .venv
@@ -115,7 +116,7 @@ exclude:
 When no explicit config file is provided via `--config`, the linter searches for configuration files in this order:
 
 1. **Current working directory** - looks for `.bake-linter.yaml`, `.bake-linter.yml`, `.bake-linter.json`, `bake-linter.yaml`, `bake-linter.yml`, or `bake-linter.json`
-2. **Tool's config/ directory** - falls back to `tools/bake_linter/config/` for the default configuration
+2. **Tool's config/ directory** - falls back to the `config/` directory of the bake_linter checkout for the default configuration
 
 The linter prints which config file is being used (or indicates if none was found) at startup.
 
@@ -586,7 +587,7 @@ pipelines:
     - step:
         name: Lint Yocto Recipes
         script:
-          - pip install ./tools/bake_linter
+          - pip install git+https://github.com/99ecarvalho/bake_linter.git
           - bake-linter --ci --format json --output lint-results.json meta-layer/
         artifacts:
           - lint-results.json
@@ -597,7 +598,7 @@ pipelines:
 ```yaml
 - name: Lint Yocto Recipes
   run: |
-    pip install ./tools/bake_linter
+    pip install git+https://github.com/99ecarvalho/bake_linter.git
     bake-linter --ci --warnings-as-errors meta-layer/
 ```
 
@@ -606,7 +607,7 @@ pipelines:
 ```yaml
 lint:
   script:
-    - pip install ./tools/bake_linter
+    - pip install git+https://github.com/99ecarvalho/bake_linter.git
     - bake-linter --ci --format json --output gl-code-quality-report.json .
   artifacts:
     reports:
@@ -631,7 +632,7 @@ pytest --cov=bake_linter --cov-report=html
 ### Project Structure
 
 ```
-tools/bake_linter/
+bake_linter/
 ├── pyproject.toml          # Package configuration
 ├── README.md               # This file
 ├── bake_linter/
@@ -706,7 +707,7 @@ When adding a new rule:
 To quickly run all rule tests:
 
 ```bash
-cd tools/bake_linter
+cd bake_linter
 source .venv/bin/activate  # if using a virtualenv
 pytest tests/test_rules.py
 ```

@@ -124,9 +124,9 @@ class LinterConfig:
         paths = [Path.cwd()]
         
         # Add the config/ directory relative to this module
-        # This is: bake_linter/../config/ = tools/bake_linter/config/
+        # This is: bake_linter/../config/ = <checkout>/config/
         module_dir = Path(__file__).parent  # bake_linter/
-        tool_root = module_dir.parent  # tools/bake_linter/
+        tool_root = module_dir.parent  # the bake_linter checkout
         config_dir = tool_root / "config"
         if config_dir.is_dir():
             paths.append(config_dir)

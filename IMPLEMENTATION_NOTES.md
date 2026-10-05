@@ -22,7 +22,7 @@ These features significantly improve the usability and flexibility of the bake-l
 
 #### Directory Structure
 ```
-tools/bake_linter/docs/
+docs/
 ├── rules/
 │   ├── README.md              # Documentation overview
 │   ├── template.md            # Template for new rule docs

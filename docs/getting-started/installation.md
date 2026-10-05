@@ -10,8 +10,9 @@
 ### From Source (Development)
 
 ```bash
-# Navigate to the linter directory
-cd tools/bake_linter
+# Clone with the oelint-adv submodule
+git clone --recurse-submodules https://github.com/99ecarvalho/bake_linter.git
+cd bake_linter
 
 # (Optional) Create and activate a virtual environment
 python3 -m venv .venv
@@ -29,7 +30,7 @@ The `egg-info` directory will be created automatically by setuptools during inst
 ### Using Requirements File
 
 ```bash
-cd tools/bake_linter
+cd bake_linter
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -48,7 +49,7 @@ bake-linter --help
 To update to the latest version:
 
 ```bash
-cd tools/bake_linter
+cd bake_linter
 git pull
 pip install -e .
 ```
