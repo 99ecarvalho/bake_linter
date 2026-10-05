@@ -251,13 +251,15 @@ class UnreliableHostingRule(BaseRule):
     groups = ["security", "supply_chain", "source"]
     hint = "Use official release sources and configure MIRRORS for fallback"
 
+    RAW_GITHUB = re.compile(r'raw\.githubusercontent\.com')
+
     # Unreliable hosting patterns
     UNRELIABLE_HOSTS = [
         re.compile(r'dropbox\.com'),
         re.compile(r'drive\.google\.com'),
         re.compile(r'pastebin\.com'),
         re.compile(r'dl\.dropboxusercontent\.com'),
-        re.compile(r'raw\.githubusercontent\.com'),
+        RAW_GITHUB,
         re.compile(r'gist\.github\.com'),
         re.compile(r'mediafire\.com'),
         re.compile(r'mega\.nz'),
@@ -265,18 +267,34 @@ class UnreliableHostingRule(BaseRule):
         re.compile(r'wetransfer\.com'),
     ]
 
+    # raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>. The file is
+    # served from git, so a ref that is a commit id, or the release tag of
+    # the version being built, names content that does not change.
+    RAW_GITHUB_REF = re.compile(
+        r'raw\.githubusercontent\.com/[^/\s]+/[^/\s]+/(?P<ref>[^/\s;"\']+)'
+    )
+    FIXED_REF = re.compile(r'^[0-9a-fA-F]{40}$|\$\{PV\}')
+
+    def _is_fixed_raw_github(self, line: str) -> bool:
+        refs = [m.group("ref") for m in self.RAW_GITHUB_REF.finditer(line)]
+        return bool(refs) and all(self.FIXED_REF.search(ref) for ref in refs)
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
-            if 'SRC_URI' in stripped or 'http' in stripped.lower():
+
+            # Only what is fetched as source: SRC_URI, continuation lines too
+            if context.owner_base(line_num) == "SRC_URI":
                 for pattern in self.UNRELIABLE_HOSTS:
                     if pattern.search(stripped):
+                        if (pattern is self.RAW_GITHUB
+                                and self._is_fixed_raw_github(stripped)):
+                            break
                         results.append(self.create_result(
                             file=context,
                             line=line_num,
