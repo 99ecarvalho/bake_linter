@@ -629,14 +629,12 @@ class RdependsPackageExistenceRule(BaseRule):
 class RrecommendsPackageValidityRule(BaseRule):
     """
     Check that packages in RRECOMMENDS:pkg are defined in PACKAGES.
-    
-    Similar to PKG005 but for RRECOMMENDS (lower severity).
-    
-    Recognizes packages added via:
-    - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
-    - PACKAGE_BEFORE_PN += "..."
+
+    Similar to PKG005 but for RRECOMMENDS (lower severity), reading the
+    package list the same way: PACKAGES, PACKAGE_BEFORE_PN, PACKAGES_DYNAMIC,
+    local variables, includes and the packages classes create.
     """
-    
+
     rule_id = "PKG006"
     name = "RRECOMMENDS Package Validity"
     description = "Checks packages in RRECOMMENDS:pkg are defined in PACKAGES"
@@ -644,49 +642,40 @@ class RrecommendsPackageValidityRule(BaseRule):
     groups = ["packaging", "dependency"]
     hint = "Add package to PACKAGES or fix package name"
 
-    RRECOMMENDS_PKG_PATTERN = re.compile(r'^RRECOMMENDS[_:]([\w${}-]+)')
-    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
-    PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
-    
-    STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc']
-
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        rrecommends_packages: List[tuple] = []
-        packages_list: List[str] = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        # A distro or machine configuration sets RRECOMMENDS of packages
+        # other recipes create
+        if 'conf' in context.path.parts[:-1]:
+            return results
+
+        package_list = _declared_packages(context)
+        if package_list is None:
+            return results
+
+        for a in context.structure.assignments:
+            # RRECOMMENDS:${PN}-dev[nodeprrecs] is a flag of the same
+            # package's variable, so flags are judged too
+            if a.base == 'RRECOMMENDS' and a.overrides:
+                package = a.overrides[0]
+            elif a.base.startswith('RRECOMMENDS_'):
+                package = a.base[len('RRECOMMENDS_'):]
+            else:
                 continue
-            
-            match = self.RRECOMMENDS_PKG_PATTERN.match(stripped)
-            if match:
-                pkg_name = match.group(1)
-                rrecommends_packages.append((line_num, pkg_name))
-            
-            # Collect PACKAGES entries (=, +=, =+, :=)
-            if self.PACKAGES_PATTERN.match(stripped):
-                value = stripped.split('=', 1)[1]
-                packages_list.extend(re.findall(r'[\w${}-]+', value))
-            
-            # Collect PACKAGE_BEFORE_PN entries (auto-adds to PACKAGES)
-            if self.PACKAGE_BEFORE_PN_PATTERN.match(stripped):
-                value = stripped.split('=', 1)[1] if '=' in stripped else ''
-                packages_list.extend(re.findall(r'[\w${}-]+', value))
-        
-        for line_num, pkg_name in rrecommends_packages:
-            if pkg_name in self.STANDARD_PACKAGES:
+            if package in _OPERATION_OVERRIDES:
+                continue  # RRECOMMENDS:append, the variable itself
+            name = package_list.expand(package)
+            if '${' in name:
+                continue  # Names a variable this file does not set
+            if package_list.declares(name):
                 continue
-            
-            if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
-                results.append(self.create_result(
-                    file=context,
-                    line=line_num,
-                    message=f"RRECOMMENDS:{pkg_name} but '{pkg_name}' not in PACKAGES",
-                    hint=f'Verify package name or add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
-                ))
-        
+
+            results.append(self.create_result(
+                file=context,
+                line=a.line,
+                message=f"RRECOMMENDS:{package} but '{package}' not in PACKAGES",
+                hint=f'Verify package name or add: PACKAGES += "{package}" or PACKAGE_BEFORE_PN += "{package}"',
+            ))
+
         return results
