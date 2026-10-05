@@ -37,55 +37,79 @@ class WrongDependencyTypeRule(BaseRule):
     groups = ["dependency"]
     hint = "Move build-time tools to DEPENDS"
 
-    # Build-time only packages/tools that shouldn't be in RDEPENDS
-    BUILD_TIME_PATTERNS = [
-        re.compile(r'\b\S+-native\b'),  # Any -native package
-        re.compile(r'\bcmake\b'),
-        re.compile(r'\bautoconf\b'),
-        re.compile(r'\bautomake\b'),
-        re.compile(r'\blibtool\b'),
-        re.compile(r'\bpkgconfig\b'),
-        re.compile(r'\bpkg-config\b'),
-        re.compile(r'\bgettext\b'),
-        re.compile(r'\bmeson\b'),
-        re.compile(r'\bninja\b'),
-        re.compile(r'\bgcc\b'),
-        re.compile(r'\bg\+\+\b'),
-        re.compile(r'\bclang\b'),
-        re.compile(r'\bmake\b'),
-        re.compile(r'\bbison\b'),
-        re.compile(r'\bflex\b'),
-        re.compile(r'\bswig\b'),
-    ]
-    
-    # Pattern to match RDEPENDS assignments
-    RDEPENDS_PATTERN = re.compile(r'^RDEPENDS[_:]')
+    # Build-time only packages/tools that shouldn't be in RDEPENDS, matched
+    # as whole package names (gcc-symlinks is not gcc)
+    BUILD_TIME_TOOLS = {
+        "cmake", "autoconf", "automake", "libtool", "pkgconfig", "pkg-config",
+        "gettext", "meson", "ninja", "gcc", "g++", "clang", "make", "bison",
+        "flex", "swig",
+    }
+
+    # Packages that legitimately need build tools at run time: test suites
+    # run "make check", -dev packages are for building on the target
+    DEV_PACKAGE_SUFFIXES = ("-dev", "-staticdev")
+
+    # Overrides that apply the assignment to a build-host variant, where
+    # -native runtime dependencies are correct
+    HOST_CLASS_OVERRIDES = ("class-native", "class-nativesdk", "class-cross")
+
+    # Recipes whose packages are for the build host, or that collect build
+    # tools on purpose (packagegroup-core-buildessential)
+    HOST_RECIPE_CLASSES = {"native", "nativesdk", "cross", "crosssdk",
+                           "cross-canadian", "packagegroup"}
+
+    def _is_host_recipe(self, context: FileContext) -> bool:
+        pn = context.pn
+        if (pn.endswith(("-native", "-cross", "-crosssdk"))
+                or pn.startswith(("nativesdk-", "packagegroup-"))
+                or "-cross-canadian" in pn):
+            return True
+        return bool(context.inherits & self.HOST_RECIPE_CLASSES)
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            # Skip comments
-            if stripped.startswith("#"):
+
+        if self._is_host_recipe(context):
+            return results
+
+        for assignment in context.structure.assignments:
+            if assignment.base != "RDEPENDS" or assignment.flag is not None:
                 continue
-            
-            # Check RDEPENDS lines
-            if self.RDEPENDS_PATTERN.match(stripped):
-                for pattern in self.BUILD_TIME_PATTERNS:
-                    match = pattern.search(stripped)
-                    if match:
-                        tool = match.group(0)
-                        results.append(self.create_result(
-                            file=context,
-                            line=line_num,
-                            message=f"Build-time tool '{tool}' should be in DEPENDS, not RDEPENDS",
-                            context=stripped[:60],
-                            hint=f"Move '{tool}' to DEPENDS",
-                        ))
-                        break  # One warning per line
-        
+            # :remove takes packages away; it does not add a dependency
+            if "remove" in assignment.overrides:
+                continue
+            overrides = assignment.overrides
+            if any("-ptest" in o or o.endswith(self.DEV_PACKAGE_SUFFIXES)
+                   for o in overrides):
+                continue
+            if any(o in self.HOST_CLASS_OVERRIDES for o in overrides):
+                continue
+
+            for token in assignment.value.split():
+                if token.endswith("-native"):
+                    message = (
+                        f"Native package '{token}' in RDEPENDS of a target "
+                        "package; native packages run on the build host"
+                    )
+                elif token in self.BUILD_TIME_TOOLS:
+                    message = f"Build-time tool '{token}' should be in DEPENDS, not RDEPENDS"
+                else:
+                    continue
+                line_num = next(
+                    (n for n in range(assignment.line, assignment.end_line + 1)
+                     if re.search(rf'(?<![\w${{}}+.-]){re.escape(token)}(?![\w+.-])',
+                                  context.lines[n - 1])),
+                    assignment.line,
+                )
+                results.append(self.create_result(
+                    file=context,
+                    line=line_num,
+                    message=message,
+                    context=context.lines[line_num - 1].strip()[:60],
+                    hint=f"Move '{token}' to DEPENDS",
+                ))
+                break  # One warning per assignment
+
         return results
 
 

@@ -12,6 +12,13 @@
 
 Detects build-time tools incorrectly in RDEPENDS
 
+Each package in the RDEPENDS value is matched as a whole name: a
+`*-native` package, or a build tool such as `cmake`, `make` or `gcc`.
+Not reported: `:remove` assignments, `-ptest`, `-dev` and `-staticdev`
+packages (which need the tools on the target), assignments under
+`class-native`, `class-nativesdk` or `class-cross`, and native, nativesdk,
+cross and packagegroup recipes.
+
 ## Example of Bad Code
 
 ```bitbake
