@@ -12,6 +12,14 @@
 
 Detects recipes using pkg-config without inherit pkgconfig
 
+A use is a run of the tool: `pkg-config`, `${PKG_CONFIG}`, or the
+`PKG_CONFIG_PATH`/`PKG_CONFIG_LIBDIR`/`PKG_CONFIG_SYSROOT_DIR` variables
+it reads. The `${libdir}/pkgconfig` directory, `.pc` files, URLs, comments
+and variables such as SUMMARY, FILES, RDEPENDS or SRC_URI are not uses.
+An `inherit pkgconfig` or a `pkgconfig-native` DEPENDS in a required file
+counts, and the recipe is not reported when a required file cannot be
+found.
+
 ## Example of Bad Code
 
 ```bitbake

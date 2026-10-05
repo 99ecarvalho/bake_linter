@@ -132,53 +132,73 @@ class MissingPkgconfigInheritRule(BaseRule):
     groups = ["dependency", "inherit"]
     hint = "Add 'inherit pkgconfig'"
 
-    PKG_CONFIG_USAGE = [
-        re.compile(r'PKG_CONFIG'),
-        re.compile(r'pkg-config'),
-        re.compile(r'pkgconfig(?!-native)'),  # Exclude pkgconfig-native
-        re.compile(r'\.pc\b'),  # .pc file references
-    ]
+    # A run of the pkg-config tool: the command, ${PKG_CONFIG} or $PKG_CONFIG,
+    # or the variables pkg-config reads to find .pc files. "pkgconfig" and
+    # ".pc" are not: ${libdir}/pkgconfig is just the directory .pc files
+    # are installed into, which every library recipe touches.
+    PKG_CONFIG_USAGE = re.compile(
+        r'(?<![\w${}/.-])(?:pkg-config|\$\{?PKG_CONFIG\}?|'
+        r'PKG_CONFIG_(?:PATH|LIBDIR|SYSROOT_DIR))(?![\w-])'
+    )
+    # URLs and file names may contain "pkg-config" (crate://.../pkg-config/,
+    # file://0001-use-pkg-config.patch)
+    URI_TOKEN = re.compile(r'\b[a-z][a-z0-9+.-]*://\S+')
+    SHELL_COMMENT = re.compile(r'(?:^|\s)#.*$')
+
+    # Variables whose values name packages, files or URLs, or document the
+    # recipe, rather than run commands
+    NON_COMMAND_VARIABLES = {
+        "SUMMARY", "DESCRIPTION", "HOMEPAGE", "FILES", "DEPENDS", "RDEPENDS",
+        "RRECOMMENDS", "RSUGGESTS", "RPROVIDES", "RCONFLICTS", "RREPLACES",
+        "SRC_URI", "RECIPE_MAINTAINER", "DISTRO_PN_ALIAS",
+    }
+
+    def _usage_line(self, context: FileContext) -> int:
+        """First line that runs pkg-config, or 0."""
+        for line_num, line in enumerate(context.lines, start=1):
+            owner = context.owner_base(line_num)
+            if owner == "#" or owner in self.NON_COMMAND_VARIABLES:
+                continue
+            if owner.startswith("PREFERRED_PROVIDER_"):
+                continue
+            text = self.URI_TOKEN.sub(" ", line)
+            if owner.startswith("FUNC:"):
+                text = self.SHELL_COMMENT.sub("", text)
+            if self.PKG_CONFIG_USAGE.search(text):
+                return line_num
+        return 0
+
+    @staticmethod
+    def _depends_on_pkgconfig_native(structures) -> bool:
+        return any(
+            a.base == "DEPENDS" and "remove" not in a.overrides
+            and "pkgconfig-native" in a.value.split()
+            for structure in structures for a in structure.assignments
+        )
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         # Skip native recipes - they don't need cross-compilation setup
         recipe_name = context.path.stem
         if '-native' in recipe_name or '_native' in recipe_name:
             return results
-        
-        # Check if already inherits pkgconfig or has pkgconfig-native in DEPENDS
-        inherits_pkgconfig = False
-        has_pkgconfig_native = False
-        uses_pkgconfig = False
-        usage_line = 0
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
-                continue
-            
-            if stripped.startswith("inherit") and "pkgconfig" in stripped:
-                inherits_pkgconfig = True
-            
-            # Check for pkgconfig-native in DEPENDS
-            if re.match(r'DEPENDS\s*[+?:]?=', stripped) and 'pkgconfig-native' in stripped:
-                has_pkgconfig_native = True
-            
-            if not uses_pkgconfig:
-                for pattern in self.PKG_CONFIG_USAGE:
-                    if pattern.search(line):
-                        # Don't flag pkgconfig-native references
-                        if 'pkgconfig-native' in line:
-                            has_pkgconfig_native = True
-                            continue
-                        uses_pkgconfig = True
-                        usage_line = line_num
-                        break
-        
+
+        usage_line = self._usage_line(context)
+        if not usage_line:
+            return results
+
+        # The inherit or the DEPENDS may come from a required .inc; when one
+        # cannot be found, what it sets is unknown
+        included = context.included_files
+        if included is None:
+            return results
+        inherits_pkgconfig = "pkgconfig" in context.inherits
+        has_pkgconfig_native = self._depends_on_pkgconfig_native(
+            [context.structure] + [i.structure for i in included])
+
         # Only flag if uses pkgconfig and doesn't have inherit or pkgconfig-native
-        if uses_pkgconfig and not inherits_pkgconfig and not has_pkgconfig_native:
+        if not inherits_pkgconfig and not has_pkgconfig_native:
             results.append(self.create_result(
                 file=context,
                 line=usage_line,
