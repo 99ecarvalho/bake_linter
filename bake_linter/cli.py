@@ -26,6 +26,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 
 from __future__ import annotations
 
+import os
 import argparse
 import sys
 from pathlib import Path
@@ -175,6 +176,14 @@ def create_parser() -> argparse.ArgumentParser:
         help="Suppress rule findings output to stdout (config, output files, and summaries are still shown)",
     )
     
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=os.environ.get("BAKE_LINTER_DEBUG", "").lower() in ("1", "true", "yes"),
+        help="Print oelint-adv detection and run diagnostics to stderr "
+             "(also enabled by BAKE_LINTER_DEBUG=1)",
+    )
+
     # CI mode
     ci_group = parser.add_argument_group("CI integration")
     ci_group.add_argument(
@@ -286,6 +295,10 @@ def get_formatter(format_name: str, color: bool, verbose: bool, output: TextIO):
     return formatters[format_name]()
 
 
+class OelintFailedError(RuntimeError):
+    """oelint-adv was found but did not run to completion."""
+
+
 def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], quiet: bool = False, debug: bool = False, release: Optional[str] = None, extra_machines: Optional[List[str]] = None):
     """
     Run oelint-adv if available.
@@ -302,6 +315,9 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
 
     Returns:
         Tuple of (results, summary) or (None, None) if not available
+
+    Raises:
+        OelintFailedError: oelint-adv is available but its run failed
     """
     import os
     
@@ -330,6 +346,9 @@ def run_oelint_adv(paths: List[Path], exclude_patterns: Optional[List[str]], qui
         extra_machines=extra_machines,
     )
     
+    if summary is None:
+        raise OelintFailedError(stderr)
+
     # Always show oelint-adv summary (quiet only suppresses detailed findings)
     if summary:
         print(f"oelint-adv found {summary.total_issues} issue(s)", file=sys.stderr)
@@ -421,16 +440,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     
     summary = engine.get_summary()
     
-    # Run oelint-adv if available
-    # Enable debug mode in CI to help diagnose issues
-    oelint_results, oelint_summary = run_oelint_adv(
-        paths=args.paths,
-        exclude_patterns=exclude_patterns if exclude_patterns else None,
-        quiet=config.quiet,
-        debug=args.ci,  # Enable debug output in CI mode
-        release=config.oelint_release,
-        extra_machines=config.oelint_extra_machines,
-    )
+    # Run oelint-adv if available. A failed run means the recipes were not
+    # fully checked, so it is a runtime error, not a clean result.
+    try:
+        oelint_results, oelint_summary = run_oelint_adv(
+            paths=args.paths,
+            exclude_patterns=exclude_patterns if exclude_patterns else None,
+            quiet=config.quiet,
+            debug=args.debug,
+            release=config.oelint_release,
+            extra_machines=config.oelint_extra_machines,
+        )
+    except OelintFailedError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return ExitCode.RUNTIME_ERROR
     
     # Output to stdout using the primary format
     use_color = config.color and not args.ci and sys.stdout.isatty()

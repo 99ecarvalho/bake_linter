@@ -216,9 +216,11 @@ class OelintAdvIntegration:
         try:
             if debug:
                 print(f"[oelint-adv] Checking if installed in current Python...", file=sys.stderr)
-            # Check if oelint_adv can be imported - don't check __version__ as it may not exist
+            # Check that oelint_adv and its parser dependency import: the
+            # oelint_adv package alone imports without its dependencies, and
+            # would then crash at run time.
             result = subprocess.run(
-                [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__file__)"],
+                [sys.executable, "-c", "import oelint_adv, oelint_parser; print(oelint_adv.__file__)"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -274,7 +276,7 @@ class OelintAdvIntegration:
             # Note: This only works if oelint-adv's dependencies are installed
             try:
                 result = subprocess.run(
-                    [sys.executable, "-c", "import oelint_adv; print(oelint_adv.__file__)"],
+                    [sys.executable, "-c", "import oelint_adv, oelint_parser; print(oelint_adv.__file__)"],
                     cwd=str(self.vendor_path),
                     capture_output=True,
                     text=True,
@@ -384,7 +386,8 @@ class OelintAdvIntegration:
                     constants-mod JSON file and passed via --constantmods.
 
         Returns:
-            Tuple of (results, summary, stdout, stderr)
+            Tuple of (results, summary, stdout, stderr). summary is None when
+            oelint-adv ran but failed; stderr then says why.
         """
         if not self.is_available():
             return [], OelintSummary(), "", "oelint-adv is not available"
@@ -461,6 +464,13 @@ class OelintAdvIntegration:
             result = self._run_command(args, timeout=600)  # 10 minute timeout
             stdout = result.stdout
             stderr = result.stderr
+            # Run with --exit-zero, oelint-adv exits non-zero only when it
+            # fails; its stderr is then a traceback, not findings.
+            if result.returncode != 0:
+                last = (stderr.strip().splitlines() or ["no output"])[-1]
+                return [], None, stdout, (
+                    f"oelint-adv failed (exit code {result.returncode}): {last}"
+                )
             if debug:
                 print(f"[oelint-adv] Command returncode: {result.returncode}", file=sys.stderr)
                 print(f"[oelint-adv] stdout length: {len(stdout)} chars", file=sys.stderr)

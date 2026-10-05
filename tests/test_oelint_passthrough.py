@@ -97,3 +97,39 @@ def test_no_temp_file_left_when_nothing_to_lint(tmp_path, monkeypatch):
     after = set(Path(tempfile.gettempdir()).glob("oelint-constantmods-*"))
     assert after == before
     assert "args" not in seen
+
+
+def test_failed_run_is_not_reported_as_clean(tmp_path, monkeypatch):
+    """With --exit-zero, a non-zero exit means oelint-adv itself failed; its
+    stderr is a traceback, not a list of findings."""
+    recipe = tmp_path / "foo_1.0.bb"
+    recipe.write_text('SUMMARY = "foo"\n')
+    integration = OelintAdvIntegration()
+    monkeypatch.setattr(integration, "is_available", lambda: True)
+    monkeypatch.setattr(
+        integration, "_run_command",
+        lambda args, **kw: subprocess.CompletedProcess(
+            args, 1, "", "Traceback ...\nModuleNotFoundError: No module named 'oelint_parser'\n"
+        ),
+    )
+
+    results, summary, _stdout, stderr = integration.run([recipe])
+
+    assert results == []
+    assert summary is None
+    assert "oelint_parser" in stderr
+
+
+def test_cli_exits_with_runtime_error_when_oelint_fails(tmp_path, monkeypatch):
+    from bake_linter import cli
+    from bake_linter.core.models import ExitCode
+
+    recipe = tmp_path / "foo_1.0.bb"
+    recipe.write_text('SUMMARY = "foo"\nLICENSE = "MIT"\n')
+
+    def failing(*args, **kwargs):
+        raise cli.OelintFailedError("oelint-adv failed (exit code 1): boom")
+
+    monkeypatch.setattr(cli, "run_oelint_adv", failing)
+
+    assert cli.main(["--quiet", str(recipe)]) == ExitCode.RUNTIME_ERROR
