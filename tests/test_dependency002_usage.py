@@ -70,6 +70,41 @@ def test_pkg_config_run_is_reported(content):
     assert results[0].rule_id == "DEPENDENCY002"
 
 
+def test_heredoc_body_is_not_run():
+    content = (
+        'do_install() {\n'
+        '    cat > ${D}${datadir}/foo/native.ini <<EOF\n'
+        '[binaries]\n'
+        "pkg-config = 'pkg-config-native'\n"
+        'EOF\n'
+        '}\n'
+    )
+    assert _check(content) == []
+
+
+def test_command_after_heredoc_is_checked():
+    content = (
+        'do_install() {\n'
+        "    cat > ${D}/x <<'EOF'\n"
+        'text\n'
+        'EOF\n'
+        '    pkg-config --modversion foo > ${D}/version\n'
+        '}\n'
+    )
+    results = _check(content)
+    assert len(results) == 1
+    assert results[0].line == 5
+
+
+@pytest.mark.parametrize("name,content", [
+    ("pkgconfig_git.bb", 'do_install:append() {\n    sed -i -e "s|^pkg-config|pkg-config.real|" x\n}\n'),
+    ("pkgconf_2.1.bb", 'PROVIDES += "pkgconfig"\ndo_install() {\n    pkg-config --version\n}\n'),
+])
+def test_recipe_providing_pkg_config(name, content):
+    rule = MissingPkgconfigInheritRule()
+    assert rule.check(_context(content, Path(name))) == []
+
+
 def test_inherit_from_included_file(tmp_path):
     (tmp_path / "foo.inc").write_text("inherit autotools pkgconfig\n")
     content = 'require foo.inc\ndo_configure() {\n    pkg-config --cflags bar\n}\n'

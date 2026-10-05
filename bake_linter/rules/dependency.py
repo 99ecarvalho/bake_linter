@@ -155,10 +155,18 @@ class MissingPkgconfigInheritRule(BaseRule):
         "SRC_URI", "RECIPE_MAINTAINER", "DISTRO_PN_ALIAS",
     }
 
+    # cat > file <<EOF ... EOF writes text into a file; it runs nothing
+    HEREDOC = re.compile(r'<<-?\s*["\']?(?P<word>[A-Za-z_]\w*)["\']?')
+
     def _usage_line(self, context: FileContext) -> int:
         """First line that runs pkg-config, or 0."""
+        heredoc_end = None
         for line_num, line in enumerate(context.lines, start=1):
             owner = context.owner_base(line_num)
+            if heredoc_end is not None:
+                if line.strip() == heredoc_end or not owner.startswith("FUNC:"):
+                    heredoc_end = None
+                continue
             if owner == "#" or owner in self.NON_COMMAND_VARIABLES:
                 continue
             if owner.startswith("PREFERRED_PROVIDER_"):
@@ -166,9 +174,25 @@ class MissingPkgconfigInheritRule(BaseRule):
             text = self.URI_TOKEN.sub(" ", line)
             if owner.startswith("FUNC:"):
                 text = self.SHELL_COMMENT.sub("", text)
+                heredoc = self.HEREDOC.search(text)
+                if heredoc:
+                    heredoc_end = heredoc.group("word")
+                    text = text[:heredoc.start()]
             if self.PKG_CONFIG_USAGE.search(text):
                 return line_num
         return 0
+
+    @staticmethod
+    def _provides_pkgconfig(context: FileContext) -> bool:
+        """The recipe is pkg-config itself (pkgconfig, or pkgconf with
+        PROVIDES += "pkgconfig"); it cannot inherit the class that depends
+        on it."""
+        if context.pn == "pkgconfig":
+            return True
+        return any(
+            a.base == "PROVIDES" and "pkgconfig" in a.value.split()
+            for a in context.structure.assignments
+        )
 
     @staticmethod
     def _depends_on_pkgconfig_native(structures) -> bool:
@@ -184,6 +208,9 @@ class MissingPkgconfigInheritRule(BaseRule):
         # Skip native recipes - they don't need cross-compilation setup
         recipe_name = context.path.stem
         if '-native' in recipe_name or '_native' in recipe_name:
+            return results
+
+        if self._provides_pkgconfig(context):
             return results
 
         usage_line = self._usage_line(context)
