@@ -99,16 +99,49 @@ class UnquotedVariableRule(BaseRule):
         
         return results
     
+    # A shell assignment word: the shell does not split its value
+    SHELL_ASSIGNMENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
+    # Words after which a new command starts
+    COMMAND_KEYWORDS = {"then", "do", "else", "elif", "if", "while", "until", "!", "{"}
+
     def _is_properly_quoted(self, line: str, var: str, pos: int) -> bool:
-        """Check if a variable at position is properly quoted in the line."""
-        # Find if position is inside double quotes
-        in_quotes = False
+        """Whether the expansion at *pos* is safe from word splitting:
+        inside double or single quotes, or the value of a shell variable
+        assignment (name=$D, in command position), which is not split."""
+        in_double = False
+        in_single = False
+        token_start = 0
+        # whether every word so far in this command is an assignment (or a
+        # keyword that starts a command), so the current word is one too
+        command_position = True
         i = 0
         while i < pos:
-            if line[i] == '"' and (i == 0 or line[i-1] != '\\'):
-                in_quotes = not in_quotes
+            char = line[i]
+            if in_single:
+                if char == "'":
+                    in_single = False
+            elif in_double:
+                if char == '"' and line[i - 1] != '\\':
+                    in_double = False
+            elif char == '"' and (i == 0 or line[i - 1] != '\\'):
+                in_double = True
+            elif char == "'" and (i == 0 or line[i - 1] != '\\'):
+                in_single = True
+            elif char in " \t":
+                word = line[token_start:i]
+                if word and word not in self.COMMAND_KEYWORDS:
+                    command_position = (
+                        command_position and bool(self.SHELL_ASSIGNMENT.match(word))
+                    )
+                token_start = i + 1
+            elif char in ";&|(":
+                command_position = True
+                token_start = i + 1
             i += 1
-        return in_quotes
+        if in_double or in_single:
+            return True
+        word = line[token_start:pos]
+        return command_position and bool(self.SHELL_ASSIGNMENT.match(word))
 
 
 class SudoUsageRule(BaseRule):
