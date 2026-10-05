@@ -102,6 +102,34 @@ class TestLicenseRules:
         assert len(results) == 1
         assert results[0].rule_id == "LICENSE003"
 
+    def test_lic_files_chksum_reported_on_license_line(self):
+        """A missing LIC_FILES_CHKSUM is reported on the LICENSE line, so
+        editors and the HTML report can point at it."""
+        lines = [
+            'SUMMARY = "foo"\n',
+            'LICENSE = "MIT"\n',
+            'SRC_URI = "https://example.com/foo-1.0.tar.gz"\n',
+        ]
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content="".join(lines),
+            lines=lines,
+            variables={
+                "LICENSE": [VariableAssignment("LICENSE", "MIT", 2)],
+                "SRC_URI": [
+                    VariableAssignment(
+                        "SRC_URI", "https://example.com/foo-1.0.tar.gz", 3
+                    )
+                ],
+            },
+        )
+
+        rule = LicFilesChkSumRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert results[0].line == 2
+
     def test_lic_files_chksum_image_recipe_exempt(self):
         """An image recipe fetches nothing, so there is no licence file to
         checksum. 57 of the 60 image recipes in the vendored
@@ -1765,12 +1793,10 @@ class TestSystemdRules:
     """Tests for systemd-related rules."""
 
     def test_systemd_without_inherit(self):
-        """Test that systemd usage without inherit is flagged."""
+        """The systemd class's packaging variables need inherit systemd."""
         from bake_linter.rules.systemd import SystemdWithoutInheritRule
-        
-        content = '''do_install() {
-    install -d ${D}${systemd_system_unitdir}
-}
+
+        content = '''SYSTEMD_SERVICE:${PN} = "foo.service"
 '''
         context = FileContext(
             path=Path("test_1.0.bb"),
@@ -1784,6 +1810,29 @@ class TestSystemdRules:
         
         assert len(results) == 1
         assert results[0].rule_id == "SYSTEMD001"
+
+    def test_systemd_unitdir_without_inherit_ok(self):
+        """systemd_unitdir and friends come from bitbake.conf, not from the
+        systemd class, so installing into them needs no inherit."""
+        from bake_linter.rules.systemd import SystemdWithoutInheritRule
+
+        content = '''do_install() {
+    install -d ${D}${systemd_system_unitdir}
+    install -d ${D}${systemd_user_unitdir}
+    install -d ${D}${systemd_unitdir}/network
+}
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = SystemdWithoutInheritRule()
+        results = rule.check(context)
+
+        assert results == []
 
     def test_systemd_with_inherit_ok(self):
         """Test that systemd usage with inherit passes."""
