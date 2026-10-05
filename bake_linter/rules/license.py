@@ -154,7 +154,7 @@ class LicFilesChkSumRule(BaseRule):
         if "SRC_URI" not in context.variables:
             return []
         if any(
-            re.match(r'^inherit\b.*\b(?:core-image|image)\b', line.strip())
+            re.match(r'^inherit\b.*(?<![\w-])(?:core-image|image)(?![\w-])', line.strip())
             for line in context.lines
         ):
             return []

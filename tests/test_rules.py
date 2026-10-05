@@ -147,6 +147,33 @@ class TestLicenseRules:
 
         assert results == []
 
+    def test_lic_files_chksum_image_helper_class_not_exempt(self):
+        """Classes such as image-artifact-names or image-buildinfo do not make
+        a recipe an image; '-' must not count as a word boundary."""
+        for inherit in ("inherit image-artifact-names\n", "inherit foo image-buildinfo\n"):
+            lines = [
+                'LICENSE = "MIT"\n',
+                'SRC_URI = "https://example.com/foo-1.0.tar.gz"\n',
+                inherit,
+            ]
+            context = FileContext(
+                path=Path("foo_1.0.bb"),
+                content="".join(lines),
+                lines=lines,
+                variables={
+                    "LICENSE": [VariableAssignment("LICENSE", "MIT", 1)],
+                    "SRC_URI": [
+                        VariableAssignment(
+                            "SRC_URI", "https://example.com/foo-1.0.tar.gz", 2
+                        )
+                    ],
+                },
+            )
+
+            results = LicFilesChkSumRule().check(context)
+
+            assert len(results) == 1, inherit
+
     def test_lic_files_chksum_closed_ok(self):
         """Test that CLOSED license doesn't need LIC_FILES_CHKSUM."""
         context = FileContext(
