@@ -16,7 +16,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import Dict, List, Optional, Set
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
@@ -361,6 +361,133 @@ class WildcardBbappendOverreachRule(BaseRule):
         return results
 
 
+# Packages bitbake.conf and the always-inherited classes create
+_STANDARD_SUFFIXES = ['', '-dev', '-dbg', '-doc', '-staticdev', '-locale',
+                      '-src', '-lic']
+
+# Classes that auto-create packages: class name -> package suffix
+_CLASS_PACKAGES = {
+    'lib_package': '-bin',
+}
+
+# PACKAGES built from Python: the list is not knowable statically
+_PYTHON_PACKAGES_PATTERN = re.compile(
+    r"""d\.(?:setVar|appendVar|prependVar)\(\s*['"]PACKAGES['"]""")
+_VARIABLE_REF_PATTERN = re.compile(r'\$\{([\w-]+)\}')
+_NAME_PATTERN = re.compile(r'[\w${}.+-]+')
+
+
+def _base_pn(pn: str) -> str:
+    """BPN: PN without the native/nativesdk/cross variant markers."""
+    bpn = re.sub(r'-(native|cross|crosssdk|cross-canadian-.*)$', '', pn)
+    return re.sub(r'^nativesdk-', '', bpn)
+
+
+class _PackageList:
+    """The packages a recipe creates, read the way BitBake builds PACKAGES."""
+
+    def __init__(self, variables: Dict[str, str]):
+        self.packages: Set[str] = set()
+        self.dynamic: List[str] = []
+        self.variables = variables
+
+    def expand(self, value: str, depth: int = 0) -> str:
+        """Expand ${VAR} from the variables the recipe (and its includes)
+        assigns. Unknown references are left in place."""
+        if depth > 5 or '${' not in value:
+            return value
+        expanded = _VARIABLE_REF_PATTERN.sub(
+            lambda m: self.variables.get(m.group(1), m.group(0)), value)
+        if expanded == value:
+            return value
+        return self.expand(expanded, depth + 1)
+
+    def declares(self, name: str) -> bool:
+        """Whether the package *name* (already expanded) is created."""
+        if name in self.packages:
+            return True
+        return any(self._dynamic_match(p, name) for p in self.dynamic)
+
+    @staticmethod
+    def _dynamic_match(pattern: str, name: str) -> bool:
+        """PACKAGES_DYNAMIC entries are regular expressions matched against
+        the start of a package name (^${PN}-plugin-.*)."""
+        try:
+            return re.match(pattern, name) is not None
+        except re.error:
+            return False
+
+
+def _declared_packages(context: FileContext) -> Optional[_PackageList]:
+    """The packages *context* creates, or None when the files at hand do
+    not tell."""
+    included = context.included_files
+    if included is None:
+        # A file this one includes was not found: what it adds to
+        # PACKAGES is unknown
+        return None
+    structures = [context.structure] + [i.structure for i in included]
+    assignments = [a for s in structures for a in s.assignments]
+
+    # A .bbappend or .inc holds a fragment of a recipe: the rest of
+    # PACKAGES lives elsewhere, unless the fragment replaces it outright
+    if context.file_type in ("bbappend", "include") and not any(
+        a.name == 'PACKAGES' and a.op in ('=', ':=') and not a.flag
+        for a in context.structure.assignments
+    ):
+        return None
+
+    texts = [context.content] + [
+        i.path.read_text(encoding="utf-8", errors="replace") for i in included
+    ]
+    if any(_PYTHON_PACKAGES_PATTERN.search(t) for t in texts):
+        return None
+
+    pn = context.pn
+    variables = {'PN': pn, 'BPN': _base_pn(pn), 'MLPREFIX': ''}
+    for a in assignments:
+        if a.flag or a.overrides or a.name in ('PN', 'BPN'):
+            continue
+        if a.op in ('=', ':=') or a.name not in variables:
+            variables[a.name] = a.value
+        else:
+            variables[a.name] += ' ' + a.value
+    package_list = _PackageList(variables)
+    packages = package_list.packages
+
+    packages.update(pn + suffix for suffix in _STANDARD_SUFFIXES)
+    for class_name, suffix in _CLASS_PACKAGES.items():
+        if class_name in context.inherits:
+            packages.add(pn + suffix)
+    # ptest and its variants (ptest-perl, ptest-gnome, ptest-cargo, ...)
+    if any(c == 'ptest' or c.startswith('ptest-') for c in context.inherits):
+        packages.add(pn + '-ptest')
+
+    for a in assignments:
+        if a.flag:
+            continue
+        if a.base in ('PACKAGES', 'PACKAGE_BEFORE_PN'):
+            # Names inside an inline expression count too:
+            # ${@bb.utils.contains('PACKAGECONFIG', 'x', '${PN}-x', '', d)}
+            packages.update(_NAME_PATTERN.findall(package_list.expand(a.value)))
+        elif a.base == 'PACKAGES_DYNAMIC':
+            package_list.dynamic.extend(package_list.expand(a.value).split())
+
+    # BBCLASSEXTEND variants rename every package: foo-dev becomes
+    # foo-native-dev or nativesdk-foo-dev
+    variants = set()
+    for a in assignments:
+        if a.base == 'BBCLASSEXTEND':
+            variants.update(package_list.expand(a.value).split())
+    for package in list(packages):
+        if 'native' in variants:
+            packages.add(package.replace(pn, pn + '-native', 1))
+        if 'nativesdk' in variants:
+            packages.add('nativesdk-' + package)
+
+    return package_list
+
+
 class FilesPackagesConsistencyRule(BaseRule):
     """
     Check that FILES entries correspond to packages in PACKAGES.
@@ -491,104 +618,12 @@ class RdependsPackageExistenceRule(BaseRule):
     groups = ["packaging", "dependency"]
     hint = "Add package to PACKAGES or fix package name"
 
-    # Packages bitbake.conf and the always-inherited classes create
-    STANDARD_SUFFIXES = ['', '-dev', '-dbg', '-doc', '-staticdev', '-locale',
-                         '-src', '-lic']
-    
-    # Classes that auto-create packages: class name -> package suffix
-    CLASS_AUTO_PACKAGES = {
-        'lib_package': '-bin',
-    }
-
-    # PACKAGES built from Python: the list is not knowable statically
-    PYTHON_PACKAGES_PATTERN = re.compile(
-        r"""d\.(?:setVar|appendVar|prependVar)\(\s*['"]PACKAGES['"]""")
-    VARIABLE_REF_PATTERN = re.compile(r'\$\{([\w-]+)\}')
-    NAME_PATTERN = re.compile(r'[\w${}.+-]+')
-
-    @staticmethod
-    def _base_pn(pn: str) -> str:
-        """BPN: PN without the native/nativesdk/cross variant markers."""
-        bpn = re.sub(r'-(native|cross|crosssdk|cross-canadian-.*)$', '', pn)
-        return re.sub(r'^nativesdk-', '', bpn)
-
-    def _expand(self, value: str, variables: dict, depth: int = 0) -> str:
-        """Expand ${VAR} from the variables this file (and its includes)
-        assign. Unknown references are left in place."""
-        if depth > 5 or '${' not in value:
-            return value
-        expanded = self.VARIABLE_REF_PATTERN.sub(
-            lambda m: variables.get(m.group(1), m.group(0)), value)
-        if expanded == value:
-            return value
-        return self._expand(expanded, variables, depth + 1)
-
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
 
-        included = context.included_files
-        if included is None:
-            # A file this one includes was not found: what it adds to
-            # PACKAGES is unknown
+        package_list = _declared_packages(context)
+        if package_list is None:
             return results
-        structures = [context.structure] + [i.structure for i in included]
-        assignments = [a for s in structures for a in s.assignments]
-
-        # A .bbappend or .inc holds a fragment of a recipe: the rest of
-        # PACKAGES lives elsewhere, unless the fragment replaces it outright
-        if context.file_type in ("bbappend", "include") and not any(
-            a.name == 'PACKAGES' and a.op in ('=', ':=') and not a.flag
-            for a in context.structure.assignments
-        ):
-            return results
-
-        texts = [context.content] + [
-            i.path.read_text(encoding="utf-8", errors="replace") for i in included
-        ]
-        if any(self.PYTHON_PACKAGES_PATTERN.search(t) for t in texts):
-            return results
-
-        pn = context.pn
-        variables = {'PN': pn, 'BPN': self._base_pn(pn), 'MLPREFIX': ''}
-        for a in assignments:
-            if a.flag or a.overrides or a.name in ('PN', 'BPN'):
-                continue
-            if a.op in ('=', ':=') or a.name not in variables:
-                variables[a.name] = a.value
-            else:
-                variables[a.name] += ' ' + a.value
-
-        packages = {pn + suffix for suffix in self.STANDARD_SUFFIXES}
-        for class_name, suffix in self.CLASS_AUTO_PACKAGES.items():
-            if class_name in context.inherits:
-                packages.add(pn + suffix)
-        # ptest and its variants (ptest-perl, ptest-gnome, ptest-cargo, ...)
-        if any(c == 'ptest' or c.startswith('ptest-') for c in context.inherits):
-            packages.add(pn + '-ptest')
-
-        dynamic = []
-        for a in assignments:
-            if a.flag:
-                continue
-            if a.base in ('PACKAGES', 'PACKAGE_BEFORE_PN'):
-                # Names inside an inline expression count too:
-                # ${@bb.utils.contains('PACKAGECONFIG', 'x', '${PN}-x', '', d)}
-                packages.update(self.NAME_PATTERN.findall(
-                    self._expand(a.value, variables)))
-            elif a.base == 'PACKAGES_DYNAMIC':
-                dynamic.extend(self._expand(a.value, variables).split())
-
-        # BBCLASSEXTEND variants rename every package: foo-dev becomes
-        # foo-native-dev or nativesdk-foo-dev
-        variants = set()
-        for a in assignments:
-            if a.base == 'BBCLASSEXTEND':
-                variants.update(self._expand(a.value, variables).split())
-        for package in list(packages):
-            if 'native' in variants:
-                packages.add(package.replace(pn, pn + '-native', 1))
-            if 'nativesdk' in variants:
-                packages.add('nativesdk-' + package)
 
         for a in context.structure.assignments:
             if a.flag:
@@ -604,12 +639,10 @@ class RdependsPackageExistenceRule(BaseRule):
             # takes the shortest name before the operator
             if a.op == '=' and package[-1:] in ('+', '.'):
                 package = package[:-1]
-            name = self._expand(package, variables)
+            name = package_list.expand(package)
             if '${' in name:
                 continue  # Names a variable this file does not set
-            if name in packages:
-                continue
-            if any(self._dynamic_match(pattern, name) for pattern in dynamic):
+            if package_list.declares(name):
                 continue
 
             results.append(self.create_result(
@@ -620,16 +653,6 @@ class RdependsPackageExistenceRule(BaseRule):
             ))
         
         return results
-
-    @staticmethod
-    def _dynamic_match(pattern: str, name: str) -> bool:
-        """PACKAGES_DYNAMIC entries are regular expressions matched against
-        the start of a package name (^${PN}-plugin-.*)."""
-        try:
-            return re.match(pattern, name) is not None
-        except re.error:
-            return False
-
 
 class RrecommendsPackageValidityRule(BaseRule):
     """
