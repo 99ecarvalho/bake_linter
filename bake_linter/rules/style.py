@@ -1002,7 +1002,7 @@ class VariableAssignmentSpacingRule(BaseRule):
     # This pattern detects MISSING spaces around operators
     ASSIGNMENT_NO_SPACE_PATTERN = re.compile(
         r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name with optional overrides
-        r'(\+?=|:=|\?\??=|=\+)'                    # Assignment operator
+        r'(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'  # Assignment operator
         r'(?!\s)',                                  # NOT followed by space (captures missing space after)
     )
     
@@ -1010,14 +1010,14 @@ class VariableAssignmentSpacingRule(BaseRule):
     MISSING_SPACE_BEFORE_PATTERN = re.compile(
         r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name with optional overrides
         r'(?<!\s)'                                  # No space before
-        r'(\+?=|:=|\?\??=|=\+)'                    # Assignment operator
+        r'(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'  # Assignment operator
     )
     
     # Full pattern to check for proper spacing (space before and after operator)
     PROPER_SPACING_PATTERN = re.compile(
         r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name with optional overrides
         r'\s+'                                      # Space(s) before operator
-        r'(\+?=|:=|\?\??=|=\+)'                    # Assignment operator  
+        r'(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'  # Assignment operator  
         r'\s+',                                     # Space(s) after operator
     )
     
@@ -1025,21 +1025,13 @@ class VariableAssignmentSpacingRule(BaseRule):
     BAD_SPACING_PATTERN = re.compile(
         r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)'  # Variable name
         r'(\s*)'                                    # Optional space before operator
-        r'(\+?=|:=|\?\??=|=\+)'                    # Operator
+        r'(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'  # Operator
         r'(\s*)'                                    # Optional space after operator
         r'(.*)$'                                    # Rest of line
     )
     
-    # Patterns to detect function contexts (to skip)
-    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
-    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
-
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_function = False
-        brace_depth = 0
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -1048,20 +1040,10 @@ class VariableAssignmentSpacingRule(BaseRule):
             if not stripped or stripped.startswith("#"):
                 continue
             
-            # Track entering shell/python functions
-            if (self.SHELL_FUNC_START.match(stripped) or 
-                self.PYTHON_FUNC_START.match(stripped) or
-                self.ANON_PYTHON_START.match(stripped) or
-                self.TASK_OVERRIDE.match(stripped)):
-                in_function = True
-                brace_depth = stripped.count('{') - stripped.count('}')
-                continue
-            
-            # Track brace depth inside functions
-            if in_function:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_function = False
+            # Only the first line of a BitBake assignment: function bodies
+            # (whatever their header) and continuation lines hold shell or
+            # python code and values, not assignments.
+            if not context.is_top_level_assignment(line_num):
                 continue
             
             # Skip require/include statements
@@ -1122,7 +1104,7 @@ class SingleQuoteUsageRule(BaseRule):
     SINGLE_QUOTE_ASSIGNMENT = re.compile(
         r"^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)"  # Variable name with optional overrides
         r"\s*"                                      # Optional space
-        r"(\+?=|:=|\?\??=|=\+)"                    # Assignment operator
+        r"(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)"  # Assignment operator
         r"\s*"                                      # Optional space
         r"'([^']*)'"                               # Single-quoted value
         r"\s*$"                                     # End of line (simple single-line case)
@@ -1132,21 +1114,13 @@ class SingleQuoteUsageRule(BaseRule):
     VAR_WITH_SINGLE_QUOTE = re.compile(
         r"^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)"  # Variable name
         r"\s*"                                      # Optional space
-        r"(\+?=|:=|\?\??=|=\+)"                    # Assignment operator
+        r"(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)"  # Assignment operator
         r"\s*"                                      # Optional space
         r"'"                                        # Single quote
     )
     
-    # Patterns to detect function contexts (to skip)
-    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
-    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
-
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_function = False
-        brace_depth = 0
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -1155,20 +1129,10 @@ class SingleQuoteUsageRule(BaseRule):
             if not stripped or stripped.startswith("#"):
                 continue
             
-            # Track entering shell/python functions
-            if (self.SHELL_FUNC_START.match(stripped) or 
-                self.PYTHON_FUNC_START.match(stripped) or
-                self.ANON_PYTHON_START.match(stripped) or
-                self.TASK_OVERRIDE.match(stripped)):
-                in_function = True
-                brace_depth = stripped.count('{') - stripped.count('}')
-                continue
-            
-            # Track brace depth inside functions
-            if in_function:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_function = False
+            # Only the first line of a BitBake assignment: function bodies
+            # (whatever their header) and continuation lines hold shell or
+            # python code and values, not assignments.
+            if not context.is_top_level_assignment(line_num):
                 continue
             
             # Skip require/include statements
@@ -1180,7 +1144,14 @@ class SingleQuoteUsageRule(BaseRule):
                 match = self.VAR_WITH_SINGLE_QUOTE.match(stripped)
                 var_name = match.group(1)
                 operator = match.group(2)
-                
+
+                # A value that contains double quotes (shell or make
+                # arguments such as KERNEL_DIR="${STAGING_KERNEL_DIR}") is
+                # single quoted on purpose
+                assignment = context.assignment_at(line_num)
+                if assignment is not None and '"' in assignment.value:
+                    continue
+
                 results.append(self.create_result(
                     file=context,
                     line=line_num,
@@ -1273,22 +1244,14 @@ class MultilineContinuationAlignmentRule(BaseRule):
 
     # Pattern to detect BitBake variable assignment start
     VAR_ASSIGNMENT_START = re.compile(
-        r'^(\s*)([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)\s*(\+?=|:=|\?\??=|=\+)\s*"(.*)'
+        r'^(\s*)([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)\s*(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)\s*"(.*)'
     )
     
-    # Patterns to detect function contexts (to skip)
-    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
-    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
-
     # Minimum indentation expected for continuation lines (typically 4 spaces)
     MIN_CONTINUATION_INDENT = 4
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_function = False
-        brace_depth = 0
         
         # Track multiline variable state
         in_multiline_var = False
@@ -1304,24 +1267,18 @@ class MultilineContinuationAlignmentRule(BaseRule):
             if not stripped or stripped.startswith("#"):
                 continue
             
-            # Track entering shell/python functions
-            if (self.SHELL_FUNC_START.match(stripped) or 
-                self.PYTHON_FUNC_START.match(stripped) or
-                self.ANON_PYTHON_START.match(stripped) or
-                self.TASK_OVERRIDE.match(stripped)):
-                in_function = True
-                brace_depth = stripped.count('{') - stripped.count('}')
-                continue
-            
-            # Track brace depth inside functions
-            if in_function:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_function = False
+            # Function bodies are shell or python code, not values
+            if context.owner(line_num).startswith("FUNC:"):
+                in_multiline_var = False
                 continue
             
             # Check if this is a new variable assignment
-            match = self.VAR_ASSIGNMENT_START.match(line)
+            # (only a line that starts a logical assignment: a continuation
+            # line such as  FOO="bar" \  inside EXTRA_OEMAKE is not one)
+            match = (
+                self.VAR_ASSIGNMENT_START.match(line)
+                if context.is_top_level_assignment(line_num) else None
+            )
             if match:
                 leading_space = match.group(1)
                 var_name = match.group(2)
@@ -1349,8 +1306,10 @@ class MultilineContinuationAlignmentRule(BaseRule):
             
             # Check continuation lines
             if in_multiline_var:
-                # Calculate actual indentation
-                actual_indent = len(line) - len(line.lstrip())
+                # Calculate actual indentation, a tab moving to the next
+                # multiple of 8 as it does on screen
+                expanded = line.expandtabs(8)
+                actual_indent = len(expanded) - len(expanded.lstrip())
                 
                 # First continuation line sets the expected pattern
                 if first_continuation_indent is None:
