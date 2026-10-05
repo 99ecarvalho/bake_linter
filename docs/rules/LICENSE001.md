@@ -28,7 +28,7 @@ Without a LICENSE variable:
 - **Unclear licensing**: Developers and users don't know the terms under which they can use the software
 - **OpenEmbedded policy**: The styleguide requires LICENSE to be present
 
-The LICENSE variable is mandatory in all recipes except for very specific cases like `packagegroup` recipes that inherit the `packagegroup` class.
+The LICENSE variable is mandatory in all recipes. A recipe may still take it from elsewhere, and the rule follows those cases: a file it requires or includes that sets LICENSE, and the classes that give it a default (`packagegroup`, `image` and `core-image` set `LICENSE ?= "MIT"`, `devicetree` sets `LICENSE ?= "GPL-2.0-only"`). When an included file cannot be found, whether it sets LICENSE is unknown and nothing is reported.
 
 ## How to Fix It
 

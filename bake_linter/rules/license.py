@@ -47,14 +47,26 @@ class LicenseRequiredRule(BaseRule):
         "CLOSED", "Proprietary", "PD", "Public Domain", "Zlib",
     }
 
+    # Classes that give LICENSE a default (LICENSE ?= "MIT" in image and
+    # packagegroup, "GPL-2.0-only" in devicetree; core-image inherits image)
+    LICENSE_DEFAULT_CLASSES: Set[str] = {
+        "packagegroup", "image", "core-image", "devicetree",
+    }
+
     def check(self, context: FileContext) -> List[LintResult]:
         if not self.is_applicable(context):
             return []
         
         results = []
         
-        # Check if LICENSE is defined
+        # Check if LICENSE is defined, here, in a required file or by a class
         if "LICENSE" not in context.variables:
+            if context.inherits & self.LICENSE_DEFAULT_CLASSES:
+                return results
+            # True: an include sets it. None: an include was not found, so
+            # whether LICENSE is set is unknown
+            if context.sets_variable("LICENSE") is not False:
+                return results
             results.append(self.create_result(
                 file=context,
                 message="Missing LICENSE variable",
