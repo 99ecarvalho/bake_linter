@@ -249,10 +249,17 @@ class InconsistentPNRule(BaseRule):
         
         # Check if PN is explicitly set
         if "PN" in context.variables:
+            # PN suffixed with expansions is the cross-canadian/SDK idiom:
+            # one recipe built per target, e.g. foo-cross-canadian-${MACHINE}
+            suffixed = re.compile(re.escape(expected_pn) + r'(?:-\$\{[A-Z_]+\})+')
             for assignment in context.variables["PN"]:
+                # PN:class-devupstream and similar name a variant of the
+                # recipe for one override only
+                if assignment.is_override:
+                    continue
                 actual_pn = assignment.value.strip().strip('"').strip("'")
-                
-                if actual_pn and actual_pn != expected_pn:
+
+                if actual_pn and actual_pn != expected_pn and not suffixed.fullmatch(actual_pn):
                     results.append(self.create_result(
                         file=context,
                         line=assignment.line,
