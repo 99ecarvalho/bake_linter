@@ -524,7 +524,7 @@ rules:
 
   SYSTEMD003:
     enabled: true
-    severity: error
+    severity: warning
     # description: Hardcoded Systemd Paths
 
   # ============================================================================

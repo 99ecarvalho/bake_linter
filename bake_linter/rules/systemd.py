@@ -185,7 +185,7 @@ class SystemdHardcodedPathsRule(BaseRule):
     rule_id = "SYSTEMD003"
     name = "Hardcoded Systemd Paths"
     description = "Detects hardcoded systemd paths instead of using variables"
-    default_severity = Severity.ERROR
+    default_severity = Severity.WARNING
     groups = ["systemd", "portability"]
 
     # Hardcoded paths and their variable replacements
@@ -198,6 +198,9 @@ class SystemdHardcodedPathsRule(BaseRule):
         (re.compile(r'/lib/systemd(?![a-z/])'), "${systemd_unitdir}"),
         (re.compile(r'/usr/lib/systemd(?![a-z/])'), "${systemd_unitdir}"),
     ]
+
+    UNITDIR_VARIABLE_PATTERN = re.compile(
+        r'\$\{systemd_(?:unitdir|system_unitdir|user_unitdir)\}')
 
     # Patterns indicating the line is a SOURCE path context (not a destination)
     SOURCE_PATH_PATTERNS = [
@@ -337,6 +340,12 @@ class SystemdHardcodedPathsRule(BaseRule):
             # Skip image inspection contexts (${IMAGE_ROOTFS}, find/grep commands)
             # These scan already-built images and need literal paths
             if self._is_image_inspection_context(line):
+                continue
+            
+            # A line that also uses the variable compares the literal path
+            # with it or moves files from the literal path to it: the
+            # build system installed there, the recipe is mapping it
+            if self.UNITDIR_VARIABLE_PATTERN.search(line):
                 continue
             
             # Check for hardcoded paths

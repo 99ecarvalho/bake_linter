@@ -1,6 +1,6 @@
 # SYSTEMD003 - Hardcoded Systemd Paths
 
-**Severity:** error
+**Severity:** warning
 
 **Category:** systemd
 
@@ -11,6 +11,8 @@
 ## Description
 
 Detects hardcoded systemd paths instead of using variables
+
+A line that also uses `${systemd_unitdir}`, `${systemd_system_unitdir}` or `${systemd_user_unitdir}` is not reported: it compares the literal path with the variable, or moves the units a build system installed below a literal path to where the variable points, which is the fix.
 
 ## Example of Bad Code
 
@@ -72,7 +74,7 @@ This rule can be configured in `.bake-linter.yaml`:
 rules:
   SYSTEMD003:
     enabled: true  # or false to disable
-    severity: error  # override severity (error, warning, info)
+    severity: warning  # override severity (error, warning, info)
     # options: none
 ```
 

@@ -307,7 +307,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 |---------|------|-----------------|-------------|
 | SYSTEMD001 | Systemd Without Inherit | Error | Detect systemd usage without inherit |
 | SYSTEMD002 | Missing SYSTEMD_SERVICE | Error | Detect .service files without declaration |
-| SYSTEMD003 | Hardcoded Systemd Paths | Error | Detect /lib/systemd instead of variables |
+| SYSTEMD003 | Hardcoded Systemd Paths | Warning | Detect /lib/systemd instead of variables |
 
 ### Install Rules
 | Rule ID | Name | Default Severity | Description |
