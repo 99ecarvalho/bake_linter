@@ -287,8 +287,17 @@ class MixedOverrideSyntaxRule(BaseRule):
     # New colon-based override patterns (for variable/function context)  
     NEW_OVERRIDE_SUFFIXES = [':append', ':prepend', ':remove', ':class-', ':pn-', ':${PN}']
 
+    # Variables whose name, not an override, carries the package:
+    # update-alternatives.bbclass reads ALTERNATIVE_PRIORITY_<pkg> and
+    # ALTERNATIVE_TARGET_<pkg>, so ALTERNATIVE_PRIORITY_${PN} is current syntax
+    PACKAGE_NAMED_PREFIXES = ('ALTERNATIVE_PRIORITY_', 'ALTERNATIVE_TARGET_')
+
     def _has_old_syntax(self, identifier: str) -> bool:
         """Check if identifier uses old underscore override syntax."""
+        for prefix in self.PACKAGE_NAMED_PREFIXES:
+            if identifier.startswith(prefix):
+                identifier = identifier[len(prefix):]
+                break
         for suffix in self.OLD_OVERRIDE_SUFFIXES:
             if suffix in identifier:
                 return True

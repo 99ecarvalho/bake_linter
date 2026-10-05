@@ -12,6 +12,8 @@
 
 Detects recipes using both old (_) and new (:) override syntax
 
+Some variables carry a package in their name rather than in an override: `update-alternatives.bbclass` reads `ALTERNATIVE_PRIORITY_<pkg>` and `ALTERNATIVE_TARGET_<pkg>`, so `ALTERNATIVE_PRIORITY_${PN} = "100"` is current syntax and is not counted as old.
+
 ## Example of Bad Code
 
 ```bitbake
