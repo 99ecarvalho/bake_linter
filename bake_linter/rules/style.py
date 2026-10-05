@@ -1405,45 +1405,76 @@ class PythonFunctionIndentationRule(BaseRule):
     groups = ["style", "formatting", "python"]
     hint = "Use 4 spaces per indentation level in Python functions"
 
-    # Patterns to detect Python function contexts
-    PYTHON_FUNC_START = re.compile(r'^python\s+([a-z_][a-z0-9_]*)\s*\(\s*\)\s*\{')
-    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
-    PYTHON_TASK_OVERRIDE = re.compile(r'^python\s+do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
+    @staticmethod
+    def _scan(line: str, state: dict) -> None:
+        """Update the Python bracket depth and open triple-quoted string in
+        *state* with one line. String literals and comments do not count."""
+        i = 0
+        n = len(line)
+        while i < n:
+            triple = state["triple"]
+            if triple:
+                end = line.find(triple, i)
+                if end == -1:
+                    return
+                state["triple"] = None
+                i = end + 3
+                continue
+            char = line[i]
+            if char == "#":
+                return
+            if char in "\"'":
+                if line.startswith(char * 3, i):
+                    state["triple"] = char * 3
+                    i += 3
+                    continue
+                # a one-line string: skip to its closing quote
+                i += 1
+                while i < n and line[i] != char:
+                    i += 2 if line[i] == "\\" else 1
+                i += 1
+                continue
+            if char in "([{":
+                state["depth"] += 1
+            elif char in ")]}":
+                state["depth"] = max(0, state["depth"] - 1)
+            i += 1
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_python_func = False
-        func_name = ""
-        func_start_line = 0
-        brace_depth = 0
-        base_indent = 0
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            # Skip empty lines and comments outside functions
-            if not stripped:
+
+        # python functions with a brace body (python f() { ... }); where
+        # each one ends comes from the structure, so dict and set braces in
+        # the code do not end it early or late
+        for function in context.structure.functions:
+            if not function.python:
                 continue
-            
-            # Check for Python function start
-            match = self.PYTHON_FUNC_START.match(stripped)
-            if not match:
-                match = self.ANON_PYTHON_START.match(stripped)
-            if not match:
-                match = self.PYTHON_TASK_OVERRIDE.match(stripped)
-            
-            if match:
-                in_python_func = True
-                func_name = match.group(1) if match.lastindex else "anonymous"
-                func_start_line = line_num
-                brace_depth = stripped.count('{') - stripped.count('}')
-                # Calculate base indentation from the function definition
-                base_indent = len(line) - len(line.lstrip())
-                continue
-            
-            if in_python_func:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                
+            header = context.lines[function.line - 1]
+            if not header.lstrip().startswith(("python", "fakeroot")):
+                continue  # a def body: plain python, not checked here
+            func_name = function.name
+            base_indent = len(header) - len(header.lstrip())
+            state = {"depth": 0, "triple": None}
+            previous_continues = False
+
+            last = function.end_line
+            if context.lines[last - 1].startswith("}"):
+                last -= 1  # the closing brace
+            for line_num in range(function.line + 1, last + 1):
+                line = context.lines[line_num - 1]
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                # Inside brackets, a triple-quoted string, or after a
+                # backslash, a line continues a statement: it is aligned,
+                # not indented by blocks
+                continues = (state["depth"] > 0 or state["triple"] is not None
+                             or previous_continues)
+                self._scan(line, state)
+                previous_continues = (line.rstrip().endswith('\\')
+                                      and state["triple"] is None)
+
                 # Check for tabs in Python code
                 if '\t' in line:
                     tab_count = line.count('\t')
@@ -1454,28 +1485,22 @@ class PythonFunctionIndentationRule(BaseRule):
                         context=stripped[:60],
                         hint="Replace tabs with 4 spaces per indentation level",
                     ))
-                
+
                 # Check indentation is multiple of 4 (relative to function body)
-                if stripped and not stripped.startswith('#'):
-                    current_indent = len(line) - len(line.lstrip())
-                    # Indent relative to function start should be multiple of 4
-                    relative_indent = current_indent - base_indent
-                    if relative_indent > 0 and relative_indent % 4 != 0:
-                        # Don't flag continuation lines or closing braces
-                        if not stripped.startswith('}') and not line.rstrip().endswith('\\'):
-                            results.append(self.create_result(
-                                file=context,
-                                line=line_num,
-                                message=f"Python indentation not multiple of 4 spaces (found {relative_indent} relative spaces)",
-                                context=stripped[:60],
-                                hint="Use 4 spaces per indentation level",
-                            ))
-                
-                # Exit function when braces balance
-                if brace_depth <= 0:
-                    in_python_func = False
-                    func_name = ""
-        
+                if continues or stripped.startswith('#'):
+                    continue
+                current_indent = len(line) - len(line.lstrip())
+                # Indent relative to function start should be multiple of 4
+                relative_indent = current_indent - base_indent
+                if relative_indent > 0 and relative_indent % 4 != 0:
+                    results.append(self.create_result(
+                        file=context,
+                        line=line_num,
+                        message=f"Python indentation not multiple of 4 spaces (found {relative_indent} relative spaces)",
+                        context=stripped[:60],
+                        hint="Use 4 spaces per indentation level",
+                    ))
+
         return results
 
 
