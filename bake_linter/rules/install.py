@@ -332,16 +332,19 @@ class UsrLocalInstallRule(BaseRule):
 class NonFHSPathRule(BaseRule):
     """
     Check for installations outside standard FHS paths.
-    
+
     Detects files installed to non-standard locations that may cause:
     - Package management issues
     - Portability problems
     - Maintenance difficulties
-    
-    Note: Recognizes BitBake variables like ${bindir}, ${libdir} as FHS-compliant.
-    Paths like ${D}/${bindir} or ${D}${bindir} are both valid and compliant.
+
+    Only destinations spelled as a literal path under ${D} are judged:
+    ${D}${bindir}, ${D}/${PTEST_PATH} and the like are set by BitBake or
+    the recipe and cannot be judged from the text. Initramfs and image
+    recipes lay out a root filesystem of their own (/init, /init.d) and
+    are not judged.
     """
-    
+
     rule_id = "INSTALL005"
     name = "Non-FHS Installation Path"
     description = "Detects files installed outside standard FHS paths"
@@ -349,107 +352,53 @@ class NonFHSPathRule(BaseRule):
     groups = ["install", "portability"]
     hint = "Use standard paths: ${bindir}, ${libdir}, ${datadir}, ${sysconfdir}"
 
-    # FHS-compliant BitBake variables - these are always valid destinations
-    FHS_VARIABLES = [
-        'bindir', 'sbindir', 'libdir', 'libexecdir', 'datadir',
-        'sysconfdir', 'localstatedir', 'includedir', 'docdir',
-        'mandir', 'infodir', 'sharedstatedir', 'servicedir',
-        'systemd_system_unitdir', 'systemd_user_unitdir', 'systemd_unitdir',
-        'base_bindir', 'base_sbindir', 'base_libdir',
-        'nonarch_libdir', 'nonarch_base_libdir',
-    ]
+    # Top-level directories of the FHS (and /efi, /run from current practice)
+    FHS_ROOTS = {
+        "usr", "etc", "var", "opt", "lib", "lib32", "lib64", "run", "srv",
+        "home", "boot", "efi", "bin", "sbin", "dev", "mnt", "media", "proc",
+        "sys", "tmp", "root",
+    }
+    DESTINATION = re.compile(r'^(?:\$\{D\}|\$D(?![A-Za-z0-9_]))(?P<path>.*)$')
+    # do_install, do_install_ptest, ...
+    INSTALL_TASK = re.compile(r'^do_install(?:_\w+)?$')
 
-    # Standard FHS paths (as variables or literals)
-    STANDARD_PATHS = [
-        r'\$\{D\}\$\{bindir\}',
-        r'\$\{D\}\$\{sbindir\}',
-        r'\$\{D\}\$\{libdir\}',
-        r'\$\{D\}\$\{libexecdir\}',
-        r'\$\{D\}\$\{datadir\}',
-        r'\$\{D\}\$\{sysconfdir\}',
-        r'\$\{D\}\$\{localstatedir\}',
-        r'\$\{D\}\$\{includedir\}',
-        r'\$\{D\}\$\{docdir\}',
-        r'\$\{D\}\$\{mandir\}',
-        r'\$\{D\}\$\{infodir\}',
-        r'\$\{D\}\$\{systemd_system_unitdir\}',
-        r'\$\{D\}\$\{systemd_user_unitdir\}',
-        r'\$\{D\}/usr/',
-        r'\$\{D\}/etc/',
-        r'\$\{D\}/var/',
-        r'\$\{D\}/opt/',
-        r'\$\{D\}/lib/',
-        r'\$\{D\}/run/',
-        r'\$\{D\}/srv/',
-        r'\$\{D\}/home/',
-    ]
-    
-    STANDARD_PATTERN = re.compile('|'.join(STANDARD_PATHS))
-    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
-    INSTALL_PATTERN = re.compile(r'^\s*install\s+.*\$\{D\}(/\S+)')
-
-    def _uses_fhs_variable(self, path: str) -> bool:
-        """Check if the path uses any FHS-compliant BitBake variable."""
-        for var in self.FHS_VARIABLES:
-            # Match ${var} or ${var}/subpath patterns
-            if f'${{{var}}}' in path or f'${{{var}/' in path:
-                return True
-        return False
-
-    def _is_fhs_compliant(self, path: str) -> bool:
-        """Check if the path is FHS-compliant (variable or literal)."""
-        # If it uses an FHS variable, it's compliant
-        if self._uses_fhs_variable(path):
-            return True
-        
-        # Check for standard literal paths
-        fhs_roots = ['/usr', '/etc', '/var', '/opt', '/lib', '/run', '/srv', '/home', '/boot']
-        return any(path.startswith(root) or f'/{root[1:]}' in path for root in fhs_roots)
+    def _non_fhs(self, word: str) -> str:
+        """The literal path *word* installs to under ${D} when it is outside
+        the FHS roots, or ""."""
+        match = self.DESTINATION.match(word)
+        if not match:
+            return ""
+        path = match.group("path").lstrip("/")
+        # ${D}${bindir}, ${D}/${PTEST_PATH}, or ${D} itself
+        if not path or path.startswith("$"):
+            return ""
+        if path.split("/", 1)[0] in self.FHS_ROOTS:
+            return ""
+        return "/" + path
 
     def check(self, context: FileContext) -> List[LintResult]:
+        from bake_linter.core.recipe import command_words
         results = []
-        in_do_install = False
-        brace_depth = 0
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
-                continue
-            
-            if self.INSTALL_TASK_PATTERN.match(stripped):
-                in_do_install = True
-                if '{' in stripped:
-                    brace_depth = 1
-                continue
-            
-            if in_do_install:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_install = False
-                    brace_depth = 0
-                    continue
-                
-                # Check for install commands with non-standard destinations
-                if 'install ' in stripped and '${D}' in stripped:
-                    # Skip if using standard paths (legacy pattern check)
-                    if self.STANDARD_PATTERN.search(stripped):
-                        continue
-                    
-                    # Extract the destination path
-                    match = self.INSTALL_PATTERN.search(stripped)
-                    if match:
-                        dest_path = match.group(1)
-                        
-                        # Check if it's FHS-compliant (variable or literal)
-                        if not self._is_fhs_compliant(dest_path):
-                            results.append(self.create_result(
-                                file=context,
-                                line=line_num,
-                                message=f"Installation to non-FHS path: {dest_path}",
-                                context=stripped[:60],
-                                hint="Consider using standard FHS paths",
-                            ))
-        
-        return results
 
+        if context.pn.startswith("initramfs-") or context.inherits & {"image", "nopackages"}:
+            return results
+
+        for line in context.function_lines:
+            if not self.INSTALL_TASK.match(line.function.split(":", 1)[0]):
+                continue
+            words = command_words(line.text)
+            if words[:1] != ["install"]:
+                continue
+            for word in words[1:]:
+                dest_path = self._non_fhs(word)
+                if dest_path:
+                    results.append(self.create_result(
+                        file=context,
+                        line=line.line,
+                        message=f"Installation to non-FHS path: {dest_path}",
+                        context=line.text[:60],
+                        hint="Consider using standard FHS paths",
+                    ))
+                    break
+
+        return results

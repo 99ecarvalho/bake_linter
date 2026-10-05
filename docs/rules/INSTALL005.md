@@ -12,35 +12,37 @@
 
 Detects files installed outside standard FHS paths
 
+Only destinations written as a literal path under `${D}` are judged, against
+the top-level directories of the FHS (`/usr`, `/etc`, `/var`, `/opt`, `/lib`,
+`/bin`, `/sbin`, `/boot`, `/dev`, `/home`, `/media`, `/mnt`, `/proc`, `/root`,
+`/run`, `/srv`, `/sys`, `/tmp`, plus `/efi`, `/lib32`, `/lib64`). A destination
+under a variable (`${D}${bindir}`, `${D}/${PTEST_PATH}`) is not judged.
+Initramfs recipes (`initramfs-*`) and recipes inheriting `image` or
+`nopackages` lay out a root filesystem of their own and are not judged.
+
 ## Example of Bad Code
 
 ```bitbake
 do_install() {
-    install -d ${D}/opt/myapp/bin
-    install -m 0755 ${B}/myapp ${D}/opt/myapp/bin/
-
-    install -d ${D}/root/.myapp
-    install -m 0600 config.cfg ${D}/root/.myapp/
+    install -d ${D}/www/pages
+    install -m 0644 index.html ${D}/www/pages/
 }
 ```
 
 ## Why This Is Bad
 
-Installing outside FHS (Filesystem Hierarchy Standard) paths like `/opt` or home directories breaks portability and system organization. Standard locations like `/usr/bin`, `/etc`, `/var` are preferred for consistency, system management tools, and compliance with packaging standards.
+Installing outside FHS (Filesystem Hierarchy Standard) paths breaks portability and system organization. Standard locations like `/usr/bin`, `/etc`, `/var` are preferred for consistency, system management tools, and compliance with packaging standards.
 
 ## How to Fix It
 
 ```bitbake
 do_install() {
-    install -d ${D}${bindir}
-    install -m 0755 ${B}/myapp ${D}${bindir}/
-
-    install -d ${D}${sysconfdir}/myapp
-    install -m 0600 config.cfg ${D}${sysconfdir}/myapp/
+    install -d ${D}${localstatedir}/www/pages
+    install -m 0644 index.html ${D}${localstatedir}/www/pages/
 }
 ```
 
-Use standard Yocto variables (`${bindir}`, `${sysconfdir}`, `${libdir}`, etc.) which resolve to proper FHS paths. This ensures consistent installation and portability across systems.
+Use standard Yocto variables (`${bindir}`, `${sysconfdir}`, `${localstatedir}`, etc.) which resolve to proper FHS paths. This ensures consistent installation and portability across systems.
 
 ## Inline Suppression
 
