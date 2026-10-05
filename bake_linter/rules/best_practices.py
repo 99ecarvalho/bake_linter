@@ -63,53 +63,49 @@ class DoFetchModificationRule(BaseRule):
 
 class CleanupInConfigureRule(BaseRule):
     """
-    Check for rm commands in do_configure.
+    Check for rm commands in do_configure that reach outside the recipe's
+    own work directory.
     
-    Cleanup operations should be in do_clean or handled by the build system.
+    Clearing stale files from ${S}, ${B} or ${WORKDIR} before configuring
+    is routine. Removing files elsewhere (sysroots, deploy directories,
+    TMPDIR, host paths) touches what other tasks and recipes own.
     """
     
     rule_id = "BESTPRACTICE002"
     name = "Cleanup in do_configure"
-    description = "Detects rm commands in do_configure that may be misplaced"
+    description = "Detects rm commands in do_configure outside the recipe's work directory"
     default_severity = Severity.INFO
     groups = ["best_practices"]
-    hint = "Move cleanup to do_clean or let build system handle it"
+    hint = "Only remove files in ${S}, ${B} or ${WORKDIR}; other paths belong to other tasks or recipes"
 
-    CONFIGURE_TASK_PATTERN = re.compile(r'^do_configure(?:[_:]|$|\s*\(\))')
-    RM_PATTERN = re.compile(r'^\s*rm\s+-rf?\s+')
+    WORK_TREE = re.compile(r'^\$\{(?:S|B|WORKDIR|UNPACKDIR)\}')
+    BITBAKE_VAR = re.compile(r'^\$\{[A-Z][A-Z0-9_]*\}')
+
+    def _outside_work_tree(self, target: str) -> bool:
+        if target.startswith("/"):
+            return True
+        # ${STAGING_DIR_HOST}, ${DEPLOY_DIR}, ${TMPDIR}, ...; a shell
+        # variable ($d, ${dir}) could be anywhere and a relative path is in
+        # ${B}
+        return bool(self.BITBAKE_VAR.match(target)) and not self.WORK_TREE.match(target)
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_do_configure = False
-        brace_depth = 0
         
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+        for line in context.function_lines:
+            if line.function.split(":", 1)[0] != "do_configure":
                 continue
-            
-            if self.CONFIGURE_TASK_PATTERN.match(stripped):
-                in_do_configure = True
-                if '{' in stripped:
-                    brace_depth = 1
+            words = command_words(line.text)
+            if words[:1] != ["rm"]:
                 continue
-            
-            if in_do_configure:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_configure = False
-                    brace_depth = 0
-                    continue
-                
-                if self.RM_PATTERN.match(stripped):
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="rm command in do_configure may be misplaced",
-                        context=stripped[:60],
-                        hint="Consider moving to do_clean or removing if unnecessary",
-                    ))
+            targets = [w for w in words[1:] if not w.startswith("-")]
+            if any(self._outside_work_tree(t) for t in targets):
+                results.append(self.create_result(
+                    file=context,
+                    line=line.line,
+                    message="rm in do_configure removes files outside the recipe's work directory",
+                    context=line.text[:60],
+                ))
         
         return results
 

@@ -10,36 +10,37 @@
 
 ## Description
 
-Detects rm commands in do_configure that may be misplaced
+Detects `rm` in `do_configure` that removes files outside the recipe's own
+work directory: absolute paths, or paths under BitBake variables other than
+`${S}`, `${B}`, `${WORKDIR}` and `${UNPACKDIR}` (`${STAGING_*}`,
+`${DEPLOY_DIR}`, `${TMPDIR}`, ...).
+
+Clearing stale files from the source or build tree before configuring (old
+libtool macros, bundled copies of libraries, pregenerated sources) is
+routine and is not reported. Relative paths are in `${B}`, and paths under a
+shell variable are not judged.
 
 ## Example of Bad Code
 
 ```bitbake
-do_configure() {
-    rm -f unwanted-file.o
-    rm -rf temp-build
-    ./configure
+do_configure:prepend() {
+    rm -f ${STAGING_INCDIR}/foo.h
 }
 ```
 
 ## Why This Is Bad
 
-Cleanup belongs in `do_compile` or a dedicated cleanup step, not in `do_configure`. Mixing cleanup and configuration makes the task logic unclear.
+Sysroots, deploy directories and the rest of TMPDIR are populated by other
+tasks and other recipes. Removing files there from `do_configure` breaks
+them behind BitBake's back: the task that put the file there is not rerun,
+and the removal is not undone when this recipe is cleaned.
 
 ## How to Fix It
 
-```bitbake
-do_compile:prepend() {
-    rm -f unwanted-file.o
-    rm -rf temp-build
-}
-
-do_configure() {
-    ./configure
-}
-```
-
-Move cleanup to `do_compile:prepend()` or `do_install:prepend()` depending on context. Keep `do_configure` focused on configuration.
+Only remove files this recipe owns, in `${S}`, `${B}` or `${WORKDIR}`. If a
+file in the sysroot gets in the way, stop it from being staged in the recipe
+that provides it (`SYSROOT_DIRS`, `do_install`), or point the build at the
+right file instead.
 
 ## Inline Suppression
 
