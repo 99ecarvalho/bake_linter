@@ -12,6 +12,9 @@
 
 Detects mkdir -p usage instead of install -d in do_install
 
+Only directories created under `${D}` are judged: scratch directories in
+`${B}` or `${WORKDIR}` are not installed.
+
 ## Example of Bad Code
 
 ```bitbake

@@ -226,13 +226,16 @@ class InstallWithoutModeRule(BaseRule):
 class MkdirInsteadOfInstallDRule(BaseRule):
     """
     Check for mkdir -p usage instead of install -d in do_install.
-    
+
     Using install -d is preferred because:
     - Sets consistent ownership and permissions
     - Standard Yocto/OE practice
     - More explicit about intent
+
+    Only directories created in the install tree (${D}) are judged; scratch
+    directories elsewhere are not installed.
     """
-    
+
     rule_id = "INSTALL003"
     name = "mkdir Instead of install -d"
     description = "Detects mkdir -p usage instead of install -d in do_install"
@@ -240,42 +243,31 @@ class MkdirInsteadOfInstallDRule(BaseRule):
     groups = ["install", "best_practices"]
     hint = "Use 'install -d' instead of 'mkdir -p'"
 
-    MKDIR_PATTERN = re.compile(r'^\s*mkdir\s+(?:-p\s+)?')
-    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+    DESTDIR = re.compile(r'\$\{D\}|\$D(?![A-Za-z0-9_])')
+    # do_install, do_install_ptest, ...
+    INSTALL_TASK = re.compile(r'^do_install(?:_\w+)?$')
 
     def check(self, context: FileContext) -> List[LintResult]:
+        from bake_linter.core.recipe import command_words
         results = []
-        in_do_install = False
-        brace_depth = 0
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        for line in context.function_lines:
+            if not self.INSTALL_TASK.match(line.function.split(":", 1)[0]):
                 continue
-            
-            if self.INSTALL_TASK_PATTERN.match(stripped):
-                in_do_install = True
-                if '{' in stripped:
-                    brace_depth = 1
+            words = command_words(line.text)
+            if words[:1] != ["mkdir"]:
                 continue
-            
-            if in_do_install:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_install = False
-                    brace_depth = 0
-                    continue
-                
-                if self.MKDIR_PATTERN.match(stripped):
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="Using 'mkdir' instead of 'install -d'",
-                        context=stripped[:60],
-                        hint="Replace 'mkdir -p' with 'install -d' for consistency",
-                    ))
-        
+            operands = [w for w in words[1:] if not w.startswith("-")]
+            if not any(self.DESTDIR.search(w) for w in operands):
+                continue
+            results.append(self.create_result(
+                file=context,
+                line=line.line,
+                message="Using 'mkdir' instead of 'install -d'",
+                context=line.text[:60],
+                hint="Replace 'mkdir -p' with 'install -d' for consistency",
+            ))
+
         return results
 
 
