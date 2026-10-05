@@ -5473,9 +5473,7 @@ UPSTREAM_CHECK_REGEX = "foo-(?P<pver>\\d+\\.\\d+)\\.tar\\.gz"
 
     def test_closed_license_recipe_is_exempt(self):
         """A proprietary recipe has no public release feed for
-        UPSTREAM_CHECK_* to point at. Of the 12 LICENSE = "CLOSED" recipes in
-        the vendored poky/meta-openembedded trees, zero set any
-        UPSTREAM_CHECK variable."""
+        UPSTREAM_CHECK_* to point at."""
         from bake_linter.rules.lifecycle import MissingUpstreamCheckRule
 
         content = '''SUMMARY = "internal daemon"
@@ -5495,13 +5493,12 @@ SRCREV = "0123456789abcdef0123456789abcdef01234567"
 
         assert results == []
 
-    def test_compound_closed_license_recipe_is_exempt(self):
-        """CLOSED as a term in a compound expression counts: a partly
-        proprietary recipe has no single public release index either. Found on
-        a recipe, whose LICENSE is "CLOSED & GPL-2.0-or-later"."""
+    def test_compound_closed_license_recipe_still_flagged(self):
+        """Only LICENSE = "CLOSED" exactly is exempt: the open part of a
+        compound expression usually has a public upstream to check."""
         from bake_linter.rules.lifecycle import MissingUpstreamCheckRule
 
-        content = '''SUMMARY = "internal lib with a GPL part"
+        content = '''SUMMARY = "lib with a GPL part"
 LICENSE = "CLOSED & GPL-2.0-or-later"
 SRC_URI = "git://git.example.com/org/lib.git;protocol=ssh;branch=master"
 SRCREV = "0123456789abcdef0123456789abcdef01234567"
@@ -5516,7 +5513,8 @@ SRCREV = "0123456789abcdef0123456789abcdef01234567"
         rule = MissingUpstreamCheckRule()
         results = rule.check(context)
 
-        assert results == []
+        assert len(results) == 1
+        assert results[0].rule_id == "LIFECYCLE001"
 
     def test_open_license_recipe_still_flagged(self):
         """A recipe tracking a public upstream is still expected to declare

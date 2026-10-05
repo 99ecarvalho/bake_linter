@@ -55,14 +55,13 @@ class MissingUpstreamCheckRule(BaseRule):
         r'packagegroup-.*\.bb$',
     ]
 
-    # CLOSED in the LICENSE expression is the conventional marker for a
-    # proprietary/internal recipe. There is no public release feed to poll for
-    # such a recipe, so UPSTREAM_CHECK_* has nothing to point at: of the 12
-    # CLOSED recipes in the vendored poky/meta-openembedded trees, zero set any
-    # UPSTREAM_CHECK variable. Matched as a term rather than as the whole value
-    # so compound expressions ("CLOSED & GPL-2.0-or-later") count too - a
-    # partly-proprietary recipe has no single public release index either.
-    CLOSED_LICENSE_PATTERN = re.compile(r'^LICENSE[^=]*=\s*"[^"]*\bCLOSED\b')
+    # LICENSE = "CLOSED" is the conventional marker for a proprietary recipe.
+    # There is no public release feed to poll for such a recipe, so
+    # UPSTREAM_CHECK_* has nothing to point at, and upstream layers do not set
+    # it on CLOSED recipes. Only the exact value counts, the same value OE
+    # special-cases: a compound expression ("CLOSED & GPL-2.0-or-later") has
+    # an open part that usually does have a public upstream.
+    CLOSED_LICENSE_PATTERN = re.compile(r'^LICENSE[^=]*=\s*"\s*CLOSED\s*"')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
