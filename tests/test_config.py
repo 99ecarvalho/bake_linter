@@ -141,3 +141,22 @@ class TestFileExclusion:
         assert config.is_file_excluded(Path("build/recipe.bb"))
         assert config.is_file_excluded(Path("recipe.bb.bak"))
         assert not config.is_file_excluded(Path("recipes/recipe.bb"))
+
+
+class TestMaxLineLength:
+    """settings.max_line_length reaches STYLE002."""
+
+    def test_setting_is_the_style002_limit(self, tmp_path):
+        config_file = tmp_path / ".bake-linter.yaml"
+        config_file.write_text("settings:\n  max_line_length: 80\n")
+        config = LinterConfig.load(config_file)
+        assert config.rules["STYLE002"].options["max_length"] == 80
+
+    def test_rule_option_wins(self, tmp_path):
+        config_file = tmp_path / ".bake-linter.yaml"
+        config_file.write_text(
+            "rules:\n  STYLE002:\n    options:\n      max_length: 100\n"
+            "settings:\n  max_line_length: 80\n"
+        )
+        config = LinterConfig.load(config_file)
+        assert config.rules["STYLE002"].options["max_length"] == 100

@@ -226,6 +226,12 @@ class LinterConfig:
             if "color" in settings:
                 self.color = bool(settings["color"])
         
+        # settings.max_line_length is the limit STYLE002 uses unless the rule
+        # sets its own max_length option
+        if "settings" in data and "max_line_length" in data["settings"]:
+            style002 = self.rules.setdefault("STYLE002", RuleConfig(rule_id="STYLE002"))
+            style002.options.setdefault("max_length", self.max_line_length)
+
         # Load exclude patterns
         if "exclude" in data:
             self.exclude_patterns = list(data["exclude"])
