@@ -98,14 +98,13 @@ class MissingSummaryRule(BaseRule):
         if not str(context.path).endswith('.bb'):
             return results
         
-        has_summary = False
-        
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("SUMMARY"):
-                has_summary = True
-                break
-        
+        # SUMMARY set here or in a required/included file counts. When an
+        # include cannot be found, whether it sets SUMMARY is unknown, so
+        # nothing is reported.
+        has_summary = context.sets_variable("SUMMARY")
+        if has_summary is None:
+            return results
+
         if not has_summary:
             # Check if inheriting from a class that sets SUMMARY
             inherits_classes = False
