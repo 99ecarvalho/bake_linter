@@ -46,6 +46,7 @@ def _check(content, name="foo_1.0.bb"):
     'RDEPENDS:${PN} = "gettext-dev libxml-parser-perl"',
     'RDEPENDS:${PN}:remove = "make"',
     'RDEPENDS:foo-native:remove = "bar-native"',
+    'RDEPENDS:${PN}-server = "${PN}-modules-protocol-native"',
 ])
 def test_not_reported(line):
     assert _check(line + "\n") == []

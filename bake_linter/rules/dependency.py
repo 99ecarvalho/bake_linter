@@ -86,7 +86,9 @@ class WrongDependencyTypeRule(BaseRule):
                 continue
 
             for token in assignment.value.split():
-                if token.endswith("-native"):
+                # ${PN}-... is a package of this target recipe, whatever its
+                # name ends with (${PN}-modules-protocol-native)
+                if token.endswith("-native") and not token.startswith("${PN}-"):
                     message = (
                         f"Native package '{token}' in RDEPENDS of a target "
                         "package; native packages run on the build host"
