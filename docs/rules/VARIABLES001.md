@@ -1,6 +1,6 @@
 # VARIABLES001 - Git Recipe PV Without +git
 
-**Severity:** warning
+**Severity:** info
 
 **Category:** variables
 
@@ -38,7 +38,13 @@ PV = "1.0.0+git"
 
 From nanbield (4.3) on, BitBake appends the revision to a PV that contains
 `+git` by itself, and `SRCPV` is deprecated. On older releases use
-`PV = "1.0.0+git${SRCPV}"`. Recipes named `*_git.bb` are skipped.
+`PV = "1.0.0+git${SRCPV}"`. Recipes named `*_git.bb` and their
+`*_git.inc` are skipped.
+
+The marker is for commits that are not a release. A recipe whose SRCREV is
+the commit of a release tag rightly keeps a plain PV, and that cannot be
+checked offline, so this rule is informational: if SRCREV is not the
+commit of a release tag, mark PV with `+git`.
 
 ## Inline Suppression
 
@@ -64,7 +70,7 @@ This rule can be configured in `.bake-linter.yaml`:
 rules:
   VARIABLES001:
     enabled: true  # or false to disable
-    severity: warning  # override severity (error, warning, info)
+    severity: info  # override severity (error, warning, info)
     # options:
     #   key: value  # Add rule-specific options if any
 ```

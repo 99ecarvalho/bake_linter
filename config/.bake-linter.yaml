@@ -568,7 +568,7 @@ rules:
   # ============================================================================
   VARIABLES001:
     enabled: true
-    severity: warning
+    severity: info
     # description: Git Recipe PV Without +git
 
   VARIABLES002:

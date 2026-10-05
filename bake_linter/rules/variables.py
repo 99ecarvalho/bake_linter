@@ -32,14 +32,18 @@ class GitRecipeWithoutSRCPVRule(BaseRule):
       to a PV containing "+git" by itself, and SRCPV is deprecated.
     - Older releases: PV = "1.0+git${SRCPV}".
     Either form is accepted.
+
+    The marker is for commits that are not a release. A recipe that pins
+    SRCREV to the commit of a release tag rightly keeps a plain PV, and
+    that cannot be told apart offline, so this is only a suggestion.
     """
-    
+
     rule_id = "VARIABLES001"
     name = "Git Recipe PV Without +git"
     description = "Detects git-based recipes whose PV has neither +git nor SRCPV"
-    default_severity = Severity.WARNING
+    default_severity = Severity.INFO
     groups = ["variables", "git"]
-    hint = 'Use PV = "<version>+git" (or "+git${SRCPV}" before nanbield)'
+    hint = "If SRCREV is not the commit of a release tag, mark PV with +git"
 
     GIT_SRC_PATTERN = re.compile(r'SRC_URI\s*[+:]?=.*(?:git://|gitsm://)')
     PV_PATTERN = re.compile(r'^PV\s*=\s*["\']([^"\']+)["\']')
@@ -69,10 +73,11 @@ class GitRecipeWithoutSRCPVRule(BaseRule):
                 pv_line_num = line_num
                 pv_value = pv_match.group(1)
         
-        # Skip _git.bb recipes (they typically inherit gitpkgv or similar)
-        if context.path.name.endswith('_git.bb'):
+        # Skip _git.bb recipes and their _git.inc (they typically inherit
+        # gitpkgv or similar)
+        if context.path.name.endswith(('_git.bb', '_git.inc')):
             return results
-        
+
         # Flag a git recipe whose PV is not marked as a git snapshot
         if is_git_recipe and pv_line and not self.SNAPSHOT_PV_PATTERN.search(pv_value):
             results.append(self.create_result(
@@ -81,7 +86,8 @@ class GitRecipeWithoutSRCPVRule(BaseRule):
                 message="Git-based recipe PV has neither +git nor ${SRCPV}",
                 context=pv_line[:60],
                 hint=(
-                    f'Change to PV = "{pv_value}+git" '
+                    f'If SRCREV is not the commit of a release tag, mark PV '
+                    f'with +git: PV = "{pv_value}+git" '
                     f'(or "{pv_value}+git${{SRCPV}}" before nanbield)'
                 ),
             ))

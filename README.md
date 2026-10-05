@@ -337,7 +337,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 ### Variables Rules
 | Rule ID | Name | Default Severity | Description |
 |---------|------|-----------------|-------------|
-| VARIABLES001 | Git Recipe PV Without +git | Warning | Detect git recipes whose PV has neither +git nor ${SRCPV} |
+| VARIABLES001 | Git Recipe PV Without +git | Info | Detect git recipes whose PV has neither +git nor ${SRCPV} |
 | VARIABLES002 | Unconventional S Assignment | Warning | Detect S = "${WORKDIR}" pattern |
 | VARIABLES003 | Unused Variable Assignment | Info | Detect variables assigned but never referenced |
 | VARIABLES004 | Variable Redefinition | Warning | Detect same variable assigned multiple times |
