@@ -1519,7 +1519,13 @@ class RecipeVariableOrderRule(BaseRule):
     }
     
     # Pattern to extract variable name from assignment
-    VAR_ASSIGNMENT = re.compile(r'^([A-Z][A-Z0-9_]*)(?::[^\s=]+)?\s*[\+\?:]?=')
+    VAR_ASSIGNMENT = re.compile(
+        r'^([A-Z][A-Z0-9_]*)(?::([^\s=]+))?\s*(\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'
+    )
+
+    # Operators that add to a value set elsewhere (often by a class or an
+    # include, so after inherit): where they sit says nothing about order
+    ADDING_OPERATORS = {"+=", "=+", ".=", "=."}
     
     # Pattern to detect inherit statement
     INHERIT_PATTERN = re.compile(r'^inherit\s+')
@@ -1554,13 +1560,25 @@ class RecipeVariableOrderRule(BaseRule):
                     task_start_line = line_num
                 continue
             
-            # Extract variable name
+            # Extract variable name (from the first line of an assignment
+            # only, not from continuation lines or function bodies)
             match = self.VAR_ASSIGNMENT.match(stripped)
-            if match:
+            if match and context.is_top_level_assignment(line_num):
                 var_name = match.group(1)
                 # Get base variable name (without package suffix)
                 base_var = var_name.split(':')[0] if ':' in var_name else var_name
-                
+
+                # Rank only the main definition of a variable. Additions
+                # (+=, :append, :prepend, :remove) and per-package or
+                # conditional variants (RDEPENDS:${PN}-foo, SUMMARY:libfoo,
+                # EXTRA_OECONF:class-native) belong next to whatever they
+                # refine, not in the recipe-level order.
+                overrides = match.group(2)
+                if match.group(3) in self.ADDING_OPERATORS:
+                    continue
+                if overrides and overrides != "${PN}":
+                    continue
+
                 if base_var in self.VARIABLE_ORDER:
                     priority = self.VARIABLE_ORDER[base_var]
                     var_positions.append((line_num, var_name, priority))
@@ -1697,7 +1715,12 @@ class SourceVariablesOrderRule(BaseRule):
             
             if stripped.startswith('#'):
                 continue
-            
+
+            # Only lines that start an assignment, not continuation lines
+            # or function bodies (S=... in a shell function)
+            if not context.is_top_level_assignment(line_num):
+                continue
+
             # Match SRC_URI (but not SRC_URI:append etc for simplicity)
             if re.match(r'^SRC_URI\s*[+?:]?=', stripped):
                 if src_uri_line is None:
@@ -1758,31 +1781,39 @@ class MetadataBeforeLicenseRule(BaseRule):
 
     METADATA_VARS = ['SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER', 'SECTION']
 
+    @staticmethod
+    def _assigns(context: FileContext, line_num: int, stripped: str, var: str) -> bool:
+        """Whether the line starts an assignment of *var* itself: not
+        LICENSE_FLAGS, not a per-package SUMMARY:libfoo, not a continuation
+        line or function body."""
+        return (bool(re.match(rf'^{var}\s*[?:+]?=', stripped))
+                and context.is_top_level_assignment(line_num))
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         license_line = None
-        
+
         # Find first LICENSE line
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             if stripped.startswith('#'):
                 continue
-            if stripped.startswith('LICENSE') and '=' in stripped:
+            if self._assigns(context, line_num, stripped, 'LICENSE'):
                 license_line = line_num
                 break
-        
+
         if not license_line:
             return results
-        
+
         # Check if any metadata vars appear after LICENSE
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             if stripped.startswith('#'):
                 continue
-            
+
             for meta_var in self.METADATA_VARS:
-                if stripped.startswith(meta_var) and '=' in stripped:
+                if self._assigns(context, line_num, stripped, meta_var):
                     if line_num > license_line:
                         results.append(self.create_result(
                             file=context,
