@@ -366,7 +366,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 | PKG002 | FILES Not Matching Install | Warning | Detect installed paths not in FILES |
 | PKG003 | Wildcard bbappend Overreach | Warning | Detect version-specific content in wildcard bbappend |
 | PKG004 | FILES/PACKAGES Consistency | Warning | Verify FILES entries match packages in PACKAGES |
-| PKG005 | RDEPENDS Package Existence | Error | Ensure packages in RDEPENDS:pkg are in PACKAGES |
+| PKG005 | RDEPENDS Package Existence | Warning | Ensure packages in RDEPENDS:pkg are in PACKAGES |
 | PKG006 | RRECOMMENDS Package Validity | Info | Check packages in RRECOMMENDS:pkg are defined |
 
 ### Metadata Rules

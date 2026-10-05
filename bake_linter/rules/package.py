@@ -430,106 +430,164 @@ class RdependsPackageExistenceRule(BaseRule):
     """
     Check that packages in RDEPENDS:pkg are defined in PACKAGES.
     
-    RDEPENDS:${PN}-foo requires ${PN}-foo to exist in PACKAGES.
+    RDEPENDS:${PN}-foo requires ${PN}-foo to exist in PACKAGES. BitBake
+    silently ignores RDEPENDS of a package that is never created, so the
+    assignment is dead metadata rather than a build failure.
     
     Recognizes packages added via:
     - PACKAGES = "..." or PACKAGES += "..." or PACKAGES =+ "..."
     - PACKAGE_BEFORE_PN += "..."
-    - Inherited classes that auto-create packages (ptest, etc.)
+    - PACKAGES_DYNAMIC patterns
+    - Inherited classes that auto-create packages (ptest, lib_package, etc.)
+    - Values held in local variables (PACKAGE_BEFORE_PN = "${FOO_PACKAGES}")
+    - Required or included files
     """
     
     rule_id = "PKG005"
     name = "RDEPENDS Package Existence"
     description = "Ensures packages referenced in RDEPENDS:pkg are in PACKAGES"
-    default_severity = Severity.ERROR
+    default_severity = Severity.WARNING
     groups = ["packaging", "dependency"]
     hint = "Add package to PACKAGES or fix package name"
 
-    RDEPENDS_PKG_PATTERN = re.compile(r'^RDEPENDS[_:]([\w${}-]+)')
-    PACKAGES_PATTERN = re.compile(r'^PACKAGES\s*[+=:]+')
-    PACKAGE_BEFORE_PN_PATTERN = re.compile(r'^PACKAGE_BEFORE_PN\s*[+=:]+')
+    # Packages bitbake.conf and the always-inherited classes create
+    STANDARD_SUFFIXES = ['', '-dev', '-dbg', '-doc', '-staticdev', '-locale',
+                         '-src', '-lic']
     
-    # Standard packages that always exist
-    STANDARD_PACKAGES = ['${PN}', '${PN}-dev', '${PN}-dbg', '${PN}-doc', 
-                         '${PN}-staticdev', '${PN}-locale']
-    
-    # Classes that auto-create packages: (class_name, package_suffix)
-    # When a recipe inherits these classes, the corresponding package is auto-created
+    # Classes that auto-create packages: class name -> package suffix
     CLASS_AUTO_PACKAGES = {
-        'ptest': '${PN}-ptest',
-        'python3-dir': '${PN}-staticdev',
-        'kernel': '${KERNEL_PACKAGE_NAME}-base',
+        'lib_package': '-bin',
     }
 
-    def _get_inherited_classes(self, context: FileContext) -> set:
-        """Extract all inherited classes from the recipe."""
-        classes = set()
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith('inherit'):
-                # Extract class names from "inherit foo bar baz"
-                parts = stripped.split()
-                classes.update(parts[1:])  # Skip 'inherit' keyword
-        return classes
+    # PACKAGES built from Python: the list is not knowable statically
+    PYTHON_PACKAGES_PATTERN = re.compile(
+        r"""d\.(?:setVar|appendVar|prependVar)\(\s*['"]PACKAGES['"]""")
+    VARIABLE_REF_PATTERN = re.compile(r'\$\{([\w-]+)\}')
+    NAME_PATTERN = re.compile(r'[\w${}.+-]+')
 
-    def _get_auto_created_packages(self, inherited_classes: set) -> set:
-        """Get packages auto-created by inherited classes."""
-        auto_packages = set()
-        for class_name, pkg_pattern in self.CLASS_AUTO_PACKAGES.items():
-            if class_name in inherited_classes:
-                auto_packages.add(pkg_pattern)
-        return auto_packages
+    @staticmethod
+    def _base_pn(pn: str) -> str:
+        """BPN: PN without the native/nativesdk/cross variant markers."""
+        bpn = re.sub(r'-(native|cross|crosssdk|cross-canadian-.*)$', '', pn)
+        return re.sub(r'^nativesdk-', '', bpn)
+
+    def _expand(self, value: str, variables: dict, depth: int = 0) -> str:
+        """Expand ${VAR} from the variables this file (and its includes)
+        assign. Unknown references are left in place."""
+        if depth > 5 or '${' not in value:
+            return value
+        expanded = self.VARIABLE_REF_PATTERN.sub(
+            lambda m: variables.get(m.group(1), m.group(0)), value)
+        if expanded == value:
+            return value
+        return self._expand(expanded, variables, depth + 1)
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        rdepends_packages: List[tuple] = []
-        packages_list: List[str] = []
-        
-        # Get auto-created packages from inherited classes
-        inherited_classes = self._get_inherited_classes(context)
-        auto_packages = self._get_auto_created_packages(inherited_classes)
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        included = context.included_files
+        if included is None:
+            # A file this one includes was not found: what it adds to
+            # PACKAGES is unknown
+            return results
+        structures = [context.structure] + [i.structure for i in included]
+        assignments = [a for s in structures for a in s.assignments]
+
+        # A .bbappend or .inc holds a fragment of a recipe: the rest of
+        # PACKAGES lives elsewhere, unless the fragment replaces it outright
+        if context.file_type in ("bbappend", "include") and not any(
+            a.name == 'PACKAGES' and a.op in ('=', ':=') and not a.flag
+            for a in context.structure.assignments
+        ):
+            return results
+
+        texts = [context.content] + [
+            i.path.read_text(encoding="utf-8", errors="replace") for i in included
+        ]
+        if any(self.PYTHON_PACKAGES_PATTERN.search(t) for t in texts):
+            return results
+
+        pn = context.pn
+        variables = {'PN': pn, 'BPN': self._base_pn(pn), 'MLPREFIX': ''}
+        for a in assignments:
+            if a.flag or a.overrides or a.name in ('PN', 'BPN'):
                 continue
-            
-            # Collect RDEPENDS:pkg entries
-            match = self.RDEPENDS_PKG_PATTERN.match(stripped)
-            if match:
-                pkg_name = match.group(1)
-                rdepends_packages.append((line_num, pkg_name))
-            
-            # Collect PACKAGES entries (=, +=, =+, :=)
-            if self.PACKAGES_PATTERN.match(stripped):
-                value = stripped.split('=', 1)[1] if '=' in stripped else ''
-                packages_list.extend(re.findall(r'[\w${}-]+', value))
-            
-            # Collect PACKAGE_BEFORE_PN entries (auto-adds to PACKAGES)
-            if self.PACKAGE_BEFORE_PN_PATTERN.match(stripped):
-                value = stripped.split('=', 1)[1] if '=' in stripped else ''
-                packages_list.extend(re.findall(r'[\w${}-]+', value))
-        
-        for line_num, pkg_name in rdepends_packages:
-            # Skip standard packages
-            if pkg_name in self.STANDARD_PACKAGES:
+            if a.op in ('=', ':=') or a.name not in variables:
+                variables[a.name] = a.value
+            else:
+                variables[a.name] += ' ' + a.value
+
+        packages = {pn + suffix for suffix in self.STANDARD_SUFFIXES}
+        for class_name, suffix in self.CLASS_AUTO_PACKAGES.items():
+            if class_name in context.inherits:
+                packages.add(pn + suffix)
+        # ptest and its variants (ptest-perl, ptest-gnome, ptest-cargo, ...)
+        if any(c == 'ptest' or c.startswith('ptest-') for c in context.inherits):
+            packages.add(pn + '-ptest')
+
+        dynamic = []
+        for a in assignments:
+            if a.flag:
                 continue
-            
-            # Skip packages auto-created by inherited classes
-            if pkg_name in auto_packages:
+            if a.base in ('PACKAGES', 'PACKAGE_BEFORE_PN'):
+                # Names inside an inline expression count too:
+                # ${@bb.utils.contains('PACKAGECONFIG', 'x', '${PN}-x', '', d)}
+                packages.update(self.NAME_PATTERN.findall(
+                    self._expand(a.value, variables)))
+            elif a.base == 'PACKAGES_DYNAMIC':
+                dynamic.extend(self._expand(a.value, variables).split())
+
+        # BBCLASSEXTEND variants rename every package: foo-dev becomes
+        # foo-native-dev or nativesdk-foo-dev
+        variants = set()
+        for a in assignments:
+            if a.base == 'BBCLASSEXTEND':
+                variants.update(self._expand(a.value, variables).split())
+        for package in list(packages):
+            if 'native' in variants:
+                packages.add(package.replace(pn, pn + '-native', 1))
+            if 'nativesdk' in variants:
+                packages.add('nativesdk-' + package)
+
+        for a in context.structure.assignments:
+            if a.flag:
                 continue
-            
-            if pkg_name not in packages_list and not any(pkg_name in p for p in packages_list):
-                results.append(self.create_result(
-                    file=context,
-                    line=line_num,
-                    message=f"RDEPENDS:{pkg_name} but '{pkg_name}' not defined in PACKAGES",
-                    hint=f'Add: PACKAGES += "{pkg_name}" or PACKAGE_BEFORE_PN += "{pkg_name}"',
-                ))
+            if a.base == 'RDEPENDS' and a.overrides:
+                package = a.overrides[0]
+            elif a.base.startswith('RDEPENDS_'):
+                package = a.base[len('RDEPENDS_'):]
+            else:
+                continue
+
+            # "RDEPENDS:${PN}+= ..." is an append to RDEPENDS:${PN}: BitBake
+            # takes the shortest name before the operator
+            if a.op == '=' and package[-1:] in ('+', '.'):
+                package = package[:-1]
+            name = self._expand(package, variables)
+            if '${' in name:
+                continue  # Names a variable this file does not set
+            if name in packages:
+                continue
+            if any(self._dynamic_match(pattern, name) for pattern in dynamic):
+                continue
+
+            results.append(self.create_result(
+                file=context,
+                line=a.line,
+                message=f"RDEPENDS:{package} but '{package}' not defined in PACKAGES",
+                hint=f'Add: PACKAGES += "{package}" or PACKAGE_BEFORE_PN += "{package}"',
+            ))
         
         return results
+
+    @staticmethod
+    def _dynamic_match(pattern: str, name: str) -> bool:
+        """PACKAGES_DYNAMIC entries are regular expressions matched against
+        the start of a package name (^${PN}-plugin-.*)."""
+        try:
+            return re.match(pattern, name) is not None
+        except re.error:
+            return False
 
 
 class RrecommendsPackageValidityRule(BaseRule):

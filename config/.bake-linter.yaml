@@ -297,7 +297,7 @@ rules:
 
   PKG005:
     enabled: true
-    severity: error
+    severity: warning
     # description: RDEPENDS Package Existence
 
   PKG006:
