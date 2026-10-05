@@ -6,668 +6,311 @@ Static analysis for BitBake recipes.
 
 Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
 
+bake_linter checks `.bb`, `.bbappend` and `.inc` files of Yocto Project and
+OpenEmbedded layers for mistakes BitBake will not catch, or will only catch
+late in a build: missing licence information, plaintext downloads, files
+installed but never packaged, dependencies on packages that do not exist,
+old override syntax, and many style issues. It also runs
+[oelint-adv](https://github.com/priv-kweihmann/oelint-adv) for you, so one
+command gives both tools' findings.
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Exit codes](#exit-codes)
+- [Configuration](#configuration)
+- [Inline suppression](#inline-suppression)
+- [Rules](#rules)
+- [Output formats](#output-formats)
+- [Pre-commit hook](#pre-commit-hook)
+- [CI integration](#ci-integration)
+- [oelint-adv](#oelint-adv)
+- [Documentation site](#documentation-site)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
-- **Modular Rule System**: Each lint rule is self-contained and auto-discovered
-- **Extensible**: Add new rules with minimal code and no refactoring
-- **CI-Friendly**: Supports multiple output formats, strict exit codes, and no-color mode
-- **Configurable**: YAML/JSON configuration files with CLI overrides
-- **Multiple Output Formats**: Text (colored), JSON, JSON Lines, HTML reports
-- **Yocto-Specific**: Built-in rules for license checks, deprecated syntax, naming conventions, and security
+- **110 rules** in families such as license, security, supply chain,
+  packaging, install, systemd, syntax, style and bbappend, each with a
+  documentation page. See [docs/rules/](docs/rules/README.md).
+- **Reads recipes the way BitBake does**, beyond single lines: continuation
+  lines, function bodies, inherited classes, `require`/`include` within the
+  layer, and `${PN}`. A rule that cannot know the answer (for example because
+  an included file is in another layer) stays silent instead of guessing.
+- **Inline suppression** with `# nolint: RULE_ID`.
+- **Output** as coloured text, compact one-line findings, JSON, JSON Lines or
+  a self-contained HTML report; several at once.
+- **CI-friendly**: no-colour mode and exit codes that separate warnings,
+  errors and tool failures.
+- **Configuration** in one YAML or JSON file, with command-line overrides.
+- **oelint-adv** runs as a second pass when it is installed.
+- **A pre-commit hook** that lints only the staged recipes.
 
 ## Installation
 
+bake_linter needs Python 3.9 or newer. oelint-adv, which is optional, needs
+Python 3.10 or newer.
+
 ```bash
-# Clone with the oelint-adv submodule
 git clone --recurse-submodules https://github.com/99ecarvalho/bake_linter.git
 cd bake_linter
 
-# (Optional) Create and activate a virtual environment
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
-# Install from source
-pip install -e .
-
-# Or with development dependencies (for testing/development)
-pip install -e ".[dev]"
+pip install -e .                     # bake_linter
+pip install -e ./vendor/oelint-adv   # optional: oelint-adv
 ```
 
-The `egg-info` directory will be created automatically by setuptools during installation—this is normal and expected.
-
-## Quick Start
+Or install the `bake-linter` command for your user with
+[pipx](https://pipx.pypa.io/), oelint-adv included:
 
 ```bash
-# Lint current directory
-bake-linter .
-
-# Lint specific files or directories
-bake-linter meta-layer/recipes-core/
-
-# Generate JSON output file
-bake-linter --output json,results.json .
-
-# Generate HTML report
-bake-linter --output html,report.html .
-
-# Generate multiple output formats (JSON + HTML)
-bake-linter --output json,results.json --output html,report.html .
-
-# CI mode with multiple outputs
-bake-linter --ci --output json,report.json --output html,report.html recipes/
-
-# Change stdout format (default is text)
-bake-linter --format compact .
-
-# CI mode (no colors, strict exit codes)
-bake-linter --ci .
-
-# Exclude directories or files (can be used multiple times, like rsync)
-bake-linter --exclude 'build/*' --exclude 'test/' .
-bake-linter --exclude 'recipes-deprecated' --exclude '*.bak' meta-layer/
-
-# List all available rules
-bake-linter --list-rules
-
-# Enable/disable specific rules
-bake-linter --enable LICENSE001,MANDATORY001 --disable STYLE001 .
+./install.sh
 ```
 
-## Exit Codes
+The script installs pipx if it is missing (on Debian and Ubuntu it runs
+`sudo apt-get install pipx`, so it may ask for your password), initialises
+the submodule, and installs both packages in editable mode, so a `git pull`
+updates the command.
+
+Check the installation:
+
+```bash
+bake-linter --version
+```
+
+## Usage
+
+```bash
+# Lint a layer, a directory or single files
+bake-linter meta-mylayer/
+bake-linter recipes-core/foo/foo_1.0.bb
+
+# Only some rules, or without some
+bake-linter --enable LICENSE001,MANDATORY001 meta-mylayer/
+bake-linter --disable-group style meta-mylayer/
+
+# Skip paths (repeatable)
+bake-linter --exclude 'build/*' --exclude '*.bak' .
+
+# Write reports; --output can be repeated
+bake-linter --output html,report.html --output json,report.json meta-mylayer/
+
+# One line per finding, for editors and grep
+bake-linter --format compact meta-mylayer/
+
+# CI: no colours, and fail on warnings too
+bake-linter --ci --warnings-as-errors meta-mylayer/
+
+# What is there and what is in effect
+bake-linter --list-rules
+bake-linter --list-groups
+bake-linter --show-config
+```
+
+`--quiet` hides the findings on standard output but still writes report
+files and summaries. `--verbose` adds the matching code to each finding.
+`--debug` (or `BAKE_LINTER_DEBUG=1`) prints how oelint-adv is found and run.
+Run `bake-linter --help` for every option.
+
+## Exit codes
 
 | Code | Meaning |
-|------|---------|
-| 0 | Success - no issues found (or info only) |
-| 1 | Warnings found (no errors) |
-| 2 | Errors found |
-| 3 | Runtime/configuration error |
+| --- | --- |
+| 0 | No findings, or only info |
+| 1 | Warnings, no errors |
+| 2 | Errors |
+| 3 | Configuration or runtime error, including an oelint-adv run that failed |
 
-Use `--warnings-as-errors` to treat warnings as errors (exit code 2).
+With `--warnings-as-errors`, warnings give exit code 2. The exit code is based
+on bake_linter's own findings; oelint-adv findings are reported but do not
+change it.
 
 ## Configuration
 
-Create a `.bake-linter.yaml` file in your project root:
+bake_linter reads the first of these files that exists in the current
+directory: `.bake-linter.yaml`, `.bake-linter.yml`, `.bake-linter.json`,
+`bake-linter.yaml`, `bake-linter.yml`, `bake-linter.json`. If none does, it
+falls back to [config/.bake-linter.yaml](config/.bake-linter.yaml) in the
+bake_linter checkout, which lists every rule and is a good starting point to
+copy. `--config FILE` picks a file explicitly. The file in use is printed at
+startup.
 
 ```yaml
 rules:
   LICENSE001:
     enabled: true
-    severity: error
-
+    severity: error        # error, warning or info
   STYLE001:
     enabled: false
-
   STYLE002:
-    enabled: true
     options:
       max_length: 100
 
+# Instead of listing rules one by one
+disable_groups:
+  - formatting
+
 settings:
-  skip_autogenerated: true
+  skip_autogenerated: true   # skip files marked as generated
+  max_line_length: 120       # STYLE002 limit, unless the rule sets max_length
   color: true
+  # Release your layers build for. bake_linter grades release-specific
+  # findings by it (e.g. S = "${WORKDIR}", fatal from styhead on), and passes
+  # it to oelint-adv's --release.
+  oelint_release: scarthgap
+  # Machines your BSP defines, so oelint-adv accepts overrides on them
+  oelint_extra_machines:
+    - my-board
 
 exclude:
   - "build/*"
   - "tmp/*"
 ```
 
-### Configuration File Search Order
+Command-line options override the file, and the file overrides the built-in
+defaults. `enable` and `disable` lists of rule IDs, and `enable_groups`, are
+accepted too.
 
-When no explicit config file is provided via `--config`, the linter searches for configuration files in this order:
-
-1. **Current working directory** - looks for `.bake-linter.yaml`, `.bake-linter.yml`, `.bake-linter.json`, `bake-linter.yaml`, `bake-linter.yml`, or `bake-linter.json`
-2. **Tool's config/ directory** - falls back to the `config/` directory of the bake_linter checkout for the default configuration
-
-The linter prints which config file is being used (or indicates if none was found) at startup.
-
-### Configuration Precedence
-
-1. CLI arguments (highest priority)
-2. Configuration file
-3. Built-in defaults (lowest priority)
-
-## Inline Suppression
-
-You can suppress specific rules for individual lines using inline comments:
+## Inline suppression
 
 ```bitbake
-# Suppress a single rule
+# The next line that is not a comment is not checked for LICENSE001
 # nolint: LICENSE001
-SUMMARY = "Meta-package without traditional license"
+SUMMARY = "Meta package"
 
-# Suppress multiple rules
+# Several rules
 # nolint: LICENSE001, MANDATORY001
-RDEPENDS:${PN} = "dependency-packages"
+RDEPENDS:${PN} = "pkg-a pkg-b"
 
-# Inline suppression (same line as code)
-LICENSE = "CLOSED"  # nolint: LICENSE001
+# Only this line
+SRC_URI = "http://example.com/foo.tar.gz"  # nolint: SECURITY001
 
-# Suppress all rules (use sparingly!)
+# Every rule (use sparingly)
 # nolint: *
-CUSTOM_VAR = "special-case"
+LEGACY = "1"
 ```
 
-### Suppression Syntax
+- A comment on its own line applies to the next line that is not a comment,
+  so several suppressions can be stacked above one line.
+- A comment at the end of a line applies to that line only.
+- Some findings concern the file as a whole and have no line, for example a
+  missing `LICENSE`. A comment on its own line naming the rule, anywhere in
+  the file, suppresses those.
+- `nolint` and rule IDs are case-insensitive.
 
-- **Format**: `# nolint: RULE_ID1, RULE_ID2, ...`
-- **Case insensitive**: `nolint`, `NOLINT`, `NoLint` all work
-- **Whitespace flexible**: Spaces around `:` and `,` are optional
-- **Standalone comments**: Apply to the next non-comment line
-- **Inline comments**: Apply to the current line
-- **File-level findings** (no line, e.g. a missing `LICENSE`): suppressed by a standalone comment naming the rule anywhere in the file
+Say why next to the suppression, and prefer fixing the recipe. See
+[docs/INLINE_SUPPRESSION.md](docs/INLINE_SUPPRESSION.md) for more.
 
-### When to Use Suppressions
+## Rules
 
-✅ **Good use cases:**
-- False positives where the rule doesn't apply
-- Temporary workarounds during migration
-- Special cases with valid technical justification
-- Legacy code that will be refactored later
+Each rule has an ID made of its family and a number, a severity, and a page
+under [docs/rules/](docs/rules/) with an example, the reason and the fix.
+The [rule index](docs/rules/README.md) lists all of them with their
+severity and default state.
 
-❌ **Bad use cases:**
-- Hiding real issues that should be fixed
-- Avoiding proper code improvements
-- Widespread use instead of fixing root cause
-- Suppressing security warnings without review
+| Family | What it checks |
+| --- | --- |
+| LICENSE, MANDATORY, DOC, METADATA | Licence information and the metadata every recipe should carry |
+| SECURITY | Plaintext downloads, world-writable and setuid installs, credentials, build paths leaking into packages |
+| SUPPLY, REPRO, URI, SRCREV | Source pinning, unreliable hosting, git URIs and revisions |
+| PKG, DEPENDENCY, DEPENDS | Packaging: FILES coverage, packages that do not exist, dependency types |
+| INSTALL, PORT, SYSTEMD | do_install hygiene, hardcoded host paths, systemd integration |
+| SYNTAX, DEPRECATED | Override syntax, quoting, removed functions and variables |
+| STYLE, NAMING, VARIABLES | Formatting, ordering and naming, from the OpenEmbedded style guide |
+| BBAPPEND, LAYER, COMPAT, LIFECYCLE, PATCH, TASK, FUNCTION, PYTHON, BESTPRACTICE | Layer- and task-level checks |
 
-### Best Practices
+Severities: **error** means the recipe is wrong or BitBake's QA will reject
+it; **warning** means it probably does something unintended or unsafe;
+**info** is a style or maintenance suggestion.
 
-1. **Add a comment explaining why** the rule is suppressed
-2. **Use specific rule IDs** instead of wildcard suppression
-3. **Track suppressions** and review them periodically
-4. **Link to issue tracker** if suppression is temporary
-5. **Get code review** for security-related suppressions
+## Output formats
 
-## Rule Documentation
+| Format | Use |
+| --- | --- |
+| `text` | Default. Coloured, grouped by file. |
+| `compact` | `file:line: severity: [RULE] message`, one per line. |
+| `json` | One document with a summary and all findings, plus oelint-adv's. |
+| `jsonl` | One JSON object per finding, for streaming and log tools. |
+| `html` | A self-contained report with filters, statistics and rule help. |
 
-Each rule has detailed documentation in the `docs/rules/` directory. Documentation includes:
+`--format` sets what is printed; `--output FORMAT,FILE` writes a file and
+can be repeated. With an HTML report and oelint-adv installed, oelint-adv's
+findings are also written to a second file next to it, `<name>_oelintadv.html`.
 
-- **What the rule checks** - Clear description of the issue
-- **Examples** - Both bad and good code samples
-- **Why it matters** - Explanation of the impact
-- **How to fix** - Step-by-step remediation guide
-- **Configuration** - Rule-specific options
-- **References** - Links to Yocto documentation and standards
+## Pre-commit hook
 
-To view documentation for a specific rule, see `docs/rules/{RULE_ID}.md`. For example:
-- [LICENSE001](docs/rules/LICENSE001.md) - License Required
-- [DEPRECATED001](docs/rules/DEPRECATED001.md) - Deprecated Override Syntax
-- [MANDATORY001](docs/rules/MANDATORY001.md) - Summary or Description Required
-
-### Generating Documentation
-
-To generate documentation for all rules:
+From inside the repository whose recipes you want checked:
 
 ```bash
-# Generate docs for all rules (skips existing)
-python -m bake_linter.utils.gen_docs
-
-# Force regeneration of all docs
-python -m bake_linter.utils.gen_docs --force
-
-# Generate docs for a specific rule
-python -m bake_linter.utils.gen_docs --rule LICENSE001
+/path/to/bake_linter/hooks/install-hooks.sh
 ```
 
-Generated documentation will need manual editing to fill in examples and explanations.
+This links [hooks/pre-commit](hooks/pre-commit) into that repository. On
+each commit it lints the staged versions of the staged `.bb`, `.bbappend`
+and `.inc` files. Warnings let the commit through; errors, and a linter that
+fails to run, block it. `git commit --no-verify` skips it.
 
-### Building HTML Documentation
-
-The documentation can be built as a static HTML website using MkDocs in a Docker container:
-
-```bash
-cd docs
-
-# Build static HTML documentation
-./build-docs.sh build
-
-# Start a local preview server at http://localhost:8001
-./build-docs.sh serve
-
-# Clean generated documentation
-./build-docs.sh clean
-
-# Rebuild Docker image (after Dockerfile changes)
-./build-docs.sh rebuild
-```
-
-The generated HTML is output to `_site/` and is excluded from version control.
-
-## Available Rules
-
-### License Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| LICENSE001 | License Required | Error | Check that LICENSE variable is defined |
-| LICENSE002 | License Typo Detection | Error | Detect typos like LICENSEX, LICENCE |
-| LICENSE003 | License File Checksum | Warning | Check LIC_FILES_CHKSUM for non-CLOSED |
-
-### Mandatory Variable Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| MANDATORY001 | Summary/Description Required | Warning | Check for SUMMARY or DESCRIPTION |
-| MANDATORY002 | SRC_URI Check | Info | Check that SRC_URI is defined |
-| MANDATORY003 | Homepage Check | Info | Check for HOMEPAGE on open-source |
-| MANDATORY004 | Inherit Directive Check | Warning | Check for proper inherit directives |
-
-### Deprecated Syntax Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| DEPRECATED001 | Deprecated Override Syntax | Warning | Detect old underscore syntax |
-| DEPRECATED002 | Deprecated Functions | Warning | Detect deprecated BitBake functions |
-| DEPRECATED003 | Deprecated Variables | Warning | Detect deprecated variables |
-| DEPRECATED004 | Python 2 Syntax Detection | Error | Detect Python 2 syntax in inline code |
-
-### Naming Convention Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| NAMING001 | Variable Naming Convention | Warning | Check BitBake variable naming |
-| NAMING002 | Recipe Naming Convention | Info | Check recipe file naming |
-| NAMING003 | PN Consistency Check | Warning | Check PN matches filename |
-
-### Style Rules
-| Rule ID | Name | Default Severity | Enabled | Description |
-|---------|------|-----------------|---------|-------------|
-| STYLE001 | Trailing Whitespace | Info | No | Check for trailing whitespace |
-| STYLE002 | Long Lines | Info | No | Check for lines > max length |
-| STYLE003 | Hardcoded Paths | Warning | Yes | Detect hardcoded paths |
-| STYLE004 | TODO/FIXME Detection | Info | No | Flag TODO/FIXME comments |
-| STYLE005 | Empty Variable Assignment | Info | Yes | Flag empty assignments |
-| STYLE006 | Duplicate Inherit | Warning | Yes | Detect duplicate inherit |
-| STYLE007 | Package List Format | Warning | Yes | Check package list formatting (alphabetical, one per line) |
-| STYLE008 | SYSTEMD_AUTO_ENABLE Suffix | Warning | Yes | Check SYSTEMD_AUTO_ENABLE uses :${PN} |
-| STYLE009 | Install Directory Trailing Slash | Info | Yes | Check install commands use trailing / for directories |
-| STYLE010 | Service Files Not in FILES | Warning | Yes | Detect service files installed but not in FILES:${PN} |
-| STYLE011 | Hardcoded Systemd Paths in FILES | Info | Yes | Suggests using systemd variables in FILES for consistency |
-| STYLE012 | Variable Assignment Spacing | Info | Yes | Check for proper spacing around assignment operators |
-| STYLE013 | Single Quote Usage | Info | Yes | Check for single quotes in variable assignments (should use double quotes) |
-| STYLE014 | Tab in Variable Definition | Warning | Yes | Check for tab characters in variable definitions (should use spaces) |
-| STYLE015 | Multiline Continuation Alignment | Info | Yes | Check alignment of continuation lines in multiline variable assignments |
-| STYLE016 | Python Function Indentation | Warning | Yes | Check Python functions use 4 spaces for indentation |
-| STYLE017 | Recipe Variable Ordering | Info | Yes | Check recipe variables follow recommended ordering |
-| STYLE018 | LICENSE Variable Order | Info | Yes | Check LICENSE appears before LIC_FILES_CHKSUM |
-| STYLE019 | Source Variables Order | Info | Yes | Check SRC_URI, SRCREV, S are in recommended order |
-| STYLE020 | Metadata Before License | Info | Yes | Check metadata variables (SUMMARY, HOMEPAGE) appear before LICENSE |
-| STYLE021 | Task Execution Order | Info | Yes | Check task functions follow execution order (configure → compile → install) |
-
-### Security Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| SECURITY001 | Insecure URI | Warning | Check for HTTP/FTP/git:// protocols |
-| SECURITY002 | Missing Checksum | Warning | Check SRC_URI has checksums |
-| SECURITY003 | Insecure Permissions | Warning | Detect overly permissive chmod |
-| SECURITY004 | Hardcoded Credentials | Error | Detect potential hardcoded secrets |
-| SECURITY005 | Dangerous rm -rf | Warning | Detect rm -rf with dangerous patterns |
-| SECURITY006 | eval Usage | Warning | Detect eval in shell tasks |
-| SECURITY007 | Build Path Leakage | Warning | Detect ${S}/${WORKDIR} in runtime files |
-| SECURITY008 | SUID/SGID Binary Detection | Warning | Detect chmod 4xxx/2xxx without security comment |
-
-### Systemd Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| SYSTEMD001 | Systemd Without Inherit | Error | Detect systemd usage without inherit |
-| SYSTEMD002 | Missing SYSTEMD_SERVICE | Error | Detect .service files without declaration |
-| SYSTEMD003 | Hardcoded Systemd Paths | Warning | Detect /lib/systemd instead of variables |
-
-### Install Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| INSTALL001 | cp Instead of install | Warning | Detect cp usage in do_install |
-| INSTALL002 | Install Without Mode | Warning | Detect install without -m permission |
-| INSTALL003 | mkdir Instead of install -d | Info | Detect mkdir -p instead of install -d |
-| INSTALL004 | Installation to /usr/local | Warning | Detect /usr/local which is non-standard |
-| INSTALL005 | Non-FHS Installation Path | Info | Detect files installed outside standard FHS paths |
-
-### BBAppend Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| BBAPPEND001 | Missing FILESEXTRAPATHS | Warning | Detect file:// without FILESEXTRAPATHS |
-| BBAPPEND002 | Task Override Without Suffix | Error | Detect do_install() without :append |
-| BBAPPEND003 | Version-Specific bbappend | Info | Detect version-specific .bbappend files |
-| BBAPPEND004 | Empty bbappend File | Warning | Detect empty or comment-only .bbappend |
-| BBAPPEND005 | Global Variable in BBAppend | Warning | Detect distro-wide variables in .bbappend |
-
-### Dependency Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| DEPENDENCY001 | Wrong Dependency Type | Warning | Detect build tools in RDEPENDS |
-| DEPENDENCY002 | Missing pkgconfig Inherit | Warning | Detect pkg-config usage without inherit |
-| DEPENDENCY003 | Essential in RRECOMMENDS | Warning | Detect essential libs in RRECOMMENDS |
-
-### Variables Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| VARIABLES001 | Git Recipe PV Without +git | Info | Detect git recipes whose PV has neither +git nor ${SRCPV} |
-| VARIABLES002 | Unconventional S Assignment | Warning | Detect S = "${WORKDIR}" pattern |
-| VARIABLES003 | Unused Variable Assignment | Info | Detect variables assigned but never referenced |
-| VARIABLES004 | Variable Redefinition | Warning | Detect same variable assigned multiple times |
-| VARIABLES005 | Excessive Append/Prepend | Info | Detect variables with many append/prepend operations |
-
-### Patch/Source Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| PATCH001 | Patch Without Strip Level | Info | Detect patches without ;striplevel= |
-| SRCREV001 | Unpinned Git SRCREV | Error | Detect AUTOREV/branch names in SRCREV |
-
-### Syntax Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| SYNTAX001 | Unmatched Quotes | Error | Detect unmatched quotes in assignments |
-| SYNTAX002 | Missing Line Continuation | Warning | Detect missing \\ in multiline |
-| SYNTAX003 | Tabs in Python Functions | Error | Detect tabs in Python indentation |
-| SYNTAX004 | Unclosed Variable Expansion | Error | Detect unclosed ${...} |
-| SYNTAX005 | Mixed Override Syntax | Error | Detect mixing _append and :append |
-| SYNTAX006 | Invalid Override Ordering | Warning | Detect improper override ordering |
-
-### Package Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| PKG001 | RDEPENDS on -dev Package | Error | Detect -dev packages in RDEPENDS |
-| PKG002 | FILES Not Matching Install | Warning | Detect installed paths not in FILES |
-| PKG003 | Wildcard bbappend Overreach | Warning | Detect version-specific content in wildcard bbappend |
-| PKG004 | FILES/PACKAGES Consistency | Warning | Verify FILES entries match packages in PACKAGES |
-| PKG005 | RDEPENDS Package Existence | Warning | Ensure packages in RDEPENDS:pkg are in PACKAGES |
-| PKG006 | RRECOMMENDS Package Validity | Info | Check packages in RRECOMMENDS:pkg are defined |
-
-### Metadata Rules
-| Rule ID | Name | Default Severity | Enabled | Description |
-|---------|------|-----------------|---------|-------------|
-| METADATA001 | Missing BUGTRACKER | Info | No | Detect recipes without BUGTRACKER |
-| METADATA002 | COMPATIBLE_MACHINE Syntax | Warning | Yes | Detect improper regex patterns |
-| METADATA003 | Missing SECTION | Info | No | Detect recipes without SECTION |
-
-### Best Practice Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| BESTPRACTICE001 | do_fetch Modification | Warning | Detect modifications to do_fetch |
-| BESTPRACTICE002 | Cleanup in do_configure | Info | Detect rm commands in do_configure |
-| BESTPRACTICE003 | Missing HOMEPAGE | Info | Detect recipes without HOMEPAGE |
-| BESTPRACTICE004 | sed in do_install | Warning | Detect sed -i in do_install |
-
-### Compatibility Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| COMPAT001 | Ungrouped COMPATIBLE_HOST Alternation | Warning | Detect a top-level alternation that splits the whole COMPATIBLE_HOST pattern |
-| COMPAT002 | Unjustified MACHINE_ARCH | Warning | Detect MACHINE_ARCH without justification |
-
-### Supply Chain/Reproducibility Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| REPRO001 | Unpinned Branch Usage | Warning | Detect mutable branches (master/main) in git URIs |
-| SUPPLY001 | Missing License in bbappend | Warning | Detect bbappend modifying SRC_URI without LIC_FILES_CHKSUM |
-| SUPPLY002 | Unreliable Download Hosting | Warning | Detect downloads from personal/temp hosting |
-
-### Task Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| TASK001 | Unquoted Variable Expansion | Warning | Detect unquoted high-risk variables in tasks |
-| TASK002 | Sudo Usage in Tasks | Error | Detect sudo usage (should use fakeroot) |
-| TASK003 | Network Access in Compile | Error | Detect network access in build tasks |
-| TASK004 | Empty Task Override | Info | Detect empty/placeholder task overrides |
-
-### Function Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| FUNCTION001 | Task Function Order | Info | Check ordering of task functions in recipes |
-| FUNCTION002 | Python/Shell Function Mixing | Warning | Detect mixed shell and Python syntax in functions |
-
-### Python Code Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| PYTHON001 | Print Instead of bb.note | Info | Detect print() where bb.note should be used |
-| PYTHON002 | Variable Assignment Without d.setVar | Info | Detect direct BitBake var assignment in Python |
-| PYTHON003 | Anonymous Python Issues | Warning | Detect sys.exit() and raise in anonymous Python |
-
-### Portability Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| PORT001 | Hardcoded CPU Flags | Warning | Detect hardcoded -march/-mtune flags |
-| PORT002 | Absolute Host Paths | Warning | Detect host paths in build flags, configure options and build tasks |
-| PORT003 | Non-Portable Sed | Info | Detect GNU-specific sed features |
-
-### Documentation Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| DOC001 | Identical SUMMARY/DESCRIPTION | Warning | Detect copy-pasted SUMMARY as DESCRIPTION |
-| DOC002 | Missing SUMMARY | Info | Detect recipes without SUMMARY |
-| DOC003 | Truncated DESCRIPTION | Info | Detect DESCRIPTION < 30 chars |
-
-### URI/Source Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| URI001 | SRC_URI Protocol Consistency | Info | Detect mixed protocols in same SRC_URI |
-| URI002 | Git SRCREV Validity | Warning | Validate SRCREV format for git URIs |
-| DEPENDS001 | Version Constraint Syntax | Warning | Validate version constraints in DEPENDS |
-
-### Layer Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| LAYER001 | LAYERSERIES_COMPAT Validation | Error | Validate layer.conf release names |
-
-### Lifecycle/Maintenance Rules
-| Rule ID | Name | Default Severity | Description |
-|---------|------|-----------------|-------------|
-| LIFECYCLE001 | Missing Upstream Check | Info | Detect missing UPSTREAM_CHECK_* configuration |
-
-## Adding a New Rule
-
-Creating a new lint rule is straightforward:
-
-### 1. Create a new file in `bake_linter/rules/`
-
-```python
-# bake_linter/rules/my_rules.py
-from bake_linter.core.models import LintResult, Severity, FileContext
-from bake_linter.rules.base import BaseRule
-
-
-class MyCustomRule(BaseRule):
-    """Check for something specific in recipes."""
-
-    # Required: Unique rule identifier
-    rule_id = "CUSTOM001"
-
-    # Required: Human-readable name
-    name = "My Custom Check"
-
-    # Required: Description of what the rule checks
-    description = "Checks for something specific in the recipe"
-
-    # Optional: Default severity (default: ERROR)
-    default_severity = Severity.WARNING
-
-    # Optional: Whether enabled by default (default: True)
-    enabled_by_default = True
-
-    # Optional: Rule groups for bulk enable/disable
-    groups = ["custom", "style"]
-
-    # Optional: Default fix hint
-    hint = "How to fix this issue"
-
-    # Optional: File types this rule applies to (default: all)
-    applicable_file_types = {"recipe", "bbappend"}
-
-    def check(self, context: FileContext) -> List[LintResult]:
-        """
-        Check the file for issues.
-
-        Args:
-            context: Parsed file context with variables, lines, etc.
-
-        Returns:
-            List of LintResult objects for any issues found
-        """
-        results = []
-
-        # Your check logic here
-        for line_num, line in enumerate(context.lines, start=1):
-            if "something_bad" in line:
-                results.append(self.create_result(
-                    file=context.path,
-                    line=line_num,
-                    message="Found something bad",
-                    hint="Remove the bad thing",
-                    context=line.strip()[:60],
-                ))
-
-        return results
-```
-
-### 2. The rule is automatically registered!
-
-The `BaseRule` metaclass automatically registers any subclass with the rule registry. No additional configuration needed.
-
-### 3. (Optional) Add configuration
-
-Add your rule to the config file:
+## CI integration
 
 ```yaml
-rules:
-  CUSTOM001:
-    enabled: true
-    severity: warning
-    options:
-      my_option: value
-```
-
-Access options in your rule:
-
-```python
-def check(self, context: FileContext) -> List[LintResult]:
-    my_option = self.get_option("my_option", default="default_value")
-    # ...
-```
-
-## Output Formats
-
-### Text (Default)
-Human-readable colored output for terminal display.
-
-```bash
-bake-linter --format text .
-```
-
-### Compact
-One-line-per-issue format suitable for CI parsing.
-
-```bash
-bake-linter --format compact .
-```
-
-Output: `file.bb:10:1: error: [LICENSE001] Missing LICENSE variable`
-
-### JSON
-Structured JSON output for programmatic consumption.
-
-```bash
-bake-linter --format json --output results.json .
-```
-
-### JSON Lines (NDJSON)
-One JSON object per line for streaming/log aggregation.
-
-```bash
-bake-linter --format jsonl .
-```
-
-### HTML
-Visual HTML report with dashboard and expandable sections.
-
-```bash
-bake-linter --html-report output/report.html .
-```
-
-## CI Integration
-
-### Bitbucket Pipelines
-
-```yaml
-pipelines:
-  default:
-    - step:
-        name: Lint Yocto Recipes
-        script:
-          - pip install git+https://github.com/99ecarvalho/bake_linter.git
-          - bake-linter --ci --format json --output lint-results.json meta-layer/
-        artifacts:
-          - lint-results.json
-```
-
-### GitHub Actions
-
-```yaml
-- name: Lint Yocto Recipes
+# GitHub Actions
+- name: Lint recipes
   run: |
     pip install git+https://github.com/99ecarvalho/bake_linter.git
-    bake-linter --ci --warnings-as-errors meta-layer/
+    bake-linter --ci --output json,bake-linter.json meta-mylayer/
 ```
 
-### GitLab CI
-
 ```yaml
+# GitLab CI
 lint:
   script:
     - pip install git+https://github.com/99ecarvalho/bake_linter.git
-    - bake-linter --ci --format json --output gl-code-quality-report.json .
+    - bake-linter --ci --output html,bake-linter.html meta-mylayer/
   artifacts:
-    reports:
-      codequality: gl-code-quality-report.json
+    when: always
+    paths:
+      - bake-linter.html
 ```
 
-## Development
+Installing from Git this way does not include oelint-adv; add
+`pip install oelint-adv` if you want it in CI too. Use
+`--warnings-as-errors` to fail the job on warnings.
 
-### Running Tests
+## oelint-adv
+
+When oelint-adv and its dependencies can be imported, bake-linter runs it
+after its own rules and reports its findings separately. If it cannot be
+found, bake-linter says so and carries on; if it is found but fails, the run
+exits with code 3. [COMPARE.md](COMPARE.md) explains how the two tools differ
+and how to use them together.
+
+## Documentation site
+
+The rule pages and guides under [docs/](docs/) can be built into a static
+site with MkDocs, in Docker:
 
 ```bash
-# Install dev dependencies
+cd docs
+./build-docs.sh build   # HTML in _site/
+./build-docs.sh serve   # preview on http://localhost:8001
+```
+
+## Contributing
+
+Bug reports, false positives with a minimal recipe that shows them, and pull
+requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the
+code is organised, how to write a rule and its tests, and the conventions
+for commits.
+
+```bash
 pip install -e ".[dev]"
-
-# Run tests
 pytest
-
-# Run with coverage
-pytest --cov=bake_linter --cov-report=html
-```
-
-### Project Structure
-
-```
-bake_linter/
-├── pyproject.toml          # Package configuration
-├── README.md               # This file
-├── bake_linter/
-│   ├── __init__.py         # Package exports
-│   ├── cli.py              # Command-line interface
-│   ├── config.py           # Configuration system
-│   ├── core/
-│   │   ├── models.py       # Data models (LintResult, Severity, etc.)
-│   │   ├── registry.py     # Rule auto-discovery registry
-│   │   └── engine.py       # Lint orchestration engine
-│   ├── rules/
-│   │   ├── base.py         # BaseRule abstract class
-│   │   ├── license.py      # License-related rules
-│   │   ├── mandatory.py    # Mandatory variable rules
-│   │   ├── deprecated.py   # Deprecated syntax rules
-│   │   ├── naming.py       # Naming convention rules
-│   │   ├── style.py        # Style/quality rules
-│   │   └── security.py     # Security rules
-│   └── output/
-│       ├── text.py         # Text formatter
-│       ├── json_output.py  # JSON formatter
-│       └── html.py         # HTML report generator
-├── tests/
-│   ├── test_rules.py       # Rule unit tests
-│   ├── test_cli.py         # CLI tests
-│   ├── test_config.py      # Config tests
-│   └── fixtures/           # Test recipe files
-└── config/
-    └── .bake-linter.yaml  # Example configuration
 ```
 
 ## License
-
-Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
 
 bake_linter is free software: you can redistribute it and/or modify it under
 the terms of the **GNU Lesser General Public License, version 3 or (at your
@@ -685,76 +328,3 @@ not its output.
 The vendored [oelint-adv](https://github.com/priv-kweihmann/oelint-adv)
 submodule under `vendor/` is a separate project under its own license
 (BSD-2-Clause, see `vendor/oelint-adv/LICENSE`).
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add your rule or feature
-4. Add tests
-5. Submit a pull request
-
-When adding a new rule:
-- Follow the naming convention: `CATEGORY###` (e.g., `CUSTOM001`)
-- Add comprehensive docstrings
-- Include helpful fix hints
-- Add unit tests
-- Update this README
-
-## Testing Lint Rules
-
-### Quick Start
-
-To quickly run all rule tests:
-
-```bash
-cd bake_linter
-source .venv/bin/activate  # if using a virtualenv
-pytest tests/test_rules.py
-```
-
-To run a specific test or group (e.g., only style rules):
-
-```bash
-pytest tests/test_rules.py -k style
-```
-
-### Detailed Usage
-
-The main test suite for all lint rules is in `tests/test_rules.py`. This file contains unit tests for every rule, organized by rule category (license, mandatory, deprecated, naming, style, security, systemd, install, bbappend, dependency, patch, etc.).
-
-**Structure:**
-- Each rule category has a test class (e.g., `TestLicenseRules`, `TestStyleRules`)
-- Each rule has one or more test methods covering both positive (should flag) and negative (should not flag) cases
-- Tests use the `FileContext` model to simulate recipe files and variables
-- All rules are tested in isolation for correctness and edge cases
-
-**How to add or debug tests:**
-- Add new test methods to the appropriate class in `tests/test_rules.py`
-- Use `pytest -k <pattern>` to run only tests matching a name or keyword
-- Use `pytest -v` for verbose output
-- Use `pytest --maxfail=1 -x` to stop on first failure
-- Use `pytest --cov=bake_linter --cov-report=html` for coverage
-
-**Example: Adding a new test**
-
-```python
-class TestStyleRules:
-    def test_trailing_whitespace(self):
-        from bake_linter.rules.style import TrailingWhitespaceRule
-        content = 'FOO = "bar"   '\n'
-        context = FileContext(
-            path=Path("test.bb"),
-            content=content,
-            lines=content.splitlines(keepends=True),
-            variables={},
-        )
-        rule = TrailingWhitespaceRule()
-        results = rule.check(context)
-        assert any(r.rule_id == "STYLE001" for r in results)
-```
-
-**Test Coverage:**
-- All rules must have at least one test for both detection and non-detection
-- Run `pytest` before submitting changes to ensure all tests pass
-
