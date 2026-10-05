@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import cached_property
 from dataclasses import dataclass, field, asdict
 from enum import Enum, IntEnum
 from pathlib import Path
@@ -319,6 +320,67 @@ class FileContext:
             self.file_type = "include"
         else:
             self.file_type = "unknown"
+
+    # Structure beyond single lines (see bake_linter.core.recipe), computed
+    # on first use.
+
+    @cached_property
+    def structure(self) -> "RecipeStructure":
+        """Line owners, logical assignments, inherits and includes."""
+        from bake_linter.core.recipe import parse_structure
+        return parse_structure(self.lines)
+
+    def owner(self, line: int) -> str:
+        """What a 1-indexed line belongs to: the variable it assigns (also on
+        continuation lines), "FUNC:<name>" in a function body, "#" for a
+        comment, or ""."""
+        return self.structure.owner(line)
+
+    def owner_base(self, line: int) -> str:
+        """The owning variable without overrides (RDEPENDS for
+        RDEPENDS:${PN}-dev), or the owner as is for functions and comments."""
+        owner = self.owner(line)
+        if owner.startswith("FUNC:") or owner == "#":
+            return owner
+        return owner.split(":", 1)[0]
+
+    @cached_property
+    def pn(self) -> str:
+        """PN as BitBake derives it from the file name."""
+        from bake_linter.core.recipe import recipe_name
+        return recipe_name(self.path)
+
+    @cached_property
+    def included_files(self) -> Optional[List["IncludedFile"]]:
+        """Files this one requires or includes, recursively, or None when any
+        of them cannot be found (what they set is then unknown)."""
+        from bake_linter.core.recipe import resolve_includes
+        if not self.structure.includes:
+            return []
+        if not self.path.is_file():
+            return None
+        return resolve_includes(self.path, self.structure)
+
+    @cached_property
+    def inherits(self) -> Set[str]:
+        """Classes inherited here or in a resolved include."""
+        classes = set(self.structure.inherits)
+        for included in self.included_files or []:
+            classes |= included.structure.inherits
+        return classes
+
+    def sets_variable(self, name: str) -> Optional[bool]:
+        """Whether this file or one it includes assigns *name* (any override
+        or flag). None when an include could not be resolved and the file
+        itself does not set it: the answer is then unknown."""
+        def assigns(structure) -> bool:
+            return any(a.base == name for a in structure.assignments)
+        if assigns(self.structure):
+            return True
+        included = self.included_files
+        if included is None:
+            return None
+        return any(assigns(i.structure) for i in included)
 
     def is_suppressed(self, rule_id: str, line: Optional[int]) -> bool:
         """Whether a "# nolint:" comment suppresses *rule_id* at *line*.
