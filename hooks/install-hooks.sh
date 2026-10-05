@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+# SPDX-License-Identifier: LGPL-3.0-or-later
 #
 # Install Bake Linter git hooks
 #

@@ -1,6 +1,6 @@
 # Bake Linter Documentation
 
-A production-grade, extensible linter for Yocto/OpenEmbedded BitBake recipes.
+Static analysis for BitBake recipes.
 
 ## Overview
 

@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+# SPDX-License-Identifier: LGPL-3.0-or-later
 # Build documentation using Docker container
 # Usage: ./build-docs.sh [command]
 #

@@ -3,7 +3,7 @@
 """
 Bake Linter - Command Line Interface.
 
-A production-grade linter for Yocto/OpenEmbedded recipes.
+Static analysis for BitBake recipes.
 
 Usage:
     bake-linter [OPTIONS] PATHS...
@@ -15,8 +15,13 @@ Examples:
     bake-linter --enable LICENSE001,MANDATORY001 --disable STYLE001 .
     bake-linter --ci --output json,report.json --output html,report.html recipes/
 
-(c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
-All rights reserved.
+Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+
+This file is part of bake_linter. It is free software, licensed under the
+GNU Lesser General Public License v3.0 or later. See COPYING.LESSER and
+COPYING for details.
+
+SPDX-License-Identifier: LGPL-3.0-or-later
 """
 
 from __future__ import annotations
@@ -80,7 +85,7 @@ def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
         prog="bake-linter",
-        description="Production-grade linter for Yocto/OpenEmbedded recipes",
+        description="Static analysis for BitBake recipes",
         epilog="For more information, see: https://github.com/99ecarvalho/bake_linter",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

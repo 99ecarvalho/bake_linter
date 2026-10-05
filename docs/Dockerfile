@@ -1,7 +1,10 @@
+# Copyright (c) 2024-2026 Eduardo Correia <ecorreia@apliant.com.br>
+# SPDX-License-Identifier: LGPL-3.0-or-later
+#
 # MkDocs with Material theme for building documentation
 FROM python:3.11-slim
 
-LABEL maintainer="Eduardo Correia"
+LABEL maintainer="Eduardo Correia <ecorreia@apliant.com.br>"
 LABEL description="Documentation builder for Bake Linter"
 
 # Install MkDocs with Material theme (modern ReadTheDocs-style theme)

@@ -1,4 +1,4 @@
-# Bake Linter .gitignore
+# bake_linter .gitignore
 
 # Python
 __pycache__/
@@ -50,3 +50,6 @@ output_untracked/
 
 # Cache
 .cache/
+
+# Local notes and reviews (never committed)
+*.local.*
