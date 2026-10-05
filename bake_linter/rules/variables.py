@@ -283,31 +283,28 @@ class VariableRedefinitionRule(BaseRule):
     groups = ["variables", "conflicts"]
     hint = "Use ?= for defaults, += for additions, or remove duplicate"
 
-    IMMEDIATE_ASSIGN_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*=\s*')
-    # Override pattern: VAR:override or VAR_override (must have : or _ followed by non-underscore)
-    OVERRIDE_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]*:[a-z][\w-]*\s*=|^[A-Z][A-Z0-9_]*_[a-z][\w-]*\s*=')
+    VARIABLE_NAME_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]*$')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        immediate_assignments = {}  # var_name -> [(line_num, line)]
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        immediate_assignments = {}  # var_name -> [line_num]
+
+        # Logical BitBake assignments only: shell assignments in function
+        # bodies and continuation lines are not redefinitions. Only a plain
+        # "=" replaces the value; =+, .=, =. and += add to it.
+        for assignment in context.structure.assignments:
+            if assignment.op != "=" or assignment.flag is not None:
                 continue
-            
-            # Skip override-specific assignments
-            if self.OVERRIDE_PATTERN.match(stripped):
+            # Override-specific assignments (VAR:override) are separate
+            if assignment.overrides:
                 continue
-            
-            match = self.IMMEDIATE_ASSIGN_PATTERN.match(stripped)
-            if match:
-                var_name = match.group(1)
-                if var_name not in immediate_assignments:
-                    immediate_assignments[var_name] = []
-                immediate_assignments[var_name].append((line_num, stripped))
+            var_name = assignment.name
+            if not self.VARIABLE_NAME_PATTERN.match(var_name):
+                continue
+            immediate_assignments.setdefault(var_name, []).append(
+                (assignment.line, None)
+            )
         
         # Flag variables with multiple immediate assignments
         for var_name, assigns in immediate_assignments.items():
