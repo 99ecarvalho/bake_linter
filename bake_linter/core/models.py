@@ -274,6 +274,13 @@ def parse_inline_suppressions(lines: List[str]) -> Tuple[Dict[int, Set[str]], Se
     return per_line, file_level
 
 
+# Yocto Project releases, oldest first
+YOCTO_RELEASES = (
+    "dunfell", "kirkstone", "langdale", "mickledore", "nanbield",
+    "scarthgap", "styhead", "walnascar", "whinlatter",
+)
+
+
 @dataclass
 class FileContext:
     """
@@ -292,6 +299,8 @@ class FileContext:
         parse_errors: Any errors encountered during parsing
         inline_suppressions: Map of line number to set of suppressed rule IDs
         file_suppressions: Rule IDs suppressed for findings with no line
+        release: Yocto release the layer targets (e.g. "scarthgap"), from
+            the configuration, or None when not configured
 
     Suppressions are parsed from ``lines`` unless they are passed in.
     """
@@ -304,6 +313,7 @@ class FileContext:
     parse_errors: List[str] = field(default_factory=list)
     inline_suppressions: Dict[int, Set[str]] = field(default_factory=dict)
     file_suppressions: Set[str] = field(default_factory=set)
+    release: Optional[str] = None
 
     def __post_init__(self):
         """Determine file type from extension and parse suppressions."""
@@ -404,6 +414,17 @@ class FileContext:
         if included is None:
             return None
         return any(assigns(i.structure) for i in included)
+
+    def release_before(self, release: str) -> Optional[bool]:
+        """Whether the configured release is older than *release*. None
+        when no release is configured or either name is not known."""
+        if self.release is None:
+            return None
+        try:
+            return (YOCTO_RELEASES.index(self.release.strip().lower())
+                    < YOCTO_RELEASES.index(release))
+        except ValueError:
+            return None
 
     def is_suppressed(self, rule_id: str, line: Optional[int]) -> bool:
         """Whether a "# nolint:" comment suppresses *rule_id* at *line*.

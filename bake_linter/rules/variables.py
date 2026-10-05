@@ -121,7 +121,14 @@ class UnconventionalSAssignmentRule(BaseRule):
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
+        # Up to scarthgap the assignment works (file-only recipes use it),
+        # so it is only a suggestion there. From styhead on, or when the
+        # release is not configured, it is a fatal error waiting to happen.
+        severity = None
+        if context.release_before("styhead"):
+            severity = Severity.INFO
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
@@ -135,6 +142,7 @@ class UnconventionalSAssignmentRule(BaseRule):
                     message="Unconventional S = \"${WORKDIR}\" assignment",
                     context=stripped,
                     hint="Standard is S = \"${WORKDIR}/${BP}\"; for a file-only recipe use S = \"${UNPACKDIR}\" (styhead and later, where ${WORKDIR} is a fatal error), or keep ${WORKDIR} only on scarthgap and earlier",
+                    severity=severity,
                 ))
         
         return results

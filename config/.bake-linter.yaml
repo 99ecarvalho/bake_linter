@@ -604,7 +604,8 @@ settings:
   # Yocto release to validate against, passed through to oelint-adv's
   # --release so its release-gated rules (e.g. oelint.vars.unpackdir, which
   # needs styhead or later) match the release you build. Unset, oelint-adv
-  # uses its newest supported release.
+  # uses its newest supported release. bake-linter's own release-dependent
+  # rules (VARIABLES002) read it too.
   # oelint_release: scarthgap
 
   # Custom machine names your BSP layer defines. oelint-adv's built-in

@@ -43,6 +43,13 @@ SRC_URI = "file://helper.sh"
 S = "${UNPACKDIR}"
 ```
 
+## Release
+
+The severity follows the release set by `oelint_release` in
+`.bake-linter.yaml`: scarthgap and older, where the assignment still
+works, get an info finding; styhead and later, or no release configured,
+get a warning.
+
 ## Inline Suppression
 
 If you need to suppress this rule for a specific line, add a comment:
