@@ -59,61 +59,48 @@ class VariableNamingRule(BaseRule):
         'cfgscript',        # U-Boot configuration script
         # Kernel recipes
         'kconf',            # Kernel config fragments
+
+        # autotools.bbclass: extra aclocal search paths
+        'acpaths',
+        # security_flags.inc: the _FORTIFY_SOURCE flag a recipe may clear
+        'lcl_maybe_fortify',
+        # bitbake.conf installation directories
+        'prefix', 'exec_prefix', 'baselib',
     }
 
+    # Other lowercase names that BitBake metadata defines on purpose:
+    # bitbake.conf directories (bindir, systemd_unitdir, base_libdir,
+    # nonarch_base_libdir, ...) and the program lists recipes hand to
+    # update-alternatives (base_bin_progs, sbin_progs, ...).
+    LOWERCASE_EXCEPTION_PATTERN = re.compile(
+        r'^(?:[a-z0-9_]*dir|base_[a-z0-9_]+|[a-z0-9_]*_prefix|[a-z0-9_]*_progs)$'
+    )
+
     # Pattern for lowercase variable names (potential issue)
-    LOWERCASE_VAR_PATTERN = re.compile(r'^[a-z][a-z0-9_]*\s*=')
-    
-    # Pattern to detect python function definition
-    # Matches: python __anonymous() {, python do_foo() {, python foo:append() {
-    PYTHON_FUNC_START = re.compile(r'^python\s+\w+(?::\w+)?\s*\(\s*\)\s*\{')
-    
-    # Pattern to detect shell function definition
-    # Matches any shell function: do_install() {, my_func () {, uboot_compile_config () {
-    # Also handles: fakeroot do_install() {, do_configure:append() {
-    SHELL_FUNC_START = re.compile(r'^(?:fakeroot\s+)?[a-zA-Z_][a-zA-Z0-9_]*(?::\w+)?\s*\(\s*\)\s*\{')
+    LOWERCASE_VAR_PATTERN = re.compile(
+        r'^([a-z][a-z0-9_]*)\s*(?:\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'
+    )
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_python_func = False
-        in_shell_func = False
-        brace_depth = 0
-        
+
         for line_num, line in enumerate(context.lines, start=1):
+            # Only BitBake assignments: a line starting at column 0 that
+            # starts a logical assignment. Continuation lines and function
+            # bodies (shell locals, PEP 8 python names) are not BitBake
+            # variables.
+            if line[:1].isspace() or not context.is_top_level_assignment(line_num):
+                continue
             stripped = line.strip()
-            
-            if stripped.startswith("#"):
-                continue
-            
-            # Track entry into Python function blocks
-            if self.PYTHON_FUNC_START.match(stripped):
-                in_python_func = True
-                brace_depth = 1
-                continue
-            
-            # Track entry into shell function blocks (any function, not just do_*)
-            if self.SHELL_FUNC_START.match(stripped):
-                in_shell_func = True
-                brace_depth = 1
-                continue
-            
-            # Track brace depth to know when we exit a function
-            if in_python_func or in_shell_func:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_python_func = False
-                    in_shell_func = False
-                    brace_depth = 0
-                # Skip checking inside Python functions - lowercase is correct PEP 8 style
-                # Skip checking inside shell functions - shell variables can be lowercase
-                continue
-            
+
             # Check for lowercase variable names (only in BitBake metadata context)
-            if self.LOWERCASE_VAR_PATTERN.match(stripped):
-                var_name = stripped.split("=")[0].strip()
-                
+            match = self.LOWERCASE_VAR_PATTERN.match(stripped)
+            if match:
+                var_name = match.group(1)
+
                 # Skip known Yocto/OE-Core lowercase variables
-                if var_name in self.LOWERCASE_EXCEPTIONS:
+                if (var_name in self.LOWERCASE_EXCEPTIONS
+                        or self.LOWERCASE_EXCEPTION_PATTERN.match(var_name)):
                     continue
                 
                 # These are valid lowercase names (keywords/directives)

@@ -42,8 +42,14 @@ SUMMARY = "My recipe"
 SRC_URI = "https://example.com/archive.tar.gz"
 ```
 
-Change lowercase metadata variables to UPPERCASE. This rule skips known
-lowercase exceptions (e.g., `hostname`) and code inside functions.
+Change lowercase metadata variables to UPPERCASE. This rule checks only
+top-level assignments starting at column 0: function bodies (under any
+header, e.g. `do_install:append:class-native()` or `pkg_postinst:${PN} ()`),
+python `def` bodies and continuation lines are skipped. It also skips
+lowercase names BitBake metadata defines itself: the bitbake.conf
+directories (`prefix`, `exec_prefix`, `bindir` and other `*dir`, `base_*`,
+`*_prefix`), `baselib`, `acpaths`, `lcl_maybe_fortify`, update-alternatives
+program lists (`*_progs`) and `hostname`.
 
 ## Inline Suppression
 
