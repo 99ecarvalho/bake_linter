@@ -38,6 +38,18 @@ do_install() {
 
 Replace hardcoded paths with BitBake variables: `${bindir}`, `${sbindir}`, `${libdir}`, `${sysconfdir}`, `${datadir}`, `${localstatedir}`, etc.
 
+## What Is Not Reported
+
+- A path that is part of a longer path or word: `${datadir}/${PV}/etc/`,
+  `file://etc/default/foo`, `etc.conf`, `-I/usr/include`.
+- The search side of a sed expression (`s:/usr/bin/perl:${bindir}/perl:`),
+  which has to spell out the text being replaced.
+- `/usr/bin/env`, the run-time way to find an interpreter.
+- Python code (`python` functions, `def` bodies and `${@...}`), which runs
+  on the build host and looks at host paths.
+- Documentation variables (SUMMARY, DESCRIPTION, ...), continuation lines
+  included, and SRC_URI.
+
 ## Inline Suppression
 
 If you need to suppress this rule for a specific line, add a comment:

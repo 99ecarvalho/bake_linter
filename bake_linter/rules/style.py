@@ -81,6 +81,18 @@ class LongLineRule(BaseRule):
         return results
 
 
+# Where STYLE003 accepts a hardcoded path: where a path can start (start of
+# a word, a quoted string or an assignment) or right after the destination
+# root (${D}/etc). This leaves out ${PV}/etc/, file://etc/... and
+# -I/usr/include.
+_PATH_START = (
+    r'(?:(?<=^)|(?<=[\s"\'=(,;])|(?<=\$D)|(?<=\$\{D\})'
+    r'|(?<=\$\{PKGD\})|(?<=\$\{IMAGE_ROOTFS\}))'
+)
+# ...and only as a whole component: not /etc.conf, not /usr/lib for /usr/lib64
+_PATH_END = r'(?![\w.-])'
+
+
 class HardcodedPathsRule(BaseRule):
     """
     Check for hardcoded paths that should use variables.
@@ -108,25 +120,32 @@ class HardcodedPathsRule(BaseRule):
     # Order matters: more specific paths should come first
     # Format: (regex_pattern, variable_name, example_path)
     PATH_MAPPINGS = [
-        # /usr/share subdirectories (must come before /usr/share)
-        (re.compile(r'/usr/share/man(?![a-z])'), '${mandir}', '/usr/share/man'),
-        (re.compile(r'/usr/share/doc(?![a-z])'), '${docdir}', '/usr/share/doc'),
-        # /usr subdirectories
-        (re.compile(r'/usr/libexec(?![a-z])'), '${libexecdir}', '/usr/libexec'),
-        (re.compile(r'/usr/include(?![a-z])'), '${includedir}', '/usr/include'),
-        (re.compile(r'/usr/share(?![a-z])'), '${datadir}', '/usr/share'),
-        (re.compile(r'/usr/sbin(?![a-z])'), '${sbindir}', '/usr/sbin'),
-        (re.compile(r'/usr/bin(?![a-z])'), '${bindir}', '/usr/bin'),
-        (re.compile(r'/usr/lib64(?![a-z])'), '${libdir}', '/usr/lib64'),
-        (re.compile(r'/usr/lib(?![a-z])'), '${libdir}', '/usr/lib'),
-        # /var subdirectories (must come before /var)
-        (re.compile(r'/var/lib(?![a-z])'), '${sharedstatedir}', '/var/lib'),
-        # Root level directories
-        (re.compile(r'/etc(?![a-z])'), '${sysconfdir}', '/etc'),
-        (re.compile(r'/var(?![a-z])'), '${localstatedir}', '/var'),
-        (re.compile(r'/srv(?![a-z])'), '${servicedir}', '/srv'),
+        (re.compile(_PATH_START + re.escape(path) + _PATH_END), var, path)
+        for path, var in [
+            # /usr/share subdirectories (must come before /usr/share)
+            ('/usr/share/man', '${mandir}'),
+            ('/usr/share/doc', '${docdir}'),
+            # /usr subdirectories
+            ('/usr/libexec', '${libexecdir}'),
+            ('/usr/include', '${includedir}'),
+            ('/usr/share', '${datadir}'),
+            ('/usr/sbin', '${sbindir}'),
+            ('/usr/bin', '${bindir}'),
+            ('/usr/lib64', '${libdir}'),
+            ('/usr/lib', '${libdir}'),
+            # /var subdirectories (must come before /var)
+            ('/var/lib', '${sharedstatedir}'),
+            # Root level directories
+            ('/etc', '${sysconfdir}'),
+            ('/var', '${localstatedir}'),
+            ('/srv', '${servicedir}'),
+        ]
     ]
-    
+
+    # The search side of a sed s<d>pattern<d>replacement<d> expression: it
+    # matches text in the files being edited, so it has to spell paths out.
+    SED_EXPRESSION = re.compile(r'\bs([:#,!|@%;/])(.*?)\1')
+
     # Documentation variables where literal paths are appropriate
     # These describe what software does, not how to build it
     DOCUMENTATION_VARS = [
@@ -157,44 +176,74 @@ class HardcodedPathsRule(BaseRule):
                 return True
         return False
 
+    @staticmethod
+    def _is_python(context: FileContext, line_num: int, line: str) -> bool:
+        """Python code: a python function or def body, or inline ${@...}.
+        It runs on the build host and reads host paths (os.path.exists of
+        /usr/include/...), which the target directory variables do not
+        describe."""
+        if "${@" in line:
+            return True
+        function = context.function_at(line_num)
+        return function is not None and function.python
+
+    def _find_path(self, line: str):
+        """First hardcoded path on *line* outside sed search patterns, as
+        (match, variable, example path), or None."""
+        # /usr/bin/env is how scripts find an interpreter at run time
+        text = line.replace("/usr/bin/env", "")
+        sed_spans = [m.span(2) for m in self.SED_EXPRESSION.finditer(text)]
+        for pattern, var_name, example_path in self.PATH_MAPPINGS:
+            for match in pattern.finditer(text):
+                if any(start <= match.start() < end for start, end in sed_spans):
+                    continue
+                return match, var_name, example_path
+        return None
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             # Skip comments
             if stripped.startswith("#"):
                 continue
-            
+
             # Skip SRC_URI lines (URLs legitimately contain paths)
-            if "SRC_URI" in line:
+            if "SRC_URI" in line or context.owner_base(line_num) == "SRC_URI":
                 continue
-            
-            # Skip documentation variables (SUMMARY, DESCRIPTION, etc.)
-            # Literal paths are appropriate for human-readable documentation
+
+            # Skip documentation variables (SUMMARY, DESCRIPTION, etc.),
+            # continuation lines included. Literal paths are appropriate
+            # for human-readable documentation.
+            assignment = context.assignment_at(line_num)
+            if assignment is not None and assignment.base in self.DOCUMENTATION_VARS:
+                continue
             if self.DOC_VAR_PATTERN.match(stripped):
                 continue
-            
+
             # Skip shebang patterns - these are runtime conventions, not build paths
             # e.g., #!/usr/bin/env python3 is the standard portable shebang
             if self._is_shebang_context(line):
                 continue
-            
-            for pattern, var_name, example_path in self.PATH_MAPPINGS:
-                match = pattern.search(line)
-                if match:
-                    # Generate helpful suggestion showing the replacement
-                    matched_path = match.group(0)
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message=f"Hardcoded path '{matched_path}' should use {var_name}",
-                        context=stripped[:60],
-                        hint=f"Replace '{matched_path}' with '{var_name}' (e.g., {var_name}/myfile instead of {example_path}/myfile)",
-                    ))
-                    break  # One warning per line is enough
-        
+
+            if self._is_python(context, line_num, line):
+                continue
+
+            found = self._find_path(line)
+            if found:
+                match, var_name, example_path = found
+                # Generate helpful suggestion showing the replacement
+                matched_path = match.group(0)
+                results.append(self.create_result(
+                    file=context,
+                    line=line_num,
+                    message=f"Hardcoded path '{matched_path}' should use {var_name}",
+                    context=stripped[:60],
+                    hint=f"Replace '{matched_path}' with '{var_name}' (e.g., {var_name}/myfile instead of {example_path}/myfile)",
+                ))
+
         return results
 
 
