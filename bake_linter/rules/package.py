@@ -124,14 +124,20 @@ class FilesNotMatchingInstallRule(BaseRule):
         '${datadir}', '${sysconfdir}', '${localstatedir}',
         '${includedir}', '${docdir}', '${mandir}', '${infodir}',
         '${systemd_system_unitdir}', '${systemd_user_unitdir}',
-        '/usr/', '/etc/', '/var/', '/lib/', '/run/',
+        '${base_bindir}', '${base_sbindir}', '${base_libdir}',
+        '${nonarch_base_libdir}', '${nonarch_libdir}',
+        '/usr/', '/etc/', '/var/', '/lib/', '/run/', '/bin/', '/sbin/',
     ]
-    
+    # Packaged by an inherited class: class -> paths. systemd.bbclass adds
+    # the units to FILES of SYSTEMD_PACKAGES, ptest.bbclass ${PTEST_PATH}
+    # to FILES:${PN}-ptest.
+    CLASS_PATHS = {
+        'systemd': ['${systemd_unitdir}/system'],
+        'ptest': ['${PTEST_PATH}'],
+    }
+
     INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
     INSTALL_CMD_PATTERN = re.compile(r'install\s+.*\$\{D\}(/\S+)')
-    # Any per-package FILES assignment, including FILES:${PN}-dev,
-    # FILES:${PN}:append and the ptest variants
-    FILES_PATTERN = re.compile(r'^FILES[_:]\$\{PN\}')
     # A hard assignment to FILES:${PN}. In a .bbappend this replaces the base
     # recipe's value, so the complete set is visible in the file being read.
     # ':append', ':prepend', '+=' and the conditional operators only add to a
@@ -221,34 +227,44 @@ class FilesNotMatchingInstallRule(BaseRule):
         ):
             return results
 
+        # FILES set in a required or included file covers installs here
+        # too. When one of them cannot be found, coverage is unknown.
+        included = context.included_files
+        if included is None:
+            return results
+
+        # Collect FILES entries of every package (FILES:${PN}-dev,
+        # FILES:${PN}:append, FILES:initramfs-module-foo), continuation
+        # lines joined. FILES_SOLIBSDEV and the like are not FILES.
+        files_entries = []
+        structures = [context.structure] + [i.structure for i in included]
+        for a in (a for s in structures for a in s.assignments):
+            if a.flag:
+                continue
+            if (a.base == 'FILES' and a.overrides) or a.base.startswith('FILES_${'):
+                files_entries.extend(
+                    self._normalise_path(tok) for tok in a.value.split()
+                    if tok not in ('\\', '"', '')
+                )
+
+        standard_paths = list(self.STANDARD_PATHS)
+        for class_name, paths in self.CLASS_PATHS.items():
+            # ptest and its variants (ptest-perl, ptest-gnome, ...)
+            if any(c == class_name or c.startswith(class_name + '-')
+                   for c in context.inherits):
+                standard_paths.extend(paths)
+
         in_do_install = False
         brace_depth = 0
 
         # Collect non-standard install paths
         custom_installs = []
-        files_entries = []
-        in_files = False
 
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
             
             if stripped.startswith("#"):
                 continue
-            
-            # Collect FILES entries. A FILES assignment is usually written
-            # across several continuation lines, so the value has to be
-            # accumulated - reading only the first line saw an empty list and
-            # flagged every installed path in the recipe.
-            if self.FILES_PATTERN.match(stripped):
-                in_files = True
-            if in_files:
-                files_entries.extend(
-                    self._normalise_path(tok)
-                    for tok in stripped.split('=', 1)[-1].split()
-                    if tok not in ('\\', '"', '')
-                )
-                if not stripped.endswith('\\'):
-                    in_files = False
 
             # Track do_install
             if self.INSTALL_TASK_PATTERN.match(stripped):
@@ -267,7 +283,8 @@ class FilesNotMatchingInstallRule(BaseRule):
                 # Find install commands
                 match = self.INSTALL_CMD_PATTERN.search(line)
                 if match:
-                    install_path = match.group(1)
+                    # "${D}/${PTEST_PATH}": the quote is not part of the path
+                    install_path = match.group(1).strip('"\'')
 
                     # `find ... -exec install -d ${D}/dir/{} \;` expands {} per
                     # match at build time, so the captured "path" is a shell
@@ -282,7 +299,7 @@ class FilesNotMatchingInstallRule(BaseRule):
                     location = install_path.strip('"\'').strip('/') + '/'
                     is_standard = any(
                         location.startswith(std_path.strip('/') + '/')
-                        for std_path in self.STANDARD_PATHS
+                        for std_path in standard_paths
                     )
 
                     if not is_standard:
