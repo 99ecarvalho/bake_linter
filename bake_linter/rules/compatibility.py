@@ -133,30 +133,49 @@ class UnjustifiedMachineArchRule(BaseRule):
         re.compile(r'KERNEL_MODULE'),
         re.compile(r'MACHINE_EXTRA'),
         re.compile(r'COMPATIBLE_MACHINE'),
+        # Content that depends on the machine's configuration
+        re.compile(r'\$\{MACHINE\}'),
+        re.compile(r'MACHINEOVERRIDES'),
+        re.compile(r'SERIAL_CONSOLES'),
+        re.compile(r'\bKERNEL_\w+'),
+        re.compile(r'virtual/kernel'),
+        re.compile(r'\bPACKAGE_ARCHS\b'),
+        re.compile(r'\bCOMBINED_FEATURES\b'),
+        re.compile(r'\bUBOOT_\w+'),
+        re.compile(r'\bTUNE_\w+'),
     ]
+
+    # Built against the machine's kernel, producing no packages, or
+    # deploying machine-specific output
+    MACHINE_SPECIFIC_CLASSES = {
+        "module", "kernel", "kernelsrc", "nopackages", "deploy", "toolchain-scripts",
+    }
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         machine_arch_line = 0
         has_machine_arch = False
-        has_justification = False
-        
+        has_justification = bool(context.inherits & self.MACHINE_SPECIFIC_CLASSES)
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
+
             if self.MACHINE_ARCH_PATTERN.search(stripped):
                 has_machine_arch = True
                 machine_arch_line = line_num
-            
+
             for indicator in self.MACHINE_SPECIFIC_INDICATORS:
                 if indicator.search(stripped):
                     has_justification = True
                     break
-        
+
+        if has_machine_arch and not has_justification:
+            has_justification = self._justified_in_includes(context)
+
         if has_machine_arch and not has_justification:
             results.append(self.create_result(
                 file=context,
@@ -164,5 +183,24 @@ class UnjustifiedMachineArchRule(BaseRule):
                 message="PACKAGE_ARCH = \"${MACHINE_ARCH}\" without clear machine-specific code",
                 hint="Remove MACHINE_ARCH unless recipe has machine-specific content",
             ))
-        
+
         return results
+
+    def _justified_in_includes(self, context: FileContext) -> bool:
+        """Whether an included file has an indicator. True when an include
+        was not found, since it may have one."""
+        included = context.included_files
+        if included is None:
+            return True
+        for include in included:
+            try:
+                lines = include.path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                return True
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if any(i.search(stripped) for i in self.MACHINE_SPECIFIC_INDICATORS):
+                    return True
+        return False

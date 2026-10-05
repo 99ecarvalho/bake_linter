@@ -12,6 +12,14 @@
 
 Detects PACKAGE_ARCH = "${MACHINE_ARCH}" without clear justification
 
+A recipe counts as machine-specific when it, or a file it includes, refers
+to the machine's configuration: `${MACHINE}`, `MACHINEOVERRIDES`,
+`MACHINE_FEATURES`, `COMBINED_FEATURES`, `COMPATIBLE_MACHINE`,
+`SERIAL_CONSOLES`, `KERNEL_*`, `virtual/kernel`, `PACKAGE_ARCHS`, `TUNE_*` or
+`UBOOT_*`, or inherits `module`, `kernel`, `kernelsrc`, `nopackages`,
+`deploy` or `toolchain-scripts`. Nothing is reported when an include cannot
+be found, since it may hold the reason.
+
 ## Example of Bad Code
 
 ```bitbake
