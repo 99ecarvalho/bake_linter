@@ -81,6 +81,30 @@ class LongLineRule(BaseRule):
         return results
 
 
+def _strip_inline_python(text: str) -> str:
+    """*text* with every inline python expression ${@...} removed, braces
+    matched (${@d.getVar('X') or '{}'} is removed whole)."""
+    out = []
+    depth = 0
+    i = 0
+    while i < len(text):
+        if depth == 0 and text.startswith("${@", i):
+            depth = 1
+            out.append(" ")
+            i += 3
+            continue
+        char = text[i]
+        if depth:
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
+
+
 # Where STYLE003 accepts a hardcoded path: where a path can start (start of
 # a word, a quoted string or an assignment) or right after the destination
 # root (${D}/etc). This leaves out ${PV}/etc/, file://etc/... and
@@ -349,7 +373,9 @@ class DuplicateInheritRule(BaseRule):
             stripped = line.strip()
             
             if stripped.startswith("inherit"):
-                classes = stripped.split()[1:]
+                # A conditional ${@...} is one expression, not a list of
+                # classes: its quoted arguments are not inherits.
+                classes = _strip_inline_python(stripped).split()[1:]
                 for cls in classes:
                     if cls in seen_classes:
                         results.append(self.create_result(
