@@ -132,8 +132,7 @@ class TestLicenseRules:
 
     def test_lic_files_chksum_image_recipe_exempt(self):
         """An image recipe fetches nothing, so there is no licence file to
-        checksum. 57 of the 60 image recipes in the vendored
-        poky/meta-openembedded trees set none, core-image-minimal.bb
+        checksum. Upstream image recipes set none, core-image-minimal.bb
         (LICENSE = "MIT", inherit core-image) among them."""
         lines = ['LICENSE = "MIT"\n', 'inherit core-image\n']
         context = FileContext(
@@ -506,8 +505,8 @@ class TestStyleRules:
     def test_empty_assignment_under_override_is_not_flagged(self):
         """Blanking a variable under an override is the deliberate way to
         exclude something for one machine/distro/class: VAR:qemuarm64 = "" drops it
-        there and nowhere else. The vendored poky/meta-openembedded trees do
-        this 218 times."""
+        there and nowhere else, a common idiom in oe-core and
+        meta-openembedded."""
         lines = ['DEBUG_TOOLS_PACKAGEGROUP:qemuarm64 = ""\n']
         context = FileContext(
             path=Path("test_1.0.bb"),
@@ -4304,7 +4303,7 @@ class TestTaskRules:
         
         # 'sudo' here is a Unix group, not a command being executed
         content = '''USERADD_PARAM:${PN} = "-u 1010 -d /home/user -r -s /bin/bash -g user -G video,input,audio,dialout,sudo -p '${USER_HASH}' user"
-USERADD_PARAM:${PN}-setup = "-u 1012 -d /home/setup -r -s /bin/bash -g setup -G sudo -p '${USER_HASH}' setup"
+USERADD_PARAM:${PN}-setup = "-u 1012 -d /home/setup -r -s /bin/bash -g setup -G sudo -p '${SETUP_HASH}' setup"
 '''
         context = FileContext(
             path=Path("example-users_0.1.bb"),

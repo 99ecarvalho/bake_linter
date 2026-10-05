@@ -149,8 +149,7 @@ class LicFilesChkSumRule(BaseRule):
 
         # LIC_FILES_CHKSUM pins the licence text of the *fetched* source, so it
         # only applies when something is fetched. An image recipe fetches
-        # nothing: 57 of the 60 image recipes in the vendored
-        # poky/meta-openembedded trees set no LIC_FILES_CHKSUM, among them
+        # nothing, and upstream image recipes set no LIC_FILES_CHKSUM, e.g.
         # core-image-minimal.bb (LICENSE = "MIT", inherit core-image).
         if "SRC_URI" not in context.variables:
             return []

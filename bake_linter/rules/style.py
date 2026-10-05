@@ -265,8 +265,8 @@ class EmptyVariableRule(BaseRule):
 
                     # Blanking a variable under an override is the deliberate
                     # way to exclude something for one machine/distro/class:
-                    # VAR:qemuarm64 = "" drops it there and nowhere else. The
-                    # vendored poky/meta-openembedded trees do this 218 times.
+                    # VAR:qemuarm64 = "" drops it there and nowhere else, a
+                    # common idiom in oe-core and meta-openembedded.
                     if self._is_override_scoped(context, assignment.line):
                         continue
 
