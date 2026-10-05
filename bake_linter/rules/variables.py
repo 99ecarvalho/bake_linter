@@ -236,22 +236,47 @@ class UnusedVariableAssignmentRule(BaseRule):
     # finding.
     VAR_ASSIGNMENT_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)\s*(\?\?=|[?:]?=)')
     VAR_REFERENCE_PATTERN = re.compile(r'\$\{([A-Z][A-Z0-9_]*)\}')
+    # Python reads a variable by name: d.getVar('X'), d.getVarFlag("X", ...)
+    GETVAR_PATTERN = re.compile(r'\bd\.getVar(?:Flags?)?\(\s*[\'"]([A-Z][A-Z0-9_]*)[\'"]')
+    # Inside ${@...}, names are passed as strings to helpers such as
+    # bb.utils.contains('X', ...) or oe.utils.conditional('X', ...)
+    NAME_PATTERN = re.compile(r'\b([A-Z][A-Z0-9_]*)\b')
+
+    @staticmethod
+    def _inline_python(line: str) -> List[str]:
+        """The ${@...} expressions on *line*, braces matched."""
+        expressions = []
+        start = line.find("${@")
+        while start != -1:
+            depth = 1
+            i = start + 3
+            while i < len(line) and depth:
+                if line[i] == "{":
+                    depth += 1
+                elif line[i] == "}":
+                    depth -= 1
+                i += 1
+            expressions.append(line[start + 3:i - 1 if depth == 0 else i])
+            start = line.find("${@", i)
+        return expressions
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
         assignments = {}  # var_name -> line_num
         references = set()
-        
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
-            # Track assignments
+
+            # Track assignments: only lines that start a BitBake
+            # assignment, not shell assignments in function bodies or
+            # FOO=bar on a continuation line
             match = self.VAR_ASSIGNMENT_PATTERN.match(stripped)
-            if match:
+            if match and context.is_top_level_assignment(line_num):
                 var_name = match.group(1)
                 is_default = match.group(2).startswith('?')
                 if var_name not in self.STANDARD_VARS and not is_default:
@@ -260,6 +285,9 @@ class UnusedVariableAssignmentRule(BaseRule):
             # Track references
             refs = self.VAR_REFERENCE_PATTERN.findall(line)
             references.update(refs)
+            references.update(self.GETVAR_PATTERN.findall(line))
+            for expression in self._inline_python(line):
+                references.update(self.NAME_PATTERN.findall(expression))
         
         # Find unused variables
         for var_name, line_num in assignments.items():
