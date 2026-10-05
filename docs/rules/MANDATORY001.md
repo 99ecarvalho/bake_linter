@@ -1,4 +1,4 @@
-# MANDATORY001 - Summary or Description Required
+# MANDATORY001 - Summary/Description Required
 
 **Severity:** warning
 
