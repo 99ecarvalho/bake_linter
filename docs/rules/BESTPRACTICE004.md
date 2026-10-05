@@ -10,34 +10,40 @@
 
 ## Description
 
-Detects sed usage in do_install that should be in do_configure
+Detects `sed -i` in `do_install` that edits the source or build tree
+(`${S}`, `${B}`, `${WORKDIR}`, `${UNPACKDIR}` or a relative path, which
+is relative to `${B}`).
+
+Editing files under `${D}` is not reported: installed files only exist once
+`do_install` has put them there, so substituting `@VARS@` or stripping build
+paths in them is done in `do_install`.
 
 ## Example of Bad Code
 
 ```bitbake
 do_install() {
-    install -m 0755 config.in ${D}${sysconfdir}/config.in
-    sed -i "s/@version@/1.0.0/" ${D}${sysconfdir}/config.in
+    sed -i "s/@version@/${PV}/" ${S}/config.in
+    install -m 0644 ${S}/config.in ${D}${sysconfdir}/config
 }
 ```
 
 ## Why This Is Bad
 
-Template substitution should happen before install, not after. Doing it in `do_install` makes build reproducibility fragile and mixes templating logic with installation.
+The source and build trees are the input of earlier tasks. Changing them in
+`do_install` means `do_compile` saw different files than the ones installed,
+and rerunning `do_install` alone edits them a second time.
 
 ## How to Fix It
 
 ```bitbake
-do_configure() {
-    sed "s/@version@/${PV}/" config.in.in > config.in
-}
-
 do_install() {
-    install -m 0755 config.in ${D}${sysconfdir}/config.in
+    install -m 0644 ${S}/config.in ${D}${sysconfdir}/config
+    sed -i "s/@version@/${PV}/" ${D}${sysconfdir}/config
 }
 ```
 
-Perform `sed` and template substitution in `do_configure` or earlier, so `do_install` only moves files.
+Edit the installed copy under `${D}`, apply a patch to the source, or make
+the change in `do_configure`.
 
 ## Inline Suppression
 

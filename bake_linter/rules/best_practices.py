@@ -19,6 +19,7 @@ import re
 from typing import List
 
 from bake_linter.core.models import LintResult, Severity, FileContext
+from bake_linter.core.recipe import command_words
 from bake_linter.rules.base import BaseRule
 
 
@@ -172,53 +173,83 @@ class MissingHomepageRule(BaseRule):
 
 class SedInDoInstallRule(BaseRule):
     """
-    Check for sed usage in do_install.
+    Check for sed usage in do_install on the source or build tree.
     
-    File modifications should happen in do_configure or via patches,
-    not during installation.
+    Editing files under ${D} after installing them is the usual way to
+    substitute paths in installed files: they only exist once installed.
+    Editing the source or build tree in do_install changes what earlier
+    tasks used; that belongs in a patch or do_configure.
     """
     
     rule_id = "BESTPRACTICE004"
     name = "sed in do_install"
-    description = "Detects sed usage in do_install that should be in do_configure"
+    description = "Detects sed -i in do_install on the source or build tree"
     default_severity = Severity.WARNING
     groups = ["best_practices"]
-    hint = "Move sed commands to do_configure or create a proper patch"
+    hint = "sed on the source/build tree in do_install; prefer a patch or do_configure"
 
-    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
-    SED_PATTERN = re.compile(r'^\s*sed\s+-i')
+    # -i, -i.bak, -ri, --in-place
+    IN_PLACE = re.compile(r'^(?:-[A-Za-z]*i|--in-place)')
+    # Options that take the next word as their argument
+    OPTIONS_WITH_ARGUMENT = {"-e", "-f", "-l", "--expression", "--file", "--line-length"}
+    DESTDIR = re.compile(r'\$\{D\}|\$D(?![A-Za-z0-9_])')
+    BUILD_TREE = re.compile(r'^\$\{(?:S|B|WORKDIR|UNPACKDIR)\}')
+    # do_install, do_install_ptest, ...
+    INSTALL_TASK = re.compile(r'^do_install(?:_\w+)?$')
+
+    @classmethod
+    def _targets(cls, words: List[str]) -> List[str]:
+        """The files a sed command edits."""
+        targets: List[str] = []
+        has_script = False
+        skip_next = False
+        for word in words[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if word in cls.OPTIONS_WITH_ARGUMENT:
+                has_script = has_script or word in {"-e", "-f", "--expression", "--file"}
+                skip_next = True
+            elif word.startswith("--"):
+                has_script = has_script or word.startswith(("--expression=", "--file="))
+            elif word.startswith("-") and len(word) > 1:
+                # A cluster: -ne takes the script as its argument, -e's/a/b/'
+                # carries it, and in -ie the e is the suffix of -i
+                match = re.match(r'^-[A-Za-z]*?([efi])', word)
+                if match and match.group(1) in "ef":
+                    has_script = True
+                    skip_next = match.end() == len(word)
+            elif not has_script:
+                has_script = True  # without -e/-f the first operand is the script
+            else:
+                targets.append(word)
+        return targets
+
+    def _on_build_tree(self, target: str) -> bool:
+        if self.BUILD_TREE.match(target):
+            return True
+        # Relative paths are in the task's working directory, ${B}
+        return not target.startswith(("$", "/", "`"))
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_do_install = False
-        brace_depth = 0
         
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+        for line in context.function_lines:
+            if not self.INSTALL_TASK.match(line.function.split(":", 1)[0]):
                 continue
-            
-            if self.INSTALL_TASK_PATTERN.match(stripped):
-                in_do_install = True
-                if '{' in stripped:
-                    brace_depth = 1
+            words = command_words(line.text)
+            if words[:1] != ["sed"] or not any(self.IN_PLACE.match(w) for w in words[1:]):
                 continue
-            
-            if in_do_install:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_install = False
-                    brace_depth = 0
-                    continue
-                
-                if self.SED_PATTERN.match(stripped):
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="sed -i in do_install modifies installed files",
-                        context=stripped[:60],
-                        hint="Move to do_configure or create a patch for reproducibility",
-                    ))
+            targets = self._targets(words)
+            # Installed files can only be edited after do_install put them there
+            if not targets or any(self.DESTDIR.search(t) for t in targets):
+                continue
+            if any(self._on_build_tree(t) for t in targets):
+                results.append(self.create_result(
+                    file=context,
+                    line=line.line,
+                    message="sed -i in do_install modifies the source/build tree",
+                    context=line.text[:60],
+                ))
         
         return results

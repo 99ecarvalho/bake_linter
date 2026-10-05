@@ -3259,11 +3259,11 @@ class TestBestPracticeRules:
         assert results[0].rule_id == "BESTPRACTICE001"
 
     def test_sed_in_do_install(self):
-        """Test that sed -i in do_install is flagged."""
+        """Test that sed -i on the source tree in do_install is flagged."""
         from bake_linter.rules.best_practices import SedInDoInstallRule
-        
+
         content = '''do_install() {
-    sed -i 's/DEBUG/RELEASE/g' ${D}${bindir}/myapp
+    sed -i 's/DEBUG/RELEASE/g' ${S}/myapp.conf
 }
 '''
         context = FileContext(
