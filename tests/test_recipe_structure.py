@@ -138,3 +138,16 @@ def test_include_cycle_terminates(tmp_path):
     recipe.write_text("require a.inc\n")
 
     assert _context(recipe).sets_variable("LICENSE") is True
+
+
+def test_operator_without_space_is_not_part_of_the_name():
+    """BitBake takes the shortest variable name: VAR+= is VAR with +=."""
+    cases = {
+        'RDEPENDS:${PN}+= "a"': ("RDEPENDS:${PN}", "+="),
+        'FOO.= "b"': ("FOO", ".="),
+        'FOO=. "c"': ("FOO", "=."),
+        'PACKAGES=+"e"': ("PACKAGES", "=+"),
+    }
+    for line, (name, op) in cases.items():
+        assignment = parse_structure([line]).assignments[0]
+        assert (assignment.name, assignment.op) == (name, op), line

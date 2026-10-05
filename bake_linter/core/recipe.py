@@ -31,10 +31,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-# VAR, VAR:override:append, VAR[flag], export VAR, followed by an operator
+# VAR, VAR:override:append, VAR[flag], export VAR, followed by an operator.
+# As in BitBake's own regex the name is the shortest match, so "VAR+=" is VAR
+# with += rather than "VAR+" with =.
 ASSIGNMENT_PATTERN = re.compile(
     r'^\s*(?:export\s+)?'
-    r'(?P<name>[A-Za-z_${}][\w${}/+.-]*(?::[\w${}+.-]+)*)'
+    r'(?P<name>[A-Za-z_${}][\w${}/+.-]*?(?::[\w${}+.-]+?)*?)'
     r'(?P<flag>\[[^\]]*\])?'
     r'\s*(?P<op>\?\?=|\?=|:=|\+=|=\+|\.=|=\.|=)'
     r'\s*(?P<value>.*)$'
