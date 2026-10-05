@@ -10,33 +10,44 @@
 
 ## Description
 
-Detects cp command usage instead of install in do_install
+Detects `cp` into `${D}` in `do_install`.
+
+A copy that preserves ownership (`cp -a`, `cp -p`, `--preserve` without a
+list, or `--preserve=` with `ownership` or `all`) is a **warning**. Copies
+that choose what to keep without ownership (`cp -R --no-dereference
+--preserve=mode,links`, `--no-preserve=ownership`) are not reported. Other
+copies into `${D}` are reported as **info**, suggesting `install`. Copies that
+do not reach `${D}` are not judged.
 
 ## Example of Bad Code
 
 ```bitbake
 do_install() {
-    mkdir -p ${D}${bindir}
-    cp tool ${D}${bindir}/tool
-    cp -r scripts ${D}${bindir}/
+    install -d ${D}${datadir}/foo
+    cp -a ${S}/data ${D}${datadir}/foo/
 }
 ```
 
 ## Why This Is Bad
 
-Using `cp` requires separate `mkdir` calls, doesn't set explicit permissions, and doesn't support stripping binaries automatically.
+`do_install` runs under pseudo, which records the ownership `cp` gives the
+copied files. Preserving ownership keeps the uid and gid of the user running
+the build, so the package ships files owned by a host user and package QA
+reports `host-user-contaminated`.
+
+A plain `cp` does not set permissions explicitly either: the installed mode
+is whatever the source file had.
 
 ## How to Fix It
 
 ```bitbake
 do_install() {
-    install -d ${D}${bindir}
-    install -m 0755 tool ${D}${bindir}/tool
-    install -m 0644 scripts/* ${D}${bindir}/
+    install -d ${D}${datadir}/foo
+    cp -R --no-dereference --preserve=mode,links ${S}/data ${D}${datadir}/foo/
 }
 ```
 
-Replace `cp` with `install -m MODE` to set permissions explicitly, create directories atomically, and allow automatic binary stripping.
+For single files, `install -m MODE` sets the mode explicitly.
 
 ## Inline Suppression
 

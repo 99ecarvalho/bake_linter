@@ -25,79 +25,123 @@ from bake_linter.rules.base import BaseRule
 class CpInsteadOfInstallRule(BaseRule):
     """
     Check for cp command usage instead of install in do_install.
-    
-    Using install instead of cp is preferred because:
+
+    Copying into ${D} with options that preserve ownership (-a, -p,
+    --preserve=ownership or all) carries the build user's uid and gid into
+    the package: do_install runs under pseudo, which records the copied
+    ownership, and package QA reports host-user-contaminated files.
+
+    Other copies into ${D} are reported as info: install is preferred
+    because:
     - install can set permissions in one command
     - install can create directories
-    - install strips binaries when requested
     - Makes permission expectations explicit
-    
+
     For recursive copies (cp -r), suggests using find + install pattern.
     """
-    
+
     rule_id = "INSTALL001"
     name = "Using cp Instead of install"
-    description = "Detects cp command usage instead of install in do_install"
+    description = "Detects cp in do_install that preserves ownership, or that could be install"
     default_severity = Severity.WARNING
     groups = ["install", "best_practices"]
     hint = "Use 'install -m MODE' instead of 'cp' for explicit permissions"
 
-    # Pattern to detect cp commands (but not in comments or strings that are clearly not commands)
-    CP_PATTERN = re.compile(r'^\s*cp\s+(?:-[a-zA-Z]+\s+)*')
-    
-    # Pattern to detect recursive cp (-r, -R, --recursive, or -a which implies -r)
-    CP_RECURSIVE_PATTERN = re.compile(r'^\s*cp\s+.*(?:-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive)\s+')
-    
-    # Pattern to detect we're in a do_install task
-    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+    DESTDIR = re.compile(r'\$\{D\}|\$D(?![A-Za-z0-9_])')
+    # do_install, do_install_ptest, ...
+    INSTALL_TASK = re.compile(r'^do_install(?:_\w+)?$')
+    OWNERSHIP_HINT = (
+        "cp preserves ownership; use --no-preserve=ownership or "
+        "cp -R --no-dereference --preserve=mode,links"
+    )
+
+    @staticmethod
+    def _attributes(value: str) -> set:
+        return {a.strip() for a in value.split(",") if a.strip()}
+
+    def _classify(self, options: List[str]) -> str:
+        """"ownership" when the copy preserves ownership, "chosen" when the
+        attributes to keep were chosen without ownership, "recursive" or
+        "plain" otherwise."""
+        preserves_ownership = False
+        chosen = False
+        recursive = False
+        for option in options:
+            if option.startswith("--no-preserve="):
+                if self._attributes(option.split("=", 1)[1]) & {"ownership", "all"}:
+                    return "chosen"
+            elif option == "--preserve":
+                # Defaults to mode,ownership,timestamps
+                preserves_ownership = True
+            elif option.startswith("--preserve="):
+                if self._attributes(option.split("=", 1)[1]) & {"ownership", "all"}:
+                    preserves_ownership = True
+                else:
+                    chosen = True
+            elif option == "--archive":
+                preserves_ownership = recursive = True
+            elif option == "--recursive":
+                recursive = True
+            elif not option.startswith("--"):
+                letters = option[1:]
+                if "a" in letters or "p" in letters:
+                    preserves_ownership = True
+                if any(c in letters for c in "rRa"):
+                    recursive = True
+        if preserves_ownership:
+            return "ownership"
+        if chosen:
+            return "chosen"
+        return "recursive" if recursive else "plain"
 
     def check(self, context: FileContext) -> List[LintResult]:
+        from bake_linter.core.recipe import command_words
         results = []
-        in_do_install = False
-        brace_depth = 0
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            # Skip comments
-            if stripped.startswith("#"):
+
+        for line in context.function_lines:
+            if not self.INSTALL_TASK.match(line.function.split(":", 1)[0]):
                 continue
-            
-            # Track if we're inside do_install
-            if self.INSTALL_TASK_PATTERN.match(stripped):
-                in_do_install = True
-                if '{' in stripped:
-                    brace_depth = 1
+            words = command_words(line.text)
+            if words[:1] != ["cp"]:
                 continue
-            
-            # Track brace depth
-            if in_do_install:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_install = False
-                    brace_depth = 0
-                    continue
-                
-                # Check for cp command
-                if self.CP_PATTERN.match(stripped):
-                    # Check if it's a recursive copy
-                    if self.CP_RECURSIVE_PATTERN.match(stripped):
-                        hint = (
-                            "For recursive copy, use find + install: "
-                            "find src -type d -exec install -d dest/{} \\; && "
-                            "find src -type f -exec install -m 0644 {} dest/{} \\;"
-                        )
-                    else:
-                        hint = "Use 'install -d' for dirs, 'install -m MODE' for files"
-                    
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="Using 'cp' instead of 'install' command",
-                        context=stripped[:60],
-                        hint=hint,
-                    ))
-        
+            options = [w for w in words[1:] if w.startswith("-") and len(w) > 1]
+            operands = [w for w in words[1:] if w not in options]
+            # Only copies into the install tree
+            if not any(self.DESTDIR.search(w) for w in operands):
+                continue
+
+            kind = self._classify(options)
+            if kind == "chosen":
+                continue
+            if kind == "ownership":
+                results.append(self.create_result(
+                    file=context,
+                    line=line.line,
+                    message="cp preserves ownership; use --no-preserve=ownership or "
+                            "cp -R --no-dereference --preserve=mode,links",
+                    context=line.text[:60],
+                    hint=self.OWNERSHIP_HINT,
+                ))
+                continue
+
+            if kind == "recursive":
+                hint = (
+                    "For recursive copy, use find + install: "
+                    "find src -type d -exec install -d dest/{} \\; && "
+                    "find src -type f -exec install -m 0644 {} dest/{} \\;"
+                )
+            else:
+                hint = "Use 'install -d' for dirs, 'install -m MODE' for files"
+
+            results.append(self.create_result(
+                file=context,
+                line=line.line,
+                message="Using 'cp' instead of 'install' command",
+                context=line.text[:60],
+                hint=hint,
+                severity=Severity.INFO,
+            ))
+
         return results
 
 

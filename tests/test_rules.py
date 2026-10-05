@@ -2272,7 +2272,7 @@ class TestInstallRules:
         assert len(results) == 1
         assert "find" in results[0].hint
         
-        # Test -a flag (implies -r)
+        # Test -a flag (implies -r, and preserves ownership)
         content = '''do_install() {
     cp -a src ${D}/dest
 }
@@ -2285,7 +2285,7 @@ class TestInstallRules:
         )
         results = rule.check(context)
         assert len(results) == 1
-        assert "find" in results[0].hint
+        assert "--no-preserve=ownership" in results[0].hint
         
         # Test combined flags -rf
         content = '''do_install() {
