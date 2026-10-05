@@ -51,3 +51,20 @@ def test_rule_page_header_matches_the_rule(rule_id, rule_cls):
     enabled = re.search(r"\*\*Enabled by Default:\*\*\s*(\w+)", text)
     expected = "yes" if getattr(rule_cls, "enabled_by_default", True) else "no"
     assert enabled and enabled.group(1).lower() == expected
+
+
+def test_shipped_config_lists_every_rule_with_its_defaults():
+    import yaml
+    from pathlib import Path
+
+    config_path = Path(__file__).parent.parent / "config" / ".bake-linter.yaml"
+    text = config_path.read_text()
+    configured = yaml.safe_load(text)["rules"]
+    rules = _rules()
+
+    assert set(configured) == set(rules)
+    for rule_id, rule_cls in rules.items():
+        entry = configured[rule_id]
+        assert entry["severity"] == rule_cls.default_severity.name.lower(), rule_id
+        assert entry["enabled"] == getattr(rule_cls, "enabled_by_default", True), rule_id
+    assert f"# Total rules: {len(rules)}" in text

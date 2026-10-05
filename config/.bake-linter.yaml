@@ -5,7 +5,7 @@
 # This file configures the bake-linter tool for this workspace.
 # Place in project root as .bake-linter.yaml
 #
-# Total rules: 99
+# Total rules: 110
 
 # Rule configuration
 # Each rule can be enabled/disabled and have its severity overridden
@@ -462,6 +462,61 @@ rules:
     enabled: true
     severity: warning
     # description: Service Files Not in FILES
+
+  STYLE011:
+    enabled: true
+    severity: info
+    # description: Hardcoded Systemd Paths in FILES
+
+  STYLE012:
+    enabled: true
+    severity: info
+    # description: Variable Assignment Spacing
+
+  STYLE013:
+    enabled: true
+    severity: info
+    # description: Single Quote Usage
+
+  STYLE014:
+    enabled: true
+    severity: warning
+    # description: Tab in Variable Definition
+
+  STYLE015:
+    enabled: true
+    severity: info
+    # description: Multiline Continuation Alignment
+
+  STYLE016:
+    enabled: true
+    severity: warning
+    # description: Python Function Indentation
+
+  STYLE017:
+    enabled: true
+    severity: info
+    # description: Recipe Variable Ordering
+
+  STYLE018:
+    enabled: true
+    severity: info
+    # description: LICENSE Variable Order
+
+  STYLE019:
+    enabled: true
+    severity: info
+    # description: Source Variables Order
+
+  STYLE020:
+    enabled: true
+    severity: info
+    # description: Metadata Before License
+
+  STYLE021:
+    enabled: true
+    severity: info
+    # description: Task Execution Order
 
   # ============================================================================
   # SUPPLY CHAIN Rules
