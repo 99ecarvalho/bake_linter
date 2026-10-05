@@ -601,24 +601,18 @@ settings:
   # Maximum line length for STYLE002 rule
   max_line_length: 120
 
-  # Yocto release this project targets (the build configuration pins poky to
-  # this branch) -- passed through to oelint-adv's --release so its
-  # release-gated rules (e.g. oelint.vars.unpackdir, which needs styhead+)
-  # don't fire on variables/features that don't exist yet on this release.
-  oelint_release: scarthgap
+  # Yocto release to validate against, passed through to oelint-adv's
+  # --release so its release-gated rules (e.g. oelint.vars.unpackdir, which
+  # needs styhead or later) match the release you build. Unset, oelint-adv
+  # uses its newest supported release.
+  # oelint_release: scarthgap
 
-  # Custom BSP machine names this project defines under
-  # vendor/bsp/meta-example-bsp/conf/machine/ -- oelint-adv's built-in
-  # MachinesKnown list has no idea these exist, so its oelint.vars.specific
-  # rule flags every :machine override of these names (e.g.
-  # IMAGE_INSTALL:append:qemuarm64) as unknown. Passed through to oelint-adv's
-  # --constantmods so it recognizes them as valid override targets.
-  oelint_extra_machines:
-    - qemuarm64
-    - qemuarm
-    - qemux86-64
-    - qemux86
-    - qemuriscv64
+  # Custom machine names your BSP layer defines. oelint-adv's built-in
+  # MachinesKnown list does not know them, so its oelint.vars.specific rule
+  # flags every override on them (e.g. IMAGE_INSTALL:append:my-board) as
+  # unknown. Passed through to oelint-adv's --constantmods.
+  oelint_extra_machines: []
+  #   - my-board
 
   # Enable colored output (set to false for CI)
   color: true

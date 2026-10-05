@@ -377,7 +377,7 @@ class OelintAdvIntegration:
                     it defaults to its own newest-supported release, which
                     misfires those rules on projects targeting an older,
                     still-supported release.
-            extra_machines: Custom BSP machine names (e.g. "qemuarm64") this project
+            extra_machines: Custom BSP machine names (e.g. "my-board") this project
                     defines that oelint-adv's built-in MachinesKnown list doesn't
                     recognize. Without these, oelint.vars.specific misfires on
                     every :machine override of these names. Written to a temp
@@ -397,15 +397,6 @@ class OelintAdvIntegration:
         ]
         if release:
             args += ["--release", release]
-
-        constantmods_file: Optional[str] = None
-        if extra_machines:
-            import json
-            import tempfile
-            fd, constantmods_file = tempfile.mkstemp(suffix=".json", prefix="oelint-constantmods-")
-            with os.fdopen(fd, "w") as f:
-                json.dump({"replacements": {"machines": list(extra_machines)}}, f)
-            args += ["--constantmods", f"+{constantmods_file}"]
 
         if extra_args:
             args.extend(extra_args)
@@ -446,6 +437,15 @@ class OelintAdvIntegration:
         if not file_list:
             return [], OelintSummary(), "", "All files excluded"
         
+        constantmods_file: Optional[str] = None
+        if extra_machines:
+            import json
+            import tempfile
+            fd, constantmods_file = tempfile.mkstemp(suffix=".json", prefix="oelint-constantmods-")
+            with os.fdopen(fd, "w") as f:
+                json.dump({"replacements": {"machines": list(extra_machines)}}, f)
+            args += ["--constantmods", f"+{constantmods_file}"]
+
         args.extend(file_list)
         
         debug = os.environ.get("BAKE_LINTER_DEBUG", "").lower() in ("1", "true", "yes")
