@@ -171,7 +171,7 @@ rules:
 
   INSTALL004:
     enabled: true
-    severity: error
+    severity: warning
     # description: Installation to /usr/local
 
   INSTALL005:

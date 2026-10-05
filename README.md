@@ -315,7 +315,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 | INSTALL001 | cp Instead of install | Warning | Detect cp usage in do_install |
 | INSTALL002 | Install Without Mode | Warning | Detect install without -m permission |
 | INSTALL003 | mkdir Instead of install -d | Info | Detect mkdir -p instead of install -d |
-| INSTALL004 | Installation to /usr/local | Error | Detect /usr/local which is non-standard |
+| INSTALL004 | Installation to /usr/local | Warning | Detect /usr/local which is non-standard |
 | INSTALL005 | Non-FHS Installation Path | Info | Detect files installed outside standard FHS paths |
 
 ### BBAppend Rules

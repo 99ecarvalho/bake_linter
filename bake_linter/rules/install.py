@@ -254,11 +254,22 @@ class UsrLocalInstallRule(BaseRule):
     rule_id = "INSTALL004"
     name = "Installation to /usr/local"
     description = "Detects installations to /usr/local which is non-standard for Yocto"
-    default_severity = Severity.ERROR
+    default_severity = Severity.WARNING
     groups = ["install", "portability"]
     hint = "Use ${bindir}, ${libdir}, ${datadir} instead of /usr/local/*"
 
-    USR_LOCAL_PATTERN = re.compile(r'/usr/local(?:/|$)')
+    USR_LOCAL_PATTERN = re.compile(r'/usr/local(?![\w.-])')
+    # Places where /usr/local is where files end up: below ${D}, or as the
+    # install prefix handed to the build system
+    INSTALL_PATTERNS = [
+        re.compile(r'\$\{D\}/usr/local(?:/|\b)'),
+        re.compile(r'(?<![\w-])(?:--)?prefix=["\']?/usr/local\b', re.IGNORECASE),
+        re.compile(r'-DCMAKE_INSTALL_PREFIX(?::\w+)?=["\']?/usr/local\b'),
+        re.compile(r'^(?:export\s+)?prefix\s*(?:\?\??|:)?=\s*["\']/usr/local\b'),
+    ]
+    # A sed command, or an -e expression continuing one: rewriting
+    # /usr/local out of a file is the fix, not an install there
+    SED_PATTERN = re.compile(r'(?:^|[|;&\s])sed\s|^-e\s')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -268,8 +279,15 @@ class UsrLocalInstallRule(BaseRule):
             
             if stripped.startswith("#"):
                 continue
-            
-            if self.USR_LOCAL_PATTERN.search(line):
+            if not self.USR_LOCAL_PATTERN.search(line):
+                continue
+            if self.SED_PATTERN.search(stripped):
+                continue
+
+            # A FILES value packages /usr/local; elsewhere only an install
+            # destination or prefix counts
+            in_files = context.owner_base(line_num) == "FILES"
+            if in_files or any(p.search(stripped) for p in self.INSTALL_PATTERNS):
                 results.append(self.create_result(
                     file=context,
                     line=line_num,

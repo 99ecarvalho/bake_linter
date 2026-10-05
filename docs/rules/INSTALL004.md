@@ -1,6 +1,6 @@
 # INSTALL004 - Installation to /usr/local
 
-**Severity:** error
+**Severity:** warning
 
 **Category:** install
 
@@ -10,7 +10,9 @@
 
 ## Description
 
-Detects installations to /usr/local which is non-standard for Yocto
+Detects installations to /usr/local which is non-standard for Yocto.
+
+Only places where files end up in `/usr/local` are reported: a path below `${D}`, a `FILES` value, and an install prefix handed to the build system (`--prefix=/usr/local`, `PREFIX=/usr/local`, `-DCMAKE_INSTALL_PREFIX=/usr/local`, `prefix = "/usr/local"`). A `sed` expression that rewrites `/usr/local` out of a script or Makefile is the fix, not an install, and is not reported.
 
 ## Example of Bad Code
 
@@ -60,7 +62,7 @@ This rule can be configured in `.bake-linter.yaml`:
 rules:
   INSTALL004:
     enabled: true  # or false to disable
-    severity: error  # override severity (error, warning, info)
+    severity: warning  # override severity (error, warning, info)
     # options:
     #   key: value  # Add rule-specific options if any
 ```
