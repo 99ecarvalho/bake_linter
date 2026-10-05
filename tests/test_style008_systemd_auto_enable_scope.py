@@ -89,3 +89,44 @@ def test_two_packages_bare_form_in_a_comment_is_ignored():
         '# SYSTEMD_AUTO_ENABLE = "enable"\n'
     )
     assert _check(content) == []
+
+
+def test_operation_override_is_not_a_package():
+    # SYSTEMD_SERVICE:append changes the unsuffixed value; it is not a
+    # second package.
+    content = (
+        'SYSTEMD_SERVICE:${PN} = "a.service"\n'
+        'SYSTEMD_SERVICE:append = " b.service"\n'
+        'SYSTEMD_AUTO_ENABLE = "enable"\n'
+    )
+    assert _check(content) == []
+
+
+def test_conditional_override_is_not_a_package():
+    content = (
+        'SYSTEMD_SERVICE:${PN} = "a.service"\n'
+        'SYSTEMD_SERVICE:class-target = "b.service"\n'
+        'SYSTEMD_AUTO_ENABLE = "enable"\n'
+    )
+    assert _check(content) == []
+
+
+def test_systemd_packages_with_two_packages_is_reported():
+    # systemd.bbclass walks SYSTEMD_PACKAGES; the bare value applies to each.
+    content = (
+        'SYSTEMD_PACKAGES = "${PN} ${PN}-extra"\n'
+        'SYSTEMD_SERVICE = "a.service"\n'
+        'SYSTEMD_AUTO_ENABLE = "enable"\n'
+    )
+    results = _check(content)
+    assert len(results) == 1
+    assert results[0].line == 3
+
+
+def test_systemd_packages_append_adds_a_package():
+    content = (
+        'SYSTEMD_SERVICE:${PN} = "a.service"\n'
+        'SYSTEMD_PACKAGES += "${PN}-extra"\n'
+        'SYSTEMD_AUTO_ENABLE = "enable"\n'
+    )
+    assert len(_check(content)) == 1

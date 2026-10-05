@@ -20,6 +20,7 @@ from typing import List
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
+from bake_linter.rules.syntax import InvalidOverrideOrderingRule
 
 
 class TrailingWhitespaceRule(BaseRule):
@@ -520,13 +521,29 @@ class SystemdAutoEnableRule(BaseRule):
         r'^SYSTEMD_SERVICE:((?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z0-9_.+-])+)'
     )
 
+    # The packages systemd.bbclass processes, listed in SYSTEMD_PACKAGES
+    PACKAGES_PATTERN = re.compile(
+        r'^SYSTEMD_PACKAGES(?::(?:append|prepend))?\s*(?:\?\?|\?|\+|:|\.)?=\+?\s*"([^"]*)"'
+    )
+
+    OPERATIONS = {"append", "prepend", "remove"}
+
     def _systemd_packages(self, context: FileContext) -> set:
         """Distinct packages this recipe declares systemd services for."""
+        conditional = InvalidOverrideOrderingRule.CONDITIONAL_OVERRIDE_PATTERN
         packages = set()
         for line in context.lines:
-            match = self.SERVICE_PKG_PATTERN.match(line.strip())
+            stripped = line.strip()
+            match = self.SERVICE_PKG_PATTERN.match(stripped)
             if match:
-                packages.add(match.group(1))
+                package = match.group(1)
+                # SYSTEMD_SERVICE:append or SYSTEMD_SERVICE:class-target name
+                # no package: they change the unsuffixed value.
+                if package not in self.OPERATIONS and not conditional.match(package):
+                    packages.add(package)
+            match = self.PACKAGES_PATTERN.match(stripped)
+            if match:
+                packages.update(match.group(1).split())
         return packages
 
     def check(self, context: FileContext) -> List[LintResult]:
