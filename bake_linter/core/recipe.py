@@ -198,6 +198,50 @@ def parse_structure(lines: List[str]) -> RecipeStructure:
     return structure
 
 
+@dataclass
+class FunctionLine:
+    """One logical line of a function body, continuation lines joined."""
+    function: str  # function name, e.g. "do_install:append"
+    text: str      # stripped, continuation lines joined
+    line: int      # first line (1-indexed)
+    end_line: int  # last line
+
+
+def function_lines(lines: List[str], structure: RecipeStructure) -> List[FunctionLine]:
+    """The body lines of every function, with lines ending in a backslash
+    joined to the next one. The header line (do_install() {) is left out."""
+    found: List[FunctionLine] = []
+    current: Optional[FunctionLine] = None
+    previous_owner = ""
+    closed = False
+    for line_num, raw in enumerate(lines, start=1):
+        owner = structure.owner(line_num)
+        if not owner.startswith(FUNCTION_PREFIX):
+            current, previous_owner = None, owner
+            continue
+        name = owner[len(FUNCTION_PREFIX):]
+        stripped = raw.rstrip("\n").strip()
+        # A new function starts where the owner changes or right after the
+        # closing brace of one with the same name
+        header = (owner != previous_owner or closed) and FUNCTION_PATTERN.match(raw)
+        previous_owner = owner
+        closed = raw.startswith("}")
+        if header:
+            current = None
+            continue
+        continued = stripped.endswith("\\")
+        part = stripped[:-1].rstrip() if continued else stripped
+        if current is not None:
+            current.text = (current.text + " " + part).strip()
+            current.end_line = line_num
+        else:
+            current = FunctionLine(name, part, line_num, line_num)
+            found.append(current)
+        if not continued:
+            current = None
+    return found
+
+
 def recipe_name(path: Path) -> str:
     """PN as BitBake derives it from the file name: foo_1.0.bb -> foo."""
     name = path.name

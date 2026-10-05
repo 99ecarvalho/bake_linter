@@ -345,6 +345,13 @@ class FileContext:
         return owner.split(":", 1)[0]
 
     @cached_property
+    def function_lines(self) -> List["FunctionLine"]:
+        """Logical lines of every function body, continuation lines joined,
+        each with the name of its function (e.g. "do_install:append")."""
+        from bake_linter.core.recipe import function_lines
+        return function_lines(self.lines, self.structure)
+
+    @cached_property
     def pn(self) -> str:
         """PN as BitBake derives it from the file name."""
         from bake_linter.core.recipe import recipe_name
