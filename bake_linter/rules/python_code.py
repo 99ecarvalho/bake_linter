@@ -165,6 +165,10 @@ class AnonymousPythonIssuesRule(BaseRule):
     groups = ["python", "reliability"]
     hint = "Ensure proper error handling in anonymous Python"
 
+    RAISE_PATTERN = re.compile(
+        r'\braise\s+(?!(?:bb\.parse\.)?Skip(?:Recipe|Package)\b)\w+'
+    )
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         in_anon_python = False
@@ -186,8 +190,11 @@ class AnonymousPythonIssuesRule(BaseRule):
                     uses_d_getvar = True
                 
                 # Check for common issues
-                # 1. Using raise without bb.fatal
-                if re.search(r'\braise\s+\w+', stripped) and 'bb.fatal' not in stripped:
+                # 1. Using raise without bb.fatal. Raising
+                # bb.parse.SkipRecipe (or SkipPackage) is how anonymous
+                # python skips a recipe; bb.fatal would fail the parse.
+                if (re.search(self.RAISE_PATTERN, stripped)
+                        and 'bb.fatal' not in stripped):
                     results.append(self.create_result(
                         file=context,
                         line=line_num,
