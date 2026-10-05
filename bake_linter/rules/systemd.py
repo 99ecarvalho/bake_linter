@@ -68,35 +68,31 @@ class SystemdWithoutInheritRule(BaseRule):
         if file_path.endswith('.inc'):
             return results
         
-        # Check if recipe inherits systemd
-        inherits_systemd = False
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("inherit") and "systemd" in stripped.split():
-                inherits_systemd = True
-                break
-        
-        if inherits_systemd:
+        # The class may be inherited in a required file, or through an inline
+        # expression (inherit ${@bb.utils.contains(..., 'systemd', '', d)})
+        if "systemd" in context.inherits:
+            return results
+        # An include that cannot be found may inherit it
+        if context.included_files is None:
             return results
         
         # Look for systemd usage without inherit
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            # Skip comments
-            if stripped.startswith("#"):
+        for a in context.structure.assignments:
+            if a.flag:
                 continue
-            
-            for pattern in self.SYSTEMD_PATTERNS:
-                if pattern.search(stripped):
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="Systemd feature used without 'inherit systemd'",
-                        context=stripped[:70],
-                        hint="Add 'inherit systemd' to use systemd features",
-                    ))
-                    break  # One error per line
+            stripped = context.lines[a.line - 1].strip()
+            if not any(p.search(stripped) for p in self.SYSTEMD_PATTERNS):
+                continue
+            # SYSTEMD_SERVICE:${PN} = "" turns the class's handling off
+            if not a.value.strip():
+                continue
+            results.append(self.create_result(
+                file=context,
+                line=a.line,
+                message="Systemd feature used without 'inherit systemd'",
+                context=stripped[:70],
+                hint="Add 'inherit systemd' to use systemd features",
+            ))
         
         return results
 
@@ -127,16 +123,13 @@ class SystemdMissingServiceDeclarationRule(BaseRule):
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
-        # First, check if recipe inherits systemd
-        inherits_systemd = False
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("inherit") and "systemd" in stripped.split():
-                inherits_systemd = True
-                break
-        
-        if not inherits_systemd:
+        # First, check if recipe inherits systemd, here or in a required file
+        if "systemd" not in context.inherits:
             return results  # SYSTEMD001 will catch this
+        # SYSTEMD_SERVICE may be declared in an include that cannot be found
+        included = context.included_files
+        if included is None:
+            return results
         
         # Collect installed service files
         installed_services = []
@@ -160,14 +153,11 @@ class SystemdMissingServiceDeclarationRule(BaseRule):
         has_service_decl = False
         declared_services = []
         
-        for line in context.lines:
-            stripped = line.strip()
-            if self.SERVICE_DECL_PATTERN.match(stripped):
+        structures = [context.structure] + [i.structure for i in included]
+        for a in (a for s in structures for a in s.assignments):
+            if self.SERVICE_DECL_PATTERN.match(a.name):
                 has_service_decl = True
-                # Extract service names from declaration
-                if '=' in stripped:
-                    value = stripped.split('=', 1)[1].strip().strip('"\'')
-                    declared_services.extend(value.split())
+                declared_services.extend(a.value.split())
         
         if not has_service_decl:
             for line_num, service_name in service_install_lines:

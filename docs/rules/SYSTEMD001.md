@@ -12,6 +12,8 @@
 
 Detects usage of systemd variables/paths without inherit systemd
 
+The class counts as inherited when the recipe or a file it requires inherits it, also through an inline expression such as `inherit ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', 'systemd', '', d)}`. An empty assignment (`SYSTEMD_SERVICE:${PN} = ""`) does not use the class, and nothing is reported when a required file cannot be found.
+
 ## Example of Bad Code
 
 ```bitbake
