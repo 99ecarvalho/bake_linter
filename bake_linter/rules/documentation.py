@@ -90,7 +90,7 @@ class MissingSummaryRule(BaseRule):
     groups = ["documentation", "metadata"]
     hint = "Add SUMMARY = \"Brief one-line description\""
     
-    applicable_file_types = {"bb"}
+    applicable_file_types = {"recipe"}
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []

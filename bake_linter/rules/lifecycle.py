@@ -38,7 +38,7 @@ class MissingUpstreamCheckRule(BaseRule):
     groups = ["maintenance", "upstream"]
     hint = "Add UPSTREAM_CHECK_URI and UPSTREAM_CHECK_REGEX for version tracking"
     
-    applicable_file_types = {"bb"}
+    applicable_file_types = {"recipe"}
 
     UPSTREAM_CHECK_VARS = [
         'UPSTREAM_CHECK_URI',

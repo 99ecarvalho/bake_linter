@@ -54,3 +54,6 @@ output_untracked/
 
 # Local notes and reviews (never committed)
 *.local.*
+
+# Claude Code local state (agent worktrees)
+.claude/
