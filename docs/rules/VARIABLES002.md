@@ -15,30 +15,33 @@ Detects S = "${WORKDIR}" which is unconventional
 ## Example of Bad Code
 
 ```bitbake
+SRC_URI = "https://example.com/foo-${PV}.tar.gz"
 S = "${WORKDIR}"
-
-do_compile() {
-    cd ${S}
-    make
-}
 ```
 
 ## Why This Is Bad
 
-Setting `S = "${WORKDIR}"` means the source directory is the entire work directory, not a subdirectory. This is unusual and suggests the recipe is missing an unpack step or explicit directory structure handling.
+Setting `S = "${WORKDIR}"` makes the source directory the whole work
+directory instead of the directory the source unpacks into, so the build
+runs on the wrong tree.
+
+For a recipe that only installs local files, it was the usual idiom up to
+scarthgap (5.0). From styhead (5.1) on, local files unpack into
+`${UNPACKDIR}` and BitBake rejects `S = "${WORKDIR}"` with a fatal error.
 
 ## How to Fix It
 
 ```bitbake
-S = "${WORKDIR}/${BPN}-${PV}"
-
-do_compile() {
-    cd ${S}
-    make
-}
+SRC_URI = "https://example.com/foo-${PV}.tar.gz"
+S = "${WORKDIR}/${BP}"
 ```
 
-Set `S` to point to the actual source directory (usually a subdirectory of `${WORKDIR}` created during unpack). Document the directory layout if non-standard.
+For a file-only recipe on styhead or later:
+
+```bitbake
+SRC_URI = "file://helper.sh"
+S = "${UNPACKDIR}"
+```
 
 ## Inline Suppression
 

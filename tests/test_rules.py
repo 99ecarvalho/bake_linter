@@ -2884,6 +2884,41 @@ PV = "1.0+git${SRCPV}"
         
         assert len(results) == 0
 
+    def test_git_recipe_with_plus_git_ok(self):
+        """Since nanbield, PV = "1.0+git" is the documented form: bitbake
+        appends the revision itself and SRCPV is deprecated."""
+        from bake_linter.rules.variables import GitRecipeWithoutSRCPVRule
+
+        content = '''SRC_URI = "git://github.com/user/repo.git;protocol=https"
+PV = "1.0+git"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        assert GitRecipeWithoutSRCPVRule().check(context) == []
+
+    def test_git_recipe_hint_suggests_plus_git(self):
+        from bake_linter.rules.variables import GitRecipeWithoutSRCPVRule
+
+        content = '''SRC_URI = "git://github.com/user/repo.git;protocol=https"
+PV = "1.0"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        results = GitRecipeWithoutSRCPVRule().check(context)
+
+        assert len(results) == 1
+        assert 'PV = "1.0+git"' in results[0].hint
+
     def test_unconventional_s_workdir(self):
         """Test that S = ${WORKDIR} is flagged."""
         from bake_linter.rules.variables import UnconventionalSAssignmentRule

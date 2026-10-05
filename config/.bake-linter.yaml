@@ -569,7 +569,7 @@ rules:
   VARIABLES001:
     enabled: true
     severity: warning
-    # description: Git Recipe Without SRCPV
+    # description: Git Recipe PV Without +git
 
   VARIABLES002:
     enabled: true

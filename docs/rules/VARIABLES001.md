@@ -1,4 +1,4 @@
-# VARIABLES001 - Git Recipe Without SRCPV
+# VARIABLES001 - Git Recipe PV Without +git
 
 **Severity:** warning
 
@@ -10,31 +10,35 @@
 
 ## Description
 
-Detects git-based recipes without SRCPV in PV
+Detects git-based recipes whose PV has neither +git nor SRCPV
 
 ## Example of Bad Code
 
 ```bitbake
-SRC_URI = "git://github.com/project/repo.git;branch=main"
+SRC_URI = "git://github.com/project/repo.git;protocol=https;branch=main"
 SRCREV = "9f0c3e1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c"
 
-PV = "1.0.0+git${SRCPV}"  # SRCPV reference but no += SRCPV in PV
+PV = "1.0.0"
 ```
 
 ## Why This Is Bad
 
-Git recipes should include `${SRCPV}` in the version to distinguish commits. Without it, different commits have the same version, causing caching and reproducibility issues.
+A recipe that builds a git commit should mark PV as a git snapshot. Without
+the marker, builds of different commits get the same version, which breaks
+upgrade ordering and makes packages from different commits look identical.
 
 ## How to Fix It
 
 ```bitbake
-SRC_URI = "git://github.com/project/repo.git;branch=main"
+SRC_URI = "git://github.com/project/repo.git;protocol=https;branch=main"
 SRCREV = "9f0c3e1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c"
 
-PV = "1.0.0+git${SRCPV}"
+PV = "1.0.0+git"
 ```
 
-Include `${SRCPV}` in PV for git-based recipes. This automatically appends the commit hash, ensuring unique versions per commit and enabling proper caching.
+From nanbield (4.3) on, BitBake appends the revision to a PV that contains
+`+git` by itself, and `SRCPV` is deprecated. On older releases use
+`PV = "1.0.0+git${SRCPV}"`. Recipes named `*_git.bb` are skipped.
 
 ## Inline Suppression
 

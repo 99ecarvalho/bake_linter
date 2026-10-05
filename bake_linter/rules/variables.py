@@ -24,24 +24,26 @@ from bake_linter.rules.base import BaseRule
 
 class GitRecipeWithoutSRCPVRule(BaseRule):
     """
-    Check for git-based recipes without SRCPV in PV.
-    
-    Git recipes should include ${SRCPV} in PV for proper version tracking:
-    - Allows sstate cache to detect source changes
-    - Ensures correct package versioning
-    - Standard practice for git recipes
+    Check that a git-based recipe marks its PV as a git snapshot.
+
+    A recipe that builds a git commit should say so in PV, so that versions
+    of different commits sort and differ:
+    - nanbield (4.3) and later: PV = "1.0+git". BitBake appends the revision
+      to a PV containing "+git" by itself, and SRCPV is deprecated.
+    - Older releases: PV = "1.0+git${SRCPV}".
+    Either form is accepted.
     """
     
     rule_id = "VARIABLES001"
-    name = "Git Recipe Without SRCPV"
-    description = "Detects git-based recipes without SRCPV in PV"
+    name = "Git Recipe PV Without +git"
+    description = "Detects git-based recipes whose PV has neither +git nor SRCPV"
     default_severity = Severity.WARNING
     groups = ["variables", "git"]
-    hint = "Add +git${SRCPV} to PV for git-based recipes"
+    hint = 'Use PV = "<version>+git" (or "+git${SRCPV}" before nanbield)'
 
     GIT_SRC_PATTERN = re.compile(r'SRC_URI\s*[+:]?=.*(?:git://|gitsm://)')
     PV_PATTERN = re.compile(r'^PV\s*=\s*["\']([^"\']+)["\']')
-    SRCPV_PATTERN = re.compile(r'\$\{SRCPV\}|SRCPV')
+    SNAPSHOT_PV_PATTERN = re.compile(r'\+git|SRCPV')
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
@@ -71,14 +73,17 @@ class GitRecipeWithoutSRCPVRule(BaseRule):
         if context.path.name.endswith('_git.bb'):
             return results
         
-        # Flag if git recipe without SRCPV in PV
-        if is_git_recipe and pv_line and not self.SRCPV_PATTERN.search(pv_value):
+        # Flag a git recipe whose PV is not marked as a git snapshot
+        if is_git_recipe and pv_line and not self.SNAPSHOT_PV_PATTERN.search(pv_value):
             results.append(self.create_result(
                 file=context,
                 line=pv_line_num,
-                message="Git-based recipe without ${SRCPV} in PV",
+                message="Git-based recipe PV has neither +git nor ${SRCPV}",
                 context=pv_line[:60],
-                hint="Change to PV = \"" + pv_value + "+git${SRCPV}\" for proper versioning",
+                hint=(
+                    f'Change to PV = "{pv_value}+git" '
+                    f'(or "{pv_value}+git${{SRCPV}}" before nanbield)'
+                ),
             ))
         
         return results
@@ -93,10 +98,10 @@ class UnconventionalSAssignmentRule(BaseRule):
     - Missing source directory specification
     - Potential build isolation issues
     
-    However, it IS acceptable for:
-    - File-only recipes (local scripts, config files)
-    - Recipes without compilation (no source tarball)
-    - Simple utility/configuration recipes
+    Up to scarthgap (5.0) it is acceptable for file-only recipes (local
+    scripts, config files, no source tarball). From styhead (5.1) on, local
+    files unpack into ${UNPACKDIR} and BitBake rejects S = "${WORKDIR}" with a
+    fatal error; such recipes must use S = "${UNPACKDIR}".
     """
     
     rule_id = "VARIABLES002"
@@ -104,7 +109,7 @@ class UnconventionalSAssignmentRule(BaseRule):
     description = "Detects S = \"${WORKDIR}\" which is unconventional"
     default_severity = Severity.WARNING
     groups = ["variables"]
-    hint = "Standard is S = \"${WORKDIR}/${PN}-${PV}\" - acceptable for file-only recipes without compilation"
+    hint = "Standard is S = \"${WORKDIR}/${BP}\"; for a file-only recipe use S = \"${UNPACKDIR}\" (styhead and later, where ${WORKDIR} is a fatal error), or keep ${WORKDIR} only on scarthgap and earlier"
 
     S_WORKDIR_PATTERN = re.compile(r'^S\s*=\s*["\']?\$\{WORKDIR\}["\']?\s*$')
 
@@ -123,7 +128,7 @@ class UnconventionalSAssignmentRule(BaseRule):
                     line=line_num,
                     message="Unconventional S = \"${WORKDIR}\" assignment",
                     context=stripped,
-                    hint="Standard is S = \"${WORKDIR}/${PN}-${PV}\" - acceptable for file-only recipes without compilation",
+                    hint="Standard is S = \"${WORKDIR}/${BP}\"; for a file-only recipe use S = \"${UNPACKDIR}\" (styhead and later, where ${WORKDIR} is a fatal error), or keep ${WORKDIR} only on scarthgap and earlier",
                 ))
         
         return results
