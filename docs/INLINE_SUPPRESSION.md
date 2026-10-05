@@ -45,7 +45,10 @@ LEGACY_CODE = "needs-refactoring"
 
 - **Standalone comment**: Applies to next non-comment line
 - **Inline comment**: Applies to current line only
-- **Not file-wide**: Each suppression is line-specific
+- **File-level findings**: Some findings are about the file as a whole and
+  have no line, such as a missing `LICENSE`. A standalone comment naming the
+  rule anywhere in the file suppresses those; an inline comment does not.
+- Otherwise each suppression is line-specific
 
 ## Best Practices
 

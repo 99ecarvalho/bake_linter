@@ -149,7 +149,7 @@ class BaseRule(metaclass=RuleMeta):
         """
         pass
     
-    def _is_suppressed(self, context: FileContext, line: int) -> bool:
+    def _is_suppressed(self, context: FileContext, line: Optional[int]) -> bool:
         """
         Check if this rule is suppressed for a specific line.
         
@@ -160,14 +160,7 @@ class BaseRule(metaclass=RuleMeta):
         Returns:
             True if this rule is suppressed for this line
         """
-        # Check current line and previous line (for standalone suppression comments)
-        for check_line in [line, line - 1]:
-            if check_line in context.inline_suppressions:
-                suppressed_rules = context.inline_suppressions[check_line]
-                # Check for specific rule ID or wildcard suppression
-                if self.rule_id in suppressed_rules or "*" in suppressed_rules:
-                    return True
-        return False
+        return context.is_suppressed(self.rule_id, line)
 
     def create_result(
         self,
@@ -204,7 +197,7 @@ class BaseRule(metaclass=RuleMeta):
             file_path = file.path
             
             # Check if this issue is suppressed
-            if check_suppression and line is not None:
+            if check_suppression:
                 if self._is_suppressed(file_context, line):
                     return None
         else:

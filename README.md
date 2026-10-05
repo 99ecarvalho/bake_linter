@@ -154,6 +154,7 @@ CUSTOM_VAR = "special-case"
 - **Whitespace flexible**: Spaces around `:` and `,` are optional
 - **Standalone comments**: Apply to the next non-comment line
 - **Inline comments**: Apply to the current line
+- **File-level findings** (no line, e.g. a missing `LICENSE`): suppressed by a standalone comment naming the rule anywhere in the file
 
 ### When to Use Suppressions
 

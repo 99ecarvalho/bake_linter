@@ -256,3 +256,65 @@ RDEPENDS:${PN} = "dependency1 dependency2"
     results = engine.lint_files([test_file])
     
     assert len(results) == 0, "LICENSE001 should be suppressed"
+
+
+class TestSuppressionScope:
+    """A suppression covers exactly the line it documents."""
+
+    @staticmethod
+    def _context(content):
+        return FileContext(
+            path=Path("test.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+    def test_standalone_comment_covers_only_the_next_code_line(self):
+        context = self._context(
+            '# nolint: STYLE001\n'
+            'A = "1"\n'
+            'B = "2"\n'
+        )
+        assert context.is_suppressed("STYLE001", 2)
+        assert not context.is_suppressed("STYLE001", 1)
+        assert not context.is_suppressed("STYLE001", 3)
+
+    def test_standalone_comment_skips_further_comments(self):
+        context = self._context(
+            '# nolint: STYLE001\n'
+            '# why it is suppressed\n'
+            'A = "1"\n'
+        )
+        assert context.is_suppressed("STYLE001", 3)
+
+    def test_inline_comment_covers_only_its_own_line(self):
+        context = self._context(
+            'A = "1"  # nolint: STYLE001\n'
+            'B = "2"\n'
+        )
+        assert context.is_suppressed("STYLE001", 1)
+        assert not context.is_suppressed("STYLE001", 2)
+
+    def test_inline_comment_does_not_suppress_file_level_findings(self):
+        context = self._context('A = "1"  # nolint: LICENSE001\n')
+        assert not context.is_suppressed("LICENSE001", None)
+
+    def test_rule_ids_are_case_insensitive(self):
+        context = self._context('# nolint: license001\nA = "1"\n')
+        assert context.is_suppressed("LICENSE001", 2)
+        assert context.is_suppressed("LICENSE001", None)
+
+    def test_wildcard_pattern_matches(self):
+        match = INLINE_SUPPRESSION_PATTERN.search("# nolint: *")
+        assert match is not None
+        assert match.group("rules") == "*"
+
+    def test_explicit_suppressions_are_kept(self):
+        context = FileContext(
+            path=Path("test.bb"),
+            content='A = "1"\n',
+            lines=['A = "1"\n'],
+            inline_suppressions={1: {"STYLE001"}},
+        )
+        assert context.is_suppressed("STYLE001", 1)
