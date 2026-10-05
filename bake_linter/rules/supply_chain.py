@@ -29,7 +29,8 @@ class UnpinnedBranchRule(BaseRule):
     A mutable branch is a reproducibility hazard only when nothing pins the
     commit: what gets built is decided by SRCREV, and the branch is just the
     ref bitbake fetches and validates the revision against. So this rule fires
-    on a mutable branch when the recipe has no pinned SRCREV, or uses AUTOREV.
+    on a mutable branch when the SRCREV for that URI (SRCREV_<name> for a URI
+    with ;name=, SRCREV otherwise) is not a fixed commit, or is AUTOREV.
     """
 
     rule_id = "REPRO001"
@@ -42,36 +43,58 @@ class UnpinnedBranchRule(BaseRule):
     # Mutable development branches to flag
     MUTABLE_BRANCHES = ['master', 'main', 'develop', 'trunk', 'dev', 'development']
 
-    GIT_URI_PATTERN = re.compile(r'(?:git|gitsm)://[^;]+;[^"\']*branch=([^;"\'\s]+)')
+    # A git or gitsm URI with its parameters
+    GIT_URI_PATTERN = re.compile(r'\bgit(?:sm)?://[^"\'\s\\]+')
+    BRANCH_PARAM = re.compile(r';branch=([^;"\'\s\\]+)')
+    NAME_PARAM = re.compile(r';name=([^;"\'\s\\]+)')
 
     # A 40-hex SRCREV pins the exact commit. Poky/meta-openembedded have 736
     # recipes on branch=master|main and 728 of them (98.9%) pin SRCREV this
     # way, so flagging the pinned case fires on the standard practice rather
     # than on a real hazard. AUTOREV is the genuinely unreproducible case and
-    # is never treated as pinned, whatever else the recipe does.
-    PINNED_SRCREV_PATTERN = re.compile(
-        r'^SRCREV[A-Za-z0-9_:${}.-]*\s*[?:+]?=\s*"[0-9a-fA-F]{40}"'
+    # is never treated as pinned.
+    #
+    # Each URI is pinned by the SRCREV for its ;name= (SRCREV_<name>), falling
+    # back to plain SRCREV as bitbake does, so a multi-repo recipe must pin
+    # each repository. Overrides (SRCREV:pn-foo, SRCREV_foo:qemuarm) count
+    # for the same name.
+    SRCREV_PATTERN = re.compile(
+        r'^SRCREV(?:_(?P<name>[A-Za-z0-9${}.-]+?))?(?::[A-Za-z0-9_${}.-]+)*'
+        r'\s*(?:\?\?|\?|:)?=\s*"(?P<value>[^"]*)"'
     )
+    HEX_REVISION = re.compile(r'^[0-9a-fA-F]{40}$')
     AUTOREV_PATTERN = re.compile(r'\bAUTOREV\b')
+
+    def _srcrev_states(self, context: FileContext) -> dict:
+        """Map each SRCREV name ("default" for plain SRCREV) to whether it is
+        a fixed commit. AUTOREV anywhere for a name makes it unpinned."""
+        states = {}
+        for line in context.lines:
+            match = self.SRCREV_PATTERN.match(line.strip())
+            if not match:
+                continue
+            name = match.group("name") or "default"
+            value = match.group("value").strip()
+            if self.AUTOREV_PATTERN.search(value):
+                states[name] = False
+            elif self.HEX_REVISION.match(value):
+                states.setdefault(name, True)
+        return states
+
+    @staticmethod
+    def _is_pinned(states: dict, name: str) -> bool:
+        """bitbake looks up SRCREV_<name>, then falls back to plain SRCREV
+        (fetch2 srcrev_internal_helper)."""
+        if name in states:
+            return states[name]
+        return states.get("default", False)
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
 
         # The pinning state is a property of the whole recipe, so resolve it
         # before judging any individual URI line.
-        has_pinned_srcrev = False
-        uses_autorev = False
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            if self.PINNED_SRCREV_PATTERN.match(stripped):
-                has_pinned_srcrev = True
-            if self.AUTOREV_PATTERN.search(stripped):
-                uses_autorev = True
-
-        if has_pinned_srcrev and not uses_autorev:
-            return results
+        states = self._srcrev_states(context)
 
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -79,19 +102,25 @@ class UnpinnedBranchRule(BaseRule):
             if stripped.startswith("#"):
                 continue
 
-            matches = self.GIT_URI_PATTERN.findall(line)
-            for branch in matches:
-                if branch.lower() in self.MUTABLE_BRANCHES:
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message=(
-                            f"Mutable branch '{branch}' used in git URI with "
-                            f"no pinned SRCREV"
-                        ),
-                        context=stripped[:60],
-                        hint='Pin the commit (SRCREV = "<40-hex>") or use a stable/release branch',
-                    ))
+            for uri in self.GIT_URI_PATTERN.findall(line):
+                branch = self.BRANCH_PARAM.search(uri)
+                if not branch or branch.group(1).lower() not in self.MUTABLE_BRANCHES:
+                    continue
+                name = self.NAME_PARAM.search(uri)
+                name = name.group(1) if name else "default"
+                if self._is_pinned(states, name):
+                    continue
+                srcrev = "SRCREV" if name == "default" else f"SRCREV_{name}"
+                results.append(self.create_result(
+                    file=context,
+                    line=line_num,
+                    message=(
+                        f"Mutable branch '{branch.group(1)}' used in git URI with "
+                        f"no pinned {srcrev}"
+                    ),
+                    context=stripped[:60],
+                    hint=f'Pin the commit ({srcrev} = "<40-hex>") or use a stable/release branch',
+                ))
         
         return results
 

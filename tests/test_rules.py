@@ -4105,6 +4105,55 @@ class TestSupplyChainRules:
 
         assert len(results) == 0
 
+    def _repro(self, content):
+        from bake_linter.rules.supply_chain import UnpinnedBranchRule
+
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+        return UnpinnedBranchRule().check(context)
+
+    def test_multi_repo_needs_each_named_srcrev_pinned(self):
+        """One pinned SRCREV_<name> does not pin the other repository."""
+        results = self._repro('''SRC_URI = "git://example.com/a.git;branch=main;protocol=https;name=a \\
+           git://example.com/b.git;branch=main;protocol=https;name=b;destsuffix=b"
+SRCREV_a = "0123456789abcdef0123456789abcdef01234567"
+''')
+
+        assert len(results) == 1
+        assert results[0].line == 2
+        assert "SRCREV_b" in results[0].message
+
+    def test_multi_repo_all_pinned_is_not_flagged(self):
+        results = self._repro('''SRC_URI = "git://example.com/a.git;branch=main;protocol=https;name=a"
+SRC_URI += "git://example.com/b.git;branch=main;protocol=https;name=b"
+SRCREV_a = "0123456789abcdef0123456789abcdef01234567"
+SRCREV_b = "89abcdef0123456789abcdef0123456789abcdef"
+''')
+
+        assert results == []
+
+    def test_autorev_on_one_name_only_affects_that_uri(self):
+        results = self._repro('''SRC_URI = "git://example.com/a.git;branch=main;protocol=https;name=a"
+SRC_URI += "git://example.com/b.git;branch=main;protocol=https;name=b"
+SRCREV_a = "0123456789abcdef0123456789abcdef01234567"
+SRCREV_b = "${AUTOREV}"
+''')
+
+        assert len(results) == 1
+        assert "SRCREV_b" in results[0].message
+
+    def test_plain_srcrev_pins_a_named_uri_without_its_own(self):
+        """bitbake falls back from SRCREV_<name> to SRCREV."""
+        results = self._repro('''SRC_URI = "git://example.com/a.git;branch=main;protocol=https;name=a"
+SRCREV = "0123456789abcdef0123456789abcdef01234567"
+''')
+
+        assert results == []
+
     def test_mutable_branch_with_pinned_srcrev_is_not_flagged(self):
         """A pinned SRCREV decides what gets built; the branch is only the ref
         bitbake fetches and validates against. Poky/meta-openembedded have 736
