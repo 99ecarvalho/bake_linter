@@ -12,6 +12,8 @@
 
 Check for potential hardcoded credentials or secrets
 
+The keyword (`password`, `api_key`, `secret`, `token`) must start a word or follow an underscore (`DB_PASSWORD`); a name that merely contains it, such as `pn-libsecret`, does not count. In a BitBake assignment only the variable being set is checked, not its value, and `RECIPE_MAINTAINER` is treated as metadata like `SUMMARY` and `DESCRIPTION`.
+
 ## Example of Bad Code
 
 ```bitbake

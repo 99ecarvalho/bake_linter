@@ -287,11 +287,13 @@ class HardcodedCredentialsRule(BaseRule):
     hint = "Use environment variables or secure credential storage instead of hardcoding"
 
     # Patterns that might indicate hardcoded credentials
+    # The keyword must start a word, or follow an underscore (DB_PASSWORD):
+    # pn-libsecret or my-token is a name that merely contains it
     CREDENTIAL_PATTERNS = [
-        (re.compile(r'password\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded password"),
-        (re.compile(r'api[_-]?key\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded API key"),
-        (re.compile(r'secret\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded secret"),
-        (re.compile(r'token\s*=\s*["\'][a-zA-Z0-9]{20,}["\']', re.I), "Possible hardcoded token"),
+        (re.compile(r'(?<![A-Za-z0-9-])password\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded password"),
+        (re.compile(r'(?<![A-Za-z0-9-])api[_-]?key\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded API key"),
+        (re.compile(r'(?<![A-Za-z0-9-])secret\s*=\s*["\'][^"\']+["\']', re.I), "Possible hardcoded secret"),
+        (re.compile(r'(?<![A-Za-z0-9-])token\s*=\s*["\'][a-zA-Z0-9]{20,}["\']', re.I), "Possible hardcoded token"),
     ]
     
     # Variables where credential-like words are expected/safe (metadata, not code)
@@ -302,6 +304,7 @@ class HardcodedCredentialsRule(BaseRule):
         'HOMEPAGE',     # URLs
         'BUGTRACKER',   # URLs
         'CVE_PRODUCT',  # Product names
+        'RECIPE_MAINTAINER',  # RECIPE_MAINTAINER:pn-libsecret = "Name <mail>"
     ]
     
     # Placeholder patterns that indicate intentional variable substitution
@@ -340,6 +343,7 @@ class HardcodedCredentialsRule(BaseRule):
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
+        assignment_starts = {a.line for a in context.structure.assignments}
         
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -356,8 +360,19 @@ class HardcodedCredentialsRule(BaseRule):
             if self._contains_placeholder(line):
                 continue
             
+            # In a BitBake assignment the credential must be the variable
+            # being set (DB_PASSWORD = "..."), not text inside its value;
+            # continuation lines hold only value
+            owner = context.owner(line_num)
+            left_end = None
+            if owner and not owner.startswith("FUNC:") and owner != "#":
+                if line_num not in assignment_starts:
+                    continue
+                left_end = line.find('=')
+            
             for pattern, message in self.CREDENTIAL_PATTERNS:
-                if pattern.search(line):
+                match = pattern.search(line)
+                if match and (left_end is None or match.start() < left_end):
                     results.append(self.create_result(
                         file=context,
                         line=line_num,
