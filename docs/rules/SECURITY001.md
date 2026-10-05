@@ -12,6 +12,13 @@
 
 Check for insecure URI protocols (HTTP, FTP, git://)
 
+Only URLs that BitBake fetches are checked. Variables that just document a
+URL (HOMEPAGE, BUGTRACKER, SUMMARY, DESCRIPTION, DISTRO_PN_ALIAS,
+UPSTREAM_CHECK_URI, RECIPE_MAINTAINER, LICENSE_URL) are ignored. In MIRRORS
+and PREMIRRORS only the replacement of each (regex, replacement) pair is
+checked, and a git replacement without `;protocol=` is accepted because the
+fetcher carries the original URL's parameters over to it.
+
 ## Example of Bad Code
 
 ```bitbake

@@ -16,7 +16,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
@@ -66,13 +66,25 @@ class InsecureUriRule(BaseRule):
     # the plaintext git daemon protocol; git, http and rsync are plaintext too.
     GIT_SECURE_PROTOCOLS = {"ssh", "https", "file"}
 
-    def _insecure_git_message(self, line: str) -> Optional[str]:
+    # Variables that only document a URL; bitbake never fetches from them
+    INFORMATIONAL_VARIABLES = {
+        "HOMEPAGE", "BUGTRACKER", "SUMMARY", "DESCRIPTION", "DISTRO_PN_ALIAS",
+        "UPSTREAM_CHECK_URI", "RECIPE_MAINTAINER", "LICENSE_URL",
+    }
+
+    # MIRRORS and PREMIRRORS hold (regex, replacement) pairs. Only the
+    # replacement is fetched from; the regex just matches the original URL.
+    MIRROR_VARIABLES = {"MIRRORS", "PREMIRRORS"}
+
+    def _insecure_git_message(self, line: str, require_protocol: bool = True) -> Optional[str]:
         """Why the first insecure git/gitsm URI on *line* is insecure, if any."""
         for match in self.GIT_URI_PATTERN.finditer(line):
             uri = match.group(0)
             scheme = uri.split("://", 1)[0]
             protocol = self.GIT_PROTOCOL_PARAM.search(uri)
             if protocol is None:
+                if not require_protocol:
+                    continue
                 return (
                     f"{scheme}:// fetch has no ;protocol= parameter, so it "
                     "falls back to the plaintext git daemon protocol"
@@ -84,46 +96,77 @@ class InsecureUriRule(BaseRule):
                 )
         return None
 
+    def _finding(self, text: str, require_protocol: bool = True) -> Optional[Tuple[str, str]]:
+        """(message, hint) for the first insecure URI in *text*, if any."""
+        if self.HTTP_PATTERN.search(text):
+            return ("Insecure HTTP URI detected; use HTTPS instead",
+                    "Change http:// to https://")
+        if self.FTP_PATTERN.search(text):
+            return ("Insecure FTP URI detected; use HTTPS or FTPS instead",
+                    "Change ftp:// to https:// or ftps://")
+        # A git fetch on a plaintext transport. An explicit
+        # ;protocol=ssh/https/file is secure.
+        message = self._insecure_git_message(text, require_protocol)
+        if message:
+            return (message,
+                    "Use ;protocol=https (or ;protocol=ssh for a private repo)")
+        return None
+
+    def _check_mirrors(self, context: FileContext, assignment) -> List[LintResult]:
+        """Check the replacement of each (regex, replacement) pair. A git
+        replacement needs no ;protocol= of its own: fetch2 uri_replace
+        carries the original URL's parameters over to it."""
+        results = []
+        tokens = assignment.value.replace("\\n", " ").split()
+        for replacement in tokens[1::2]:
+            finding = self._finding(replacement, require_protocol=False)
+            if not finding:
+                continue
+            line_num = next(
+                (n for n in range(assignment.line, assignment.end_line + 1)
+                 if replacement in context.lines[n - 1]),
+                assignment.line,
+            )
+            message, hint = finding
+            results.append(self.create_result(
+                file=context,
+                line=line_num,
+                message=message,
+                context=context.lines[line_num - 1].strip()[:80],
+                hint=hint,
+            ))
+        return results
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
+
+        for assignment in context.structure.assignments:
+            if assignment.base in self.MIRROR_VARIABLES:
+                results.extend(self._check_mirrors(context, assignment))
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
-            # Check for HTTP
-            if self.HTTP_PATTERN.search(line):
+
+            # Documentation URLs are never fetched; mirrors are checked
+            # above as pairs
+            owner = context.owner_base(line_num)
+            if owner in self.INFORMATIONAL_VARIABLES or owner in self.MIRROR_VARIABLES:
+                continue
+
+            finding = self._finding(line)
+            if finding:
+                message, hint = finding
                 results.append(self.create_result(
                     file=context,
                     line=line_num,
-                    message="Insecure HTTP URI detected; use HTTPS instead",
+                    message=message,
                     context=stripped[:80],
-                    hint="Change http:// to https://",
+                    hint=hint,
                 ))
-            # Check for FTP
-            elif self.FTP_PATTERN.search(line):
-                results.append(self.create_result(
-                    file=context,
-                    line=line_num,
-                    message="Insecure FTP URI detected; use HTTPS or FTPS instead",
-                    context=stripped[:80],
-                    hint="Change ftp:// to https:// or ftps://",
-                ))
-            # Check for a git fetch on a plaintext transport. An explicit
-            # ;protocol=ssh/https/file is secure.
-            else:
-                message = self._insecure_git_message(line)
-                if message:
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message=message,
-                        context=stripped[:80],
-                        hint="Use ;protocol=https (or ;protocol=ssh for a private repo)",
-                    ))
-        
+
         return results
 
 
