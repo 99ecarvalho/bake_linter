@@ -104,6 +104,10 @@ def build_rule_index(rules) -> str:
     """Markdown tables of all rules, one per rule family (ID prefix)."""
     families = {}
     for rule_id, rule_cls in sorted(rules.items()):
+        # Only the rules shipped in the package, not ones defined elsewhere
+        # (rule classes register themselves, tests define some too)
+        if not rule_cls.__module__.startswith("bake_linter.rules."):
+            continue
         family = re.match(r"[A-Z]+", rule_id).group(0)
         families.setdefault(family, []).append((rule_id, rule_cls))
 

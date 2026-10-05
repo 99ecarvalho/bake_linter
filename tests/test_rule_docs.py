@@ -22,7 +22,10 @@ from bake_linter.utils.gen_docs import INDEX_PATH, RULES_DIR, render_index
 def _rules():
     registry = get_registry()
     registry.discover_rules()
-    return registry.get_all_rules()
+    return {
+        rule_id: rule_cls for rule_id, rule_cls in registry.get_all_rules().items()
+        if rule_cls.__module__.startswith("bake_linter.rules.")
+    }
 
 
 def test_rule_index_is_up_to_date():
