@@ -103,8 +103,12 @@ class GitSrcrevValidityRule(BaseRule):
 
     SRCREV_PATTERN = re.compile(r'SRCREV\s*=\s*["\']([^"\']+)["\']')
     GIT_URI_PATTERN = re.compile(r'git://|gitsm://')
-    VALID_SHA1_PATTERN = re.compile(r'^[a-fA-F0-9]{40}$')
-    
+    # SHA-1, or SHA-256 for a repository in git's sha256 object format
+    VALID_SHA1_PATTERN = re.compile(r'^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$')
+    # Other fetchers that use SRCREV, with revisions of their own format
+    # (an svn revision number, an hg changeset)
+    OTHER_SCM_PATTERN = re.compile(r'\b(?:svn|hg|bzr|repo)://')
+
     VALID_SRCREV_VALUES = ['${AUTOREV}', 'AUTOINC', 'INVALID']
 
     def check(self, context: FileContext) -> List[LintResult]:
@@ -130,8 +134,14 @@ class GitSrcrevValidityRule(BaseRule):
                 srcrev_value = match.group(1)
                 srcrev_line = line_num
         
-        # Validate SRCREV format
-        if srcrev_value and srcrev_line:
+        other_scm = any(
+            a.base == "SRC_URI" and self.OTHER_SCM_PATTERN.search(a.value)
+            for a in context.structure.assignments
+        )
+
+        # Validate SRCREV format, as a git commit only when git is the only
+        # fetcher it can be for
+        if srcrev_value and srcrev_line and has_git_uri and not other_scm:
             # Skip if it's a known valid value
             if srcrev_value in self.VALID_SRCREV_VALUES:
                 pass
@@ -146,8 +156,10 @@ class GitSrcrevValidityRule(BaseRule):
                     hint="SRCREV should be 40-character SHA-1 hash or ${AUTOREV}",
                 ))
         
-        # Check for SRCREV without git URI
-        if srcrev_value and not has_git_uri:
+        # Check for SRCREV without git URI. The URI may be in a required
+        # file, and svn, hg, bzr and repo fetches use SRCREV too.
+        if (srcrev_value and not has_git_uri and not other_scm
+                and not context.structure.includes):
             # Only flag if it looks like a real recipe (not .inc)
             if str(context.path).endswith('.bb'):
                 results.append(self.create_result(
