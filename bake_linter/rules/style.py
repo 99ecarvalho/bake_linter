@@ -402,34 +402,60 @@ class PackageListFormatRule(BaseRule):
         "INSTALL_PKGS",
     ]
 
+    # Lists whose order means something, so it is not checked: the first
+    # package in PACKAGES whose FILES match a file gets it.
+    ORDERED_VARS = {"PACKAGES"}
+
     # Pattern to match package list variable assignments (including overrides)
     VAR_PATTERN = re.compile(
         r'^([A-Z_]+(?::[a-z_-]+)*)\s*[\+\?]?=\s*"(.*)$'
     )
 
+    @staticmethod
+    def _closing_quote(text: str) -> int:
+        """Index of the first double quote in *text* that is not inside an
+        inline python expression ${@...}, or -1."""
+        depth = 0
+        i = 0
+        while i < len(text):
+            if text.startswith("${@", i) and depth == 0:
+                depth = 1
+                i += 3
+                continue
+            char = text[i]
+            if depth:
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+            elif char == '"':
+                return i
+            i += 1
+        return -1
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         lines = context.lines
         i = 0
-        
+
         while i < len(lines):
             line = lines[i]
             stripped = line.strip()
-            
+
             # Skip comments and empty lines
             if not stripped or stripped.startswith("#"):
                 i += 1
                 continue
-            
+
             match = self.VAR_PATTERN.match(stripped)
             if match:
                 var_name = match.group(1)
                 var_base = var_name.split(":")[0]
-                
-                # Check if this is a package list variable
-                if var_base in self.PACKAGE_LIST_VARS or any(
-                    var_name.startswith(v) for v in self.PACKAGE_LIST_VARS
-                ):
+
+                # Check if this is a package list variable (by its exact
+                # name: PACKAGECONFIG_GL or PACKAGES_DYNAMIC are not lists
+                # of packages)
+                if var_base in self.PACKAGE_LIST_VARS:
                     # Check if it's a multi-line assignment
                     if stripped.endswith("\\"):
                         check_results = self._check_multiline_package_list(
@@ -473,11 +499,12 @@ class PackageListFormatRule(BaseRule):
             line = lines[current_line]
             stripped = line.strip()
             
-            # Check for closing quote
-            if '"' in stripped:
+            # Check for closing quote (quotes inside ${@...} do not close)
+            quote = self._closing_quote(stripped)
+            if quote != -1:
                 closing_line = current_line
                 # Check if there are packages on the closing line
-                before_quote = stripped.split('"')[0].rstrip("\\").strip()
+                before_quote = stripped[:quote].rstrip("\\").strip()
                 if before_quote:
                     results.append(self.create_result(
                         file=context,
@@ -495,7 +522,12 @@ class PackageListFormatRule(BaseRule):
             
             current_line += 1
         
-        # Rule 2: Check alphabetical order (if more than one package)
+        # Rule 2: Check alphabetical order (if more than one package).
+        # Entries that are expansions (${VIRTUAL-RUNTIME_x}, ${@...}) have
+        # no name to sort by, and some lists are ordered on purpose.
+        packages = [p for p in packages if not p[0].startswith("${")]
+        if var_name.split(":")[0] in self.ORDERED_VARS:
+            packages = []
         if len(packages) > 1:
             pkg_names = [p[0].lower() for p in packages]
             sorted_names = sorted(pkg_names)

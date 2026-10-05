@@ -15,7 +15,8 @@ Check package list formatting (alphabetical, one per line)
 ## Example of Bad Code
 
 ```bitbake
-PACKAGES = "myapp bash sed grep tar zlib awk gawk"  # Unsorted, mixed order
+RDEPENDS:${PN} = "myapp bash sed grep tar \
+    zlib awk gawk"  # Unsorted, mixed order
 ```
 
 ## Why This Is Bad
@@ -25,17 +26,26 @@ Unsorted package lists are harder to maintain and easier to add duplicates to. W
 ## How to Fix It
 
 ```bitbake
-PACKAGES = " \
-    myapp \
+RDEPENDS:${PN} = " \
+    awk \
     bash \
-    grep \
+    gawk \
+    myapp \
     sed \
     tar \
     zlib \
-    "
+"
 ```
 
 Sort package names alphabetically and place one per line. This improves readability, makes diffs cleaner, and prevents accidental duplicates
+
+The checked variables are IMAGE_INSTALL, RDEPENDS, DEPENDS, RRECOMMENDS,
+PACKAGECONFIG, PACKAGES and INSTALL_PKGS (with any override), by exact
+name: PACKAGECONFIG_GL or PACKAGES_DYNAMIC are not package lists. The
+order of PACKAGES is not checked, because it is meaningful: a file goes
+to the first package whose FILES match it. Expansions such as
+`${VIRTUAL-RUNTIME_init_manager}` or `${@...}` are left out of the sort,
+and quotes inside `${@...}` do not close the value.
 
 ## Inline Suppression
 
