@@ -15,7 +15,8 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 
 from __future__ import annotations
 
-from typing import List, Set
+import re
+from typing import List
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
@@ -43,15 +44,17 @@ class SummaryDescriptionRule(BaseRule):
         
         results = []
         
-        has_summary = "SUMMARY" in context.variables
-        has_description = "DESCRIPTION" in context.variables
+        # A required .inc often carries the descriptive metadata; None means
+        # an include could not be resolved and may set it.
+        has_summary = context.sets_variable("SUMMARY")
+        has_description = context.sets_variable("DESCRIPTION")
         
-        if not has_summary and not has_description:
+        if has_summary is False and has_description is False:
             results.append(self.create_result(
                 file=context,
                 message="Missing SUMMARY or DESCRIPTION variable",
             ))
-        elif has_description and not has_summary:
+        elif has_description and has_summary is False:
             # Suggest using SUMMARY instead of DESCRIPTION
             results.append(self.create_result(
                 file=context,
@@ -85,26 +88,37 @@ class SrcUriRule(BaseRule):
         "-native", "-cross", "-sdk",
     }
 
+    # Classes that set SRC_URI themselves (pypi, gnomebase, xfce and the
+    # like build it from the recipe name), and classes of recipes that fetch
+    # nothing: images, packagegroups, SDKs, and recipes that build from
+    # another recipe's tree.
+    EXEMPT_CLASSES = {
+        "pypi", "gnomebase", "xfce", "xfce-app", "xfce-panel-plugin",
+        "thunar-plugin", "gpe", "clutter", "mozilla",
+        "nopackages", "populate_sdk", "populate_sdk_ext", "toolchain-scripts",
+        "kernelsrc", "image", "core-image", "packagegroup",
+    }
+
     def check(self, context: FileContext) -> List[LintResult]:
         if not self.is_applicable(context):
             return []
-        
+
         results = []
         recipe_name = context.path.stem
-        
+
         # Check if this recipe type is exempt
         for pattern in self.EXEMPT_PATTERNS:
             if pattern in recipe_name:
                 return []
-        
-        # Check for inherit packagegroup or image
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("inherit"):
-                if "packagegroup" in stripped or "image" in stripped or "core-image" in stripped:
-                    return []
-        
-        if "SRC_URI" not in context.variables:
+
+        # Inherited here or in an include
+        if context.inherits & self.EXEMPT_CLASSES:
+            return []
+
+        # Any assignment counts (SRC_URI:append, SRC_URI[sha256sum], ...),
+        # here or in an include. None means an include was not found and
+        # may set it.
+        if context.sets_variable("SRC_URI") is False:
             results.append(self.create_result(
                 file=context,
                 message="Missing SRC_URI variable",
@@ -130,24 +144,41 @@ class HomepageRule(BaseRule):
     hint = "Add HOMEPAGE = \"https://project-homepage.com\""
     applicable_file_types = {"recipe"}
 
+    # pypi and xfce (and the xfce classes built on it) set HOMEPAGE
+    # themselves; images, packagegroups and SDKs have no upstream project to
+    # point at.
+    EXEMPT_CLASSES = {
+        "pypi", "xfce", "xfce-app", "xfce-panel-plugin", "thunar-plugin",
+        "packagegroup", "image", "core-image",
+        "nopackages", "populate_sdk",
+    }
+
     def check(self, context: FileContext) -> List[LintResult]:
         if not self.is_applicable(context):
             return []
-        
+
         results = []
-        
-        # Get LICENSE value
+
+        # Inherited here or in an include
+        if context.inherits & self.EXEMPT_CLASSES:
+            return []
+
+        # Get LICENSE value, here or in an include
         license_val = ""
-        if "LICENSE" in context.variables:
-            for assignment in context.variables["LICENSE"]:
-                license_val = assignment.value.upper()
-                break
-        
+        structures = [context.structure] + [
+            included.structure for included in context.included_files or []
+        ]
+        for structure in structures:
+            for assignment in structure.assignments:
+                if assignment.name == "LICENSE":
+                    license_val += " " + assignment.value.upper()
+
         # CLOSED/Proprietary licenses don't need homepage
         if "CLOSED" in license_val or "PROPRIETARY" in license_val:
             return []
-        
-        if "HOMEPAGE" not in context.variables:
+
+        # None means an include was not found and may set it
+        if context.sets_variable("HOMEPAGE") is False:
             results.append(self.create_result(
                 file=context,
                 message="Missing HOMEPAGE variable for open-source recipe",
@@ -168,6 +199,9 @@ class InheritCheck(BaseRule):
     groups = ["mandatory", "inherit"]
     applicable_file_types = {"recipe"}
 
+    # require recipes-core/images/core-image-minimal.bb
+    IMAGE_RECIPE = re.compile(r'image\S*\.bb$')
+
     def check(self, context: FileContext) -> List[LintResult]:
         if not self.is_applicable(context):
             return []
@@ -175,15 +209,17 @@ class InheritCheck(BaseRule):
         results = []
         recipe_name = context.path.stem
         
-        # Collect all inherit statements
-        inherits: Set[str] = set()
-        for line in context.lines:
-            stripped = line.strip()
-            if stripped.startswith("inherit"):
-                # Parse inherit classes
-                parts = stripped.split()[1:]
-                inherits.update(parts)
-        
+        # Inherited here or in an include
+        inherits = context.inherits
+
+        # Recipes that do not package anything need neither class
+        if "nopackages" in inherits:
+            return []
+
+        # An include that was not found may inherit the class
+        if context.included_files is None:
+            return []
+
         # Check for packagegroup naming convention
         if recipe_name.startswith("packagegroup-"):
             if "packagegroup" not in inherits:
@@ -195,7 +231,11 @@ class InheritCheck(BaseRule):
         
         # Check for image naming convention
         if recipe_name.endswith("-image") or "-image-" in recipe_name:
-            if "image" not in inherits and "core-image" not in inherits:
+            # An image built on another image requires that image's .bb
+            builds_on_image = any(
+                self.IMAGE_RECIPE.search(path) for path in context.structure.includes
+            )
+            if not builds_on_image and "image" not in inherits and "core-image" not in inherits:
                 results.append(self.create_result(
                     file=context,
                     message="Recipe named '*-image*' should inherit an image class",
