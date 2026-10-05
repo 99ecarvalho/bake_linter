@@ -197,21 +197,26 @@ class VersionConstraintSyntaxRule(BaseRule):
     MISSING_PARENS = re.compile(r'\b([\w${}-]+)\s+(>=|>|=|<=|<)\s+([\d\w.]+)(?!\))')
     INVALID_OPERATOR = re.compile(r'\b[\w${}-]+\s+\((=>|=<|==|!=)\s+[\d\w.]+\)')
 
+    # Variables whose values are dependency lists with version constraints
+    DEPENDENCY_VARIABLES = {
+        'DEPENDS', 'RDEPENDS', 'RRECOMMENDS', 'RSUGGESTS', 'RPROVIDES',
+        'RCONFLICTS', 'RREPLACES',
+    }
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        # The value of a dependency assignment only, continuation lines
+        # joined: a Python function that reads RDEPENDS is not a list
+        for assignment in context.structure.assignments:
+            if assignment.base not in self.DEPENDENCY_VARIABLES or assignment.flag is not None:
                 continue
-            
-            # Only check dependency variables
-            if not any(var in stripped for var in ['DEPENDS', 'RDEPENDS', 'RRECOMMENDS', 'RSUGGESTS']):
-                continue
-            
+            value = assignment.value
+            line_num = assignment.line
+            stripped = context.lines[line_num - 1].strip()
+
             # Check for missing parentheses
-            match = self.MISSING_PARENS.search(stripped)
+            match = self.MISSING_PARENS.search(value)
             if match:
                 results.append(self.create_result(
                     file=context,
@@ -220,9 +225,9 @@ class VersionConstraintSyntaxRule(BaseRule):
                     context=stripped[:60],
                     hint=f'Use: {match.group(1)} ({match.group(2)} {match.group(3)})',
                 ))
-            
+
             # Check for invalid operators
-            match = self.INVALID_OPERATOR.search(stripped)
+            match = self.INVALID_OPERATOR.search(value)
             if match:
                 results.append(self.create_result(
                     file=context,
@@ -231,5 +236,5 @@ class VersionConstraintSyntaxRule(BaseRule):
                     context=stripped[:60],
                     hint="Valid operators: >=, >, =, <=, <",
                 ))
-        
+
         return results
