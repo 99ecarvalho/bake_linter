@@ -17,12 +17,12 @@ RDEPENDS:${PN} = " \
 "
 
 # HOMEPAGE not applicable for internal meta-packages
-# Tracked in JIRA-5678 to add proper project page
+# Tracked in issue #42 to add a proper project page
 # nolint: BESTPRACTICE003
 AUTHOR = "Platform Team <platform@example.com>"
 
 # Temporary during migration from old syntax to new syntax
-# Will be fixed in sprint 2024-Q2 as part of JIRA-1234
+# To be converted with the rest of the layer, see issue #17
 # The rest of the file already uses the new syntax, so the mix is
 # reported too (SYNTAX005)
 # nolint: DEPRECATED001, SYNTAX005

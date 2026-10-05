@@ -1,67 +1,73 @@
 # Installation
 
-## Prerequisites
+## Requirements
 
-- Python 3.8 or higher
-- pip (Python package installer)
+- Python 3.9 or newer for bake_linter.
+- Python 3.10 or newer for oelint-adv, which is optional.
+- git, to clone the repository and its oelint-adv submodule.
 
-## Installation Methods
-
-### From Source (Development)
+## From a clone
 
 ```bash
-# Clone with the oelint-adv submodule
 git clone --recurse-submodules https://github.com/99ecarvalho/bake_linter.git
 cd bake_linter
 
-# (Optional) Create and activate a virtual environment
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
-# Install from source
-pip install -e .
+pip install -e .                     # bake_linter
+pip install -e ./vendor/oelint-adv   # optional: oelint-adv
+```
 
-# Or with development dependencies (for testing/development)
+For development, install the test dependencies too:
+
+```bash
 pip install -e ".[dev]"
 ```
 
-The `egg-info` directory will be created automatically by setuptools during installation—this is normal and expected.
+If you cloned without `--recurse-submodules`, fetch oelint-adv with
+`git submodule update --init`.
 
-### Using Requirements File
+## For your user, with pipx
 
 ```bash
-cd bake_linter
-pip install -r requirements.txt
-pip install -e .
+./install.sh
 ```
 
-## Verifying Installation
+The script:
 
-After installation, verify that the linter is available:
+1. installs [pipx](https://pipx.pypa.io/) if it is missing. On Debian and
+   Ubuntu it runs `sudo apt-get install pipx`, so it may ask for your
+   password; elsewhere it tells you how to install pipx;
+2. initialises the oelint-adv submodule;
+3. installs bake_linter and oelint-adv in editable mode, so the
+   `bake-linter` command follows the checkout after a `git pull`.
+
+Open a new terminal if `bake-linter` is not found yet.
+
+## From Git, without a clone
+
+```bash
+pip install git+https://github.com/99ecarvalho/bake_linter.git
+pip install oelint-adv               # optional
+```
+
+## Check the installation
 
 ```bash
 bake-linter --version
-bake-linter --help
+bake-linter --list-rules
 ```
+
+To see whether oelint-adv is found, and why not, run any lint with
+`--debug`.
 
 ## Updating
 
-To update to the latest version:
-
 ```bash
-cd bake_linter
 git pull
-pip install -e .
+git submodule update --init
 ```
 
-## Uninstalling
-
-```bash
-pip uninstall bake-linter
-```
-
-## Next Steps
-
-- [Quick Start Guide](quickstart.md) - Learn basic usage
-- [Rules Reference](../rules/README.md) - Explore available rules
-- [Configuration](../index.md#configuration) - Customize the linter
+An editable install picks up the new code; reinstall only after changes to
+`pyproject.toml`.

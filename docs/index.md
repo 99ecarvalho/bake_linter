@@ -1,113 +1,41 @@
-# Bake Linter Documentation
+# Bake Linter
 
 Static analysis for BitBake recipes.
 
-## Overview
+bake_linter checks the `.bb`, `.bbappend` and `.inc` files of Yocto Project
+and OpenEmbedded layers for problems BitBake will not catch, or will only
+catch late in a build:
 
-Bake Linter helps you maintain high-quality BitBake recipes by checking for:
+- **licensing**: missing `LICENSE` or `LIC_FILES_CHKSUM`, typos;
+- **security**: plaintext downloads, world-writable or setuid installs,
+  credentials, build paths leaking into packages;
+- **supply chain**: unpinned branches, unreliable hosting, bbappends that
+  fetch new sources without updating the licence checksum;
+- **packaging**: installed files no package contains, dependencies on
+  packages the recipe never creates, `-dev` dependencies;
+- **install hygiene**: `cp` that keeps the build user's ownership, missing
+  modes, `/usr/local`, hardcoded host paths;
+- **syntax and style**: old override syntax, quoting, ordering and
+  formatting from the OpenEmbedded style guide.
 
-- **License compliance** - Ensure proper licensing declarations
-- **Security issues** - Detect potential security vulnerabilities
-- **Style consistency** - Enforce coding standards
-- **Best practices** - Follow Yocto/OE community guidelines
-- **Deprecated syntax** - Identify outdated patterns
+It reads recipes beyond single lines (continuation lines, function bodies,
+inherited classes, `require`/`include`), stays silent when it cannot know
+the answer, and runs [oelint-adv](https://github.com/priv-kweihmann/oelint-adv)
+as a second pass when it is installed.
 
-## Features
-
-- **Modular Rule System**: Each lint rule is self-contained and auto-discovered
-- **Extensible**: Add new rules with minimal code and no refactoring
-- **CI-Friendly**: Supports multiple output formats, strict exit codes, and no-color mode
-- **Configurable**: YAML/JSON configuration files with CLI overrides
-- **Multiple Output Formats**: Text (colored), JSON, JSON Lines, HTML reports
-- **Yocto-Specific**: Built-in rules for license checks, deprecated syntax, naming conventions, and security
-
-## Quick Start
+## Quick start
 
 ```bash
-# Lint current directory
-bake-linter .
-
-# Lint specific files or directories
-bake-linter meta-layer/recipes-core/
-
-# Generate HTML report
-bake-linter --output html,report.html .
-
-# CI mode (no colors, strict exit codes)
-bake-linter --ci .
-
-# List all available rules
-bake-linter --list-rules
+pip install -e .                 # from a clone of the repository
+bake-linter meta-mylayer/
+bake-linter --output html,report.html meta-mylayer/
 ```
 
-## Documentation Sections
+## Where to go next
 
-- **[Getting Started](getting-started/installation.md)** - Installation and setup
-- **[Inline Suppression](INLINE_SUPPRESSION.md)** - How to suppress rules inline
-- **[Examples](examples/README.md)** - Example recipes and usage patterns
-- **[Rules Reference](rules/README.md)** - Complete rule documentation
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success - no issues found |
-| 1 | Errors found |
-| 2 | Warnings found (no errors) |
-| 3 | Runtime/configuration error |
-
-## Configuration
-
-Create a `.bake-linter.yaml` file in your project root:
-
-```yaml
-rules:
-  LICENSE001:
-    enabled: true
-    severity: error
-
-  STYLE001:
-    enabled: false
-
-settings:
-  exclude:
-    - "build/*"
-    - "tmp/*"
-```
-
-## Rule Categories
-
-| Category | Description |
-|----------|-------------|
-| BBAPPEND | Rules for .bbappend files |
-| BESTPRACTICE | General best practices |
-| COMPAT | Compatibility checks |
-| DEPENDENCY | Dependency management |
-| DEPRECATED | Deprecated syntax detection |
-| DOC | Documentation checks |
-| FUNCTION | Function usage rules |
-| INSTALL | Installation rules |
-| LAYER | Layer configuration |
-| LICENSE | License compliance |
-| LIFECYCLE | Recipe lifecycle |
-| MANDATORY | Required variables |
-| METADATA | Metadata checks |
-| NAMING | Naming conventions |
-| PATCH | Patch handling |
-| PKG | Package rules |
-| PORT | Portability checks |
-| PYTHON | Python-specific rules |
-| REPRO | Reproducibility |
-| SECURITY | Security checks |
-| SRCREV | Source revision rules |
-| STYLE | Code style |
-| SUPPLY | Supply chain security |
-| SYNTAX | Syntax validation |
-| SYSTEMD | Systemd integration |
-| TASK | Task definitions |
-| URI | URI validation |
-| VARIABLES | Variable usage |
-
----
-
-*Bake Linter - Keeping your BitBake recipes clean and secure*
+- [Installation](getting-started/installation.md)
+- [Quick start](getting-started/quickstart.md): options, output, exit codes
+  and configuration
+- [Inline suppression](INLINE_SUPPRESSION.md)
+- [Rules](rules/README.md): every rule, with an example and a fix
+- [Examples](examples/README.md)

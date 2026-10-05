@@ -6,7 +6,7 @@
 #
 # Commands:
 #   build   - Build static HTML documentation (default)
-#   serve   - Start local development server on http://localhost:8000
+#   serve   - Start local development server on http://localhost:8001
 #   clean   - Remove generated documentation
 #   help    - Show this help message
 
@@ -47,7 +47,7 @@ show_help() {
     echo ""
     echo "Commands:"
     echo "  build   - Build static HTML documentation (default)"
-    echo "  serve   - Start local development server on http://localhost:8000"
+    echo "  serve   - Start local development server on http://localhost:8001"
     echo "  clean   - Remove generated documentation"
     echo "  rebuild - Rebuild the Docker image"
     echo "  help    - Show this help message"

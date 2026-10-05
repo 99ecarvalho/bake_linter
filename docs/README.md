@@ -67,9 +67,11 @@ When adding new documentation:
 
 ### Adding a New Rule
 
-1. Create `rules/RULEID.md` using the template in `rules/template.md`
-2. Add the rule to the navigation in `mkdocs.yml`
-3. Rebuild documentation
+1. Create the page with `python -m bake_linter.utils.gen_docs --rule RULEID`
+   and fill in the example, the reason and the fix
+2. Regenerate the rule index: `python -m bake_linter.utils.gen_docs --index`
+3. Add the page to the navigation in `mkdocs.yml`
+4. Rebuild documentation
 
 ## Requirements
 

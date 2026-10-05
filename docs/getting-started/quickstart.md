@@ -1,126 +1,101 @@
-# Quick Start
+# Quick start
 
-This guide will help you get started with Bake Linter in just a few minutes.
-
-## Basic Usage
-
-### Lint a Directory
+## Lint a layer
 
 ```bash
-# Lint current directory
-bake-linter .
-
-# Lint a specific layer
-bake-linter meta-layer/
-
-# Lint specific recipe files
-bake-linter recipes-core/base-files/base-files_%.bb
+bake-linter meta-mylayer/
+bake-linter meta-mylayer/recipes-core/foo/foo_1.0.bb
 ```
 
-### Lint with Output Files
+bake_linter checks `.bb`, `.bbappend` and `.inc` files. Each finding names
+the rule, its severity, the line, a hint, and the rule's page:
+
+```text
+━━━ recipes-core/foo/foo_1.0.bb ━━━
+  Line 4
+  ⚠ WARNING [SECURITY001]
+    Insecure HTTP URI detected; use HTTPS instead
+    💡 Change http:// to https://
+    📚 docs/rules/SECURITY001.md
+```
+
+For one line per finding, use `--format compact`:
+
+```text
+recipes-core/foo/foo_1.0.bb:4: warning: [SECURITY001] Insecure HTTP URI detected; use HTTPS instead: docs/rules/SECURITY001.md
+```
+
+## Reports
 
 ```bash
-# Generate JSON output
-bake-linter --output json,results.json .
-
-# Generate HTML report
-bake-linter --output html,report.html .
-
-# Generate multiple formats
-bake-linter --output json,results.json --output html,report.html .
+bake-linter --output html,report.html meta-mylayer/
+bake-linter --output json,report.json --output html,report.html meta-mylayer/
 ```
 
-## Understanding Output
+`--output FORMAT,FILE` can be repeated; formats are `text`, `compact`,
+`json`, `jsonl` and `html`. Add `--quiet` to write the files without
+printing every finding.
 
-### Console Output
+## Choosing rules
 
+```bash
+bake-linter --list-rules                 # every rule, severity, default state
+bake-linter --list-groups                # rule groups
+bake-linter --enable LICENSE001,MANDATORY001 meta-mylayer/
+bake-linter --disable STYLE001,STYLE002 meta-mylayer/
+bake-linter --disable-group formatting meta-mylayer/
+bake-linter --exclude 'build/*' --exclude '*.bak' .
 ```
-recipes-core/myapp/myapp_1.0.bb:5: error: LICENSE001 - Missing LICENSE variable
-recipes-core/myapp/myapp_1.0.bb:12: warning: STYLE002 - Line exceeds 100 characters
-```
 
-Format: `FILE:LINE: SEVERITY: RULE_ID - MESSAGE`
-
-### Exit Codes
+## Exit codes
 
 | Code | Meaning |
-|------|---------|
-| 0 | Success - no issues found |
-| 1 | Errors found |
-| 2 | Warnings found (no errors) |
-| 3 | Runtime/configuration error |
+| --- | --- |
+| 0 | No findings, or only info |
+| 1 | Warnings, no errors |
+| 2 | Errors |
+| 3 | Configuration or runtime error, including an oelint-adv run that failed |
 
-## Common Options
+In CI, `--ci` turns colours off, and `--warnings-as-errors` makes warnings
+exit with 2.
 
-### Filtering Rules
+## Configuration file
 
-```bash
-# Enable specific rules only
-bake-linter --enable LICENSE001,MANDATORY001 .
-
-# Disable specific rules
-bake-linter --disable STYLE001,STYLE002 .
-
-# List all available rules
-bake-linter --list-rules
-```
-
-### Excluding Files
-
-```bash
-# Exclude directories
-bake-linter --exclude 'build/*' --exclude 'tmp/*' .
-
-# Exclude specific files
-bake-linter --exclude '*.bak' --exclude 'test_*' meta-layer/
-```
-
-### CI Mode
-
-```bash
-# No colors, strict exit codes
-bake-linter --ci .
-
-# Treat warnings as errors
-bake-linter --warnings-as-errors .
-```
-
-## Configuration File
-
-Create `.bake-linter.yaml` in your project root:
+Put `.bake-linter.yaml` in the directory you run bake-linter from, or pass
+`--config FILE`:
 
 ```yaml
 rules:
   LICENSE001:
-    enabled: true
     severity: error
-
   STYLE001:
     enabled: false
 
 settings:
-  exclude:
-    - "build/*"
-    - "tmp/*"
+  oelint_release: scarthgap   # the release your layers build for
+
+exclude:
+  - "build/*"
+  - "tmp/*"
 ```
 
-## Inline Suppression
+`bake-linter --show-config` prints the configuration in effect. The
+[README](https://github.com/99ecarvalho/bake_linter#configuration) lists all
+settings, and `config/.bake-linter.yaml` in the repository lists every rule.
 
-Suppress rules directly in your recipes:
+## Suppressing a finding
 
 ```bitbake
-# Suppress for next line
+# Meta package: nothing to license
 # nolint: LICENSE001
-LICENSE = "CLOSED"
+SUMMARY = "Meta package"
 
-# Suppress inline
-RDEPENDS:${PN} = "bash"  # nolint: DEPENDENCY001
+SRC_URI = "http://example.com/foo.tar.gz"  # nolint: SECURITY001
 ```
 
-See [Inline Suppression](../INLINE_SUPPRESSION.md) for more details.
+See [Inline suppression](../INLINE_SUPPRESSION.md).
 
-## Next Steps
+## Next steps
 
-- [Rules Reference](../rules/README.md) - Explore all available rules
-- [Examples](../examples/README.md) - See example recipes
-- [Inline Suppression](../INLINE_SUPPRESSION.md) - Learn suppression syntax
+- [Rules](../rules/README.md): what each rule checks and how to fix it
+- [Examples](../examples/README.md)

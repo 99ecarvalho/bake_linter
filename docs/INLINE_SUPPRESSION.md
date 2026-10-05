@@ -60,7 +60,7 @@ LEGACY_CODE = "needs-refactoring"
 # nolint: LICENSE001
 RDEPENDS:${PN} = "pkg1 pkg2 pkg3"
 
-# TODO: Fix this deprecated syntax in next sprint (JIRA-1234)
+# TODO: convert to the new override syntax (issue #17)
 # nolint: DEPRECATED001
 SRC_URI_append = " file://patch.patch"
 
@@ -105,10 +105,9 @@ PASSWORD = "admin123"
 bake-linter --list-rules
 
 # See which rule flagged an issue
-bake-linter recipe.bb
-# Output: recipe.bb:5:error:LICENSE001:Variable 'LICENSE' should be set
-#                               ^^^^^^^^^^
-#                               This is the Rule ID
+bake-linter --format compact recipe.bb
+# recipe.bb:5: warning: [SECURITY001] Insecure HTTP URI detected; use HTTPS instead: docs/rules/SECURITY001.md
+#                        ^^^^^^^^^^^ the rule ID
 ```
 
 ## Documentation
@@ -174,11 +173,6 @@ rules:
 
 ## Help
 
-- **Documentation**: See `docs/rules/README.md`
-- **Examples**: See rule-specific documentation
-- **Issues**: Report false positives on issue tracker
-- **Questions**: Ask in team chat or documentation
-
----
-
-*Last updated: January 19, 2026*
+- **Rules**: see [rules/README.md](rules/README.md) for every rule and its page
+- **False positives**: report them with a minimal recipe that reproduces the
+  finding; see CONTRIBUTING.md in the repository
