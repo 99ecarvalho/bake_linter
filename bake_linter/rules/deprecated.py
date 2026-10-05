@@ -54,6 +54,10 @@ class DeprecatedOverrideSyntaxRule(BaseRule):
         "IMAGE_INSTALL", "IMAGE_FEATURES", "DISTRO_FEATURES",
         "MACHINE_FEATURES", "EXTRA_OECONF", "EXTRA_OECMAKE",
         "FILES_SOLIBSDEV", "INSANE_SKIP", "ALLOW_EMPTY",
+        # update-alternatives.bbclass reads ALTERNATIVE_PRIORITY_<pkg> and
+        # ALTERNATIVE_TARGET_<pkg> by name (getVar('ALTERNATIVE_PRIORITY_%s'
+        # % pkg)): the underscore is part of the variable, not an override.
+        "ALTERNATIVE_PRIORITY", "ALTERNATIVE_TARGET",
     }
 
     def check(self, context: FileContext) -> List[LintResult]:
