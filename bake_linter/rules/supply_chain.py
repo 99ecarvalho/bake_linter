@@ -16,7 +16,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
 
 from bake_linter.core.models import LintResult, Severity, FileContext
 from bake_linter.rules.base import BaseRule
@@ -60,16 +60,16 @@ class UnpinnedBranchRule(BaseRule):
     # for the same name.
     SRCREV_PATTERN = re.compile(
         r'^SRCREV(?:_(?P<name>[A-Za-z0-9${}.-]+?))?(?::[A-Za-z0-9_${}.-]+)*'
-        r'\s*(?:\?\?|\?|:)?=\s*"(?P<value>[^"]*)"'
+        r'\s*(?:\?\?|\?|:)?=\s*(?P<quote>["\'])(?P<value>.*?)(?P=quote)'
     )
     HEX_REVISION = re.compile(r'^[0-9a-fA-F]{40}$')
     AUTOREV_PATTERN = re.compile(r'\bAUTOREV\b')
 
-    def _srcrev_states(self, context: FileContext) -> dict:
+    def _srcrev_states(self, lines) -> dict:
         """Map each SRCREV name ("default" for plain SRCREV) to whether it is
         a fixed commit. AUTOREV anywhere for a name makes it unpinned."""
         states = {}
-        for line in context.lines:
+        for line in lines:
             match = self.SRCREV_PATTERN.match(line.strip())
             if not match:
                 continue
@@ -80,6 +80,24 @@ class UnpinnedBranchRule(BaseRule):
             elif self.HEX_REVISION.match(value):
                 states.setdefault(name, True)
         return states
+
+    def _included_states(self, context: FileContext) -> Optional[dict]:
+        """SRCREV states set by the files this one requires or includes, or
+        None when one of them cannot be found."""
+        included = context.included_files
+        if included is None:
+            return None
+        lines = []
+        for item in included:
+            try:
+                lines += item.path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                return None
+        return self._srcrev_states(lines)
+
+    @staticmethod
+    def _has_state(states: dict, name: str) -> bool:
+        return name in states or "default" in states
 
     @staticmethod
     def _is_pinned(states: dict, name: str) -> bool:
@@ -94,7 +112,8 @@ class UnpinnedBranchRule(BaseRule):
 
         # The pinning state is a property of the whole recipe, so resolve it
         # before judging any individual URI line.
-        states = self._srcrev_states(context)
+        states = self._srcrev_states(context.lines)
+        included_states = None
 
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
@@ -108,7 +127,19 @@ class UnpinnedBranchRule(BaseRule):
                     continue
                 name = self.NAME_PARAM.search(uri)
                 name = name.group(1) if name else "default"
-                if self._is_pinned(states, name):
+                uri_states = states
+                if not self._has_state(states, name):
+                    # The SRCREV may be set by a file this one includes. An
+                    # .inc is itself included by recipes that may pin it, and
+                    # an include that cannot be found may set it: unknown.
+                    if context.file_type == "include":
+                        continue
+                    if included_states is None:
+                        included_states = self._included_states(context)
+                    if included_states is None:
+                        continue
+                    uri_states = included_states
+                if self._is_pinned(uri_states, name):
                     continue
                 srcrev = "SRCREV" if name == "default" else f"SRCREV_{name}"
                 results.append(self.create_result(
