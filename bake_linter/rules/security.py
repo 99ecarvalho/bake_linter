@@ -492,63 +492,73 @@ class BuildPathLeakageRule(BaseRule):
 
     # Build-time variables that should NEVER appear in installed file content
     # These are paths that exist only during build and would be invalid at runtime
-    BUILD_TIME_VARS = [
-        re.compile(r'\$\{S\}'),           # Source directory
-        re.compile(r'\$\{WORKDIR\}'),     # Work directory
-        re.compile(r'\$\{B\}'),           # Build directory
-        re.compile(r'\$\{TMPDIR\}'),      # Temp directory
-        re.compile(r'\$\{STAGING_DIR\}'), # Staging directory
-        re.compile(r'\$\{STAGING_INCDIR\}'),
-        re.compile(r'\$\{STAGING_LIBDIR\}'),
-        re.compile(r'\$\{RECIPE_SYSROOT\}'),
-        re.compile(r'\$\{RECIPE_SYSROOT_NATIVE\}'),
-    ]
-    
-    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
-    
-    # Pattern to detect write operations to ${D} (content being written to target)
-    WRITE_TO_D_PATTERN = re.compile(r'(echo|printf|cat)\s+.*>.*\$\{D\}|>>.*\$\{D\}|sed\s+-i.*\$\{D\}')
+    BUILD_TIME_VARS = re.compile(
+        r'\$\{(?:S|B|WORKDIR|TMPDIR|STAGING_DIR\w*|STAGING_INCDIR|'
+        r'STAGING_LIBDIR|RECIPE_SYSROOT(?:_NATIVE)?)\}'
+    )
+
+    SED_COMMAND = re.compile(r'(?<![\w.-])sed(?![\w.-])')
+    # s<d>pattern<d>replacement<d>; group 3 is what gets written to the file
+    SED_SUBSTITUTION = re.compile(
+        r'(?<![\w$])s([|#:,;+@!/])((?:(?!\1).)*)\1((?:(?!\1).)*)\1'
+    )
+    # echo/printf <args> > <target>
+    ECHO_REDIRECT = re.compile(
+        r'(?<![\w.-])(?:echo|printf)(?![\w.-])(?P<args>[^>]*)>>?\s*(?P<target>\S+)'
+    )
+    DESTDIR = re.compile(r'\$\{D\}')
+
+    def _leaks(self, command: str) -> bool:
+        """Whether a shell command writes a build path into a file in ${D}.
+
+        A sed into ${D} leaks only when a build path is in the replacement:
+        the common sed that has a build path in the pattern removes it, which
+        is the fix for a leak, not one. An echo/printf leaks when it
+        redirects a build path into a file in ${D}.
+        """
+        if self.SED_COMMAND.search(command):
+            substitutions = list(self.SED_SUBSTITUTION.finditer(command))
+            outside = self.SED_SUBSTITUTION.sub(" ", command)
+            if self.DESTDIR.search(outside) and any(
+                    self.BUILD_TIME_VARS.search(m.group(3)) for m in substitutions):
+                return True
+        for match in self.ECHO_REDIRECT.finditer(command):
+            if (self.DESTDIR.search(match.group("target"))
+                    and self.BUILD_TIME_VARS.search(match.group("args"))):
+                return True
+        return False
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_do_install = False
-        brace_depth = 0
-        
+        command = ""
+        start = 0
+
         for line_num, line in enumerate(context.lines, start=1):
+            # Shell commands in do_install and its variants (do_install:append,
+            # do_install_ptest), continuation lines joined
+            if not context.owner(line_num).startswith("FUNC:do_install"):
+                command = ""
+                continue
             stripped = line.strip()
-            
-            if stripped.startswith("#"):
+            if not command and stripped.startswith("#"):
                 continue
-            
-            if self.INSTALL_TASK_PATTERN.match(stripped):
-                in_do_install = True
-                if '{' in stripped:
-                    brace_depth = 1
+            if not command:
+                start = line_num
+            if stripped.endswith("\\"):
+                command += stripped[:-1] + " "
                 continue
-            
-            if in_do_install:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_install = False
-                    brace_depth = 0
-                    continue
-                
-                # Only check lines that write content to ${D} (target filesystem)
-                # Look for echo/printf/cat/sed writing to ${D}
-                if ('echo' in stripped or 'printf' in stripped or 
-                    'cat' in stripped or 'sed' in stripped):
-                    # Check if any build-time variable is in the content
-                    for pattern in self.BUILD_TIME_VARS:
-                        if pattern.search(stripped):
-                            results.append(self.create_result(
-                                file=context,
-                                line=line_num,
-                                message="Build path may leak into installed file",
-                                context=stripped[:60],
-                                hint="Use ${datadir}, ${sysconfdir} instead of build paths",
-                            ))
-                            break
-        
+            command += stripped
+
+            if self._leaks(command):
+                results.append(self.create_result(
+                    file=context,
+                    line=start,
+                    message="Build path may leak into installed file",
+                    context=context.lines[start - 1].strip()[:60],
+                    hint="Use ${datadir}, ${sysconfdir} instead of build paths",
+                ))
+            command = ""
+
         return results
 
 

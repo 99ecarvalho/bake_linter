@@ -12,6 +12,14 @@
 
 Detects build paths leaking into runtime configuration
 
+In do_install (and its variants), a finding is a command that writes a
+build path (`${S}`, `${B}`, `${WORKDIR}`, `${TMPDIR}`, `${STAGING_DIR*}`,
+`${STAGING_INCDIR}`, `${STAGING_LIBDIR}`, `${RECIPE_SYSROOT}`,
+`${RECIPE_SYSROOT_NATIVE}`) into a file in `${D}`: an `echo`/`printf`
+redirected into `${D}`, or a `sed` on a file in `${D}` whose substitution
+has the build path in the replacement. A `sed -i -e 's|${B}/||g' ${D}...`
+removes the build path and is not reported.
+
 ## Example of Bad Code
 
 ```bitbake
