@@ -1154,73 +1154,36 @@ class TabInVariableDefinitionRule(BaseRule):
     groups = ["style", "formatting"]
     hint = "Replace tabs with 4 spaces per indentation level"
 
-    # Pattern to detect BitBake variable assignment start
-    VAR_ASSIGNMENT_START = re.compile(
-        r'^([A-Z][A-Z0-9_]*(?::[a-z0-9_${}-]+)*)\s*(\+?=|:=|\?\??=|=\+)'
-    )
-    
-    # Patterns to detect function contexts (to skip)
-    SHELL_FUNC_START = re.compile(r'^[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    PYTHON_FUNC_START = re.compile(r'^python\s+[a-z_][a-z0-9_]*\s*\(\s*\)\s*\{')
-    ANON_PYTHON_START = re.compile(r'^python\s*\(\s*\)\s*\{')
-    TASK_OVERRIDE = re.compile(r'^do_[a-z_]+(?::[a-z_]+)*\s*\(\s*\)\s*\{')
-
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        in_function = False
-        in_multiline_var = False
-        brace_depth = 0
-        
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.strip()
-            
+
             # Skip comments and empty lines
             if not stripped or stripped.startswith("#"):
                 continue
-            
-            # Track entering shell/python functions
-            if (self.SHELL_FUNC_START.match(stripped) or 
-                self.PYTHON_FUNC_START.match(stripped) or
-                self.ANON_PYTHON_START.match(stripped) or
-                self.TASK_OVERRIDE.match(stripped)):
-                in_function = True
-                brace_depth = stripped.count('{') - stripped.count('}')
+
+            # Only lines of a BitBake variable assignment (its first line
+            # and continuation lines). Function bodies, under any header
+            # (do_install:append:class-native(), pkg_postinst:${PN} (),
+            # fakeroot f()), are shell or python code where tabs are fine.
+            assignment = context.assignment_at(line_num)
+            if assignment is None or not assignment.name[:1].isupper():
                 continue
-            
-            # Track brace depth inside functions
-            if in_function:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_function = False
-                continue
-            
-            # Check if this is a variable assignment
-            is_var_start = self.VAR_ASSIGNMENT_START.match(stripped)
-            
-            # Check for tabs BEFORE updating multiline state
-            # This allows checking both the start line and continuation lines
-            should_check_tabs = is_var_start or in_multiline_var
-            
-            # Track multiline variable continuations
-            if is_var_start:
-                in_multiline_var = stripped.rstrip().endswith('\\')
-            elif in_multiline_var:
-                # We're in a continuation line, check if it continues further
-                in_multiline_var = stripped.rstrip().endswith('\\')
-            
+
             # Check for tabs in variable assignments or continuations
-            if should_check_tabs:
-                if '\t' in line:
-                    # Count tabs for reporting
-                    tab_count = line.count('\t')
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message=f"Tab character(s) found in variable definition ({tab_count} tab{'s' if tab_count > 1 else ''})",
-                        context=stripped[:60],
-                        hint="Replace tabs with 4 spaces per indentation level",
-                    ))
-        
+            if '\t' in line:
+                # Count tabs for reporting
+                tab_count = line.count('\t')
+                results.append(self.create_result(
+                    file=context,
+                    line=line_num,
+                    message=f"Tab character(s) found in variable definition ({tab_count} tab{'s' if tab_count > 1 else ''})",
+                    context=stripped[:60],
+                    hint="Replace tabs with 4 spaces per indentation level",
+                ))
+
         return results
 
 
