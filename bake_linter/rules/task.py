@@ -141,6 +141,12 @@ class SudoUsageRule(BaseRule):
     # Pattern for sudo as a group name (not a command)
     GROUP_CONTEXT_PATTERN = re.compile(r'-G\s+\S*sudo|--groups\s+\S*sudo')
     
+    # Documentation variables: "su and sudo ..." there is prose, not a command
+    DOCUMENTATION_VARS = {
+        'SUMMARY', 'DESCRIPTION', 'HOMEPAGE', 'BUGTRACKER', 'AUTHOR',
+        'MAINTAINER', 'RECIPE_MAINTAINER', 'SECTION', 'LICENSE',
+    }
+    
     # Pattern to extract variable name
     VAR_ASSIGN_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)(?::[^\s=]+)?\s*[+?:]?=')
 
@@ -161,6 +167,11 @@ class SudoUsageRule(BaseRule):
             
             if in_task and stripped == '}':
                 in_task = False
+                continue
+            
+            # Skip documentation, including overrides (SUMMARY:${PN}-foo) and
+            # continuation lines
+            if context.owner_base(line_num) in self.DOCUMENTATION_VARS:
                 continue
             
             # Skip if 'sudo' appears as a group name context
