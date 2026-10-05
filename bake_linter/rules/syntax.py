@@ -384,19 +384,25 @@ class InvalidOverrideOrderingRule(BaseRule):
         RDEPENDS:${PN}:append:class-target = " pkg"   # package scope, then operation
         RDEPENDS:${PN}-ptest:append = " pkg"          # package scope, then operation
         RDEPENDS:packagegroup-meta-oe-support:append = " pkg"
-        WKS_FILE_DEPENDS:append:qemux86-64 = " x"        # operation, then machine override
+        WKS_FILE_DEPENDS:append:qemux86-64 = " x"     # operation, then machine override
         DEPENDS:remove:class-native = "pkg"           # operation, then class override
 
     INCORRECT examples:
-        WKS_FILE_DEPENDS:qemux86-64:append = " x"  # WRONG - machine override before operation
+        WKS_FILE_DEPENDS:qemux86-64:append = " x"     # WRONG - machine override before operation
+        RDEPENDS:qemux86-64:append = " pkg"           # WRONG - not a package name
+        RDEPENDS:${PN}:qemux86-64:append = " pkg"     # WRONG - only the first override can be a package
 
     This rule detects when operations are placed AFTER a *conditional* override
     (machine, class, libc, ...). A **package-name** override legitimately
     precedes the operation and is not flagged: that is the ubiquitous upstream
-    convention, verified against the vendored poky/meta-openembedded trees
-    (252 occurrences of package-scope-before-operation, e.g.
-    ``RDEPENDS:${PN}-ptest:append`` and ``FILES:${PN}:append``; zero
-    occurrences of a machine or class override placed before the operation).
+    convention in oe-core and meta-openembedded (e.g.
+    ``RDEPENDS:${PN}-ptest:append`` and ``FILES:${PN}:append``).
+
+    Only the first override can be a package name. It counts as one when it
+    expands ${PN}, or, for per-package variables such as RDEPENDS and FILES,
+    when it is a literal name that does not look like a class, libc, arch or
+    QEMU machine override. A custom machine name in that position cannot be
+    told apart from a literal package name, so it is not flagged.
 
     Note the reverse form the rule used to suggest for packages
     (``RDEPENDS:append:${PN}``) does not appear in poky at all - do not
@@ -432,16 +438,29 @@ class InvalidOverrideOrderingRule(BaseRule):
     # Pattern to find variable assignments with multiple overrides
     MULTI_OVERRIDE_PATTERN = re.compile(r'^([A-Z_][A-Z0-9_]*)((?::[a-zA-Z0-9_${}+-]+)+)\s*[+?:]?=')
 
+    # Overrides that are build conditions, never package names: class,
+    # libc, per-recipe and per-task overrides, and the architecture and
+    # QEMU machine names oe-core defines.
+    CONDITIONAL_OVERRIDE_PATTERN = re.compile(
+        r'^(?:class-|libc-|pn-|task-|virtclass-|qemu|linux(?:$|-)'
+        r'|(?:x86|i[3-6]86|arm|aarch64|mips|powerpc|ppc|riscv)(?:$|[-_0-9]))'
+    )
+
     @classmethod
-    def _is_package_scope(cls, variable: str, override: str) -> bool:
+    def _is_package_scope(cls, variable: str, override: str, position: int) -> bool:
         """Whether *override* names a package rather than a build condition.
 
-        A package-name override correctly precedes the operation, so it must
-        not be flagged. Anything else (machine, class-*, libc-*, distro) must
-        come after the operation.
+        A package name can only be the first override, right after the
+        variable name. It is recognised when it expands ${PN} (or ${BPN},
+        ${MLPREFIX}), or, for variables BitBake resolves per package, when
+        it is a literal name that does not look like a build condition.
         """
+        if position != 0:
+            return False
         if any(exp in override for exp in cls.PACKAGE_NAME_EXPANSIONS):
             return True
+        if cls.CONDITIONAL_OVERRIDE_PATTERN.match(override):
+            return False
         return variable in cls.PACKAGE_SCOPED_VARIABLES
 
     def check(self, context: FileContext) -> List[LintResult]:
@@ -477,13 +496,13 @@ class InvalidOverrideOrderingRule(BaseRule):
                     # (RDEPENDS:${PN}:append:qemux86-64). Only a *conditional*
                     # override placed before it is wrong.
                     preceding = overrides[:operation_index]
-                    if all(self._is_package_scope(variable, o) for o in preceding):
+                    offenders = [
+                        o for i, o in enumerate(preceding)
+                        if not self._is_package_scope(variable, o, i)
+                    ]
+                    if not offenders:
                         continue
 
-                    offenders = [
-                        o for o in preceding
-                        if not self._is_package_scope(variable, o)
-                    ]
                     operation = overrides[operation_index]
                     results.append(self.create_result(
                         file=context,

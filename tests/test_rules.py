@@ -3571,9 +3571,9 @@ do_install:append() {
     def test_package_scope_before_operation_is_not_flagged(self):
         """A package-name override legitimately precedes the operation.
 
-        This is the ubiquitous upstream convention (252 occurrences in the
-        vendored poky/meta-openembedded trees); the reverse form the rule used
-        to suggest (RDEPENDS:append:${PN}) appears there zero times.
+        This is the ubiquitous upstream convention in oe-core and
+        meta-openembedded; the reverse form the rule used to suggest
+        (RDEPENDS:append:${PN}) does not appear there.
         """
         from bake_linter.rules.syntax import InvalidOverrideOrderingRule
 
@@ -3616,6 +3616,47 @@ RDEPENDS:packagegroup-meta-oe-support:append = " pkg"
         assert len(results) == 1
         assert results[0].rule_id == "SYNTAX006"
         assert "qemux86-64" in results[0].message
+
+    def test_non_package_first_override_flagged_on_package_var(self):
+        """On a per-package variable, a first override that is clearly a
+        build condition is not a package name."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+
+        content = '''RDEPENDS:qemux86-64:append = " x"
+FILES:class-target:append = " /usr/share/foo"
+RDEPENDS:aarch64:append = " x"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+
+        assert [r.line for r in results] == [1, 2, 3]
+
+    def test_only_first_override_can_be_package_scope(self):
+        """RDEPENDS:${PN}:machine:append puts a machine override before the
+        operation, even though it follows a package scope."""
+        from bake_linter.rules.syntax import InvalidOverrideOrderingRule
+
+        content = '''RDEPENDS:${PN}:my-board:append = " x"
+'''
+        context = FileContext(
+            path=Path("test_1.0.bb"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        rule = InvalidOverrideOrderingRule()
+        results = rule.check(context)
+
+        assert len(results) == 1
+        assert "my-board" in results[0].message
 
     def test_valid_override_ordering_operation_first(self):
         """Test that operation BEFORE conditional override is NOT flagged.
