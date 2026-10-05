@@ -46,6 +46,7 @@ htmlcov/
 _site/
 
 # Output directories
+output/
 output_untracked/
 
 # Cache
