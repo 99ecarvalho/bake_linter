@@ -26,6 +26,7 @@ SPDX-License-Identifier: LGPL-3.0-or-later
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
@@ -240,6 +241,32 @@ def function_lines(lines: List[str], structure: RecipeStructure) -> List[Functio
         if not continued:
             current = None
     return found
+
+
+SHELL_SEPARATORS = {";", "&&", "||", "|", "&"}
+
+
+def command_words(text: str) -> List[str]:
+    """The words of the first shell command in *text*, quotes removed, up to
+    a separator (;, &&, ||, |, &) or a redirection. Unbalanced quotes fall
+    back to splitting on whitespace."""
+    try:
+        lexer = shlex.shlex(text, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        words = list(lexer)
+    except ValueError:
+        words = text.split()
+    command: List[str] = []
+    for index, word in enumerate(words):
+        if word in SHELL_SEPARATORS or word[:1] in "<>":
+            break
+        # The 2 of 2>/dev/null
+        following = words[index + 1] if index + 1 < len(words) else ""
+        if word.isdigit() and following[:1] in "<>" and following:
+            break
+        command.append(word)
+    return command
 
 
 def recipe_name(path: Path) -> str:
