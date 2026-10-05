@@ -94,33 +94,45 @@ class MissingLineContinuationRule(BaseRule):
     groups = ["syntax"]
     hint = "Add \\ at end of line for multiline assignments"
 
-    # Pattern for variable assignment start
-    VAR_START_PATTERN = re.compile(r'^([A-Z_][A-Z0-9_]*(?:[_:]\S+)?)\s*[+?:]?=\s*"')
+    # Pattern for variable assignment start: the name, then any operator
+    # (=, ?=, ??=, :=, +=, .=, =+, =.), then the opening quote, double or
+    # single
+    VAR_START_PATTERN = re.compile(
+        r'^([A-Z_][A-Z0-9_]*(?::[^\s=]+)?)\s*(?:\?\?|[+?:.])?=[+.]?\s*(["\'])'
+    )
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         in_multiline = False
         start_line = 0
         var_name = ""
-        
+        quote = '"'
+
         for line_num, line in enumerate(context.lines, start=1):
             stripped = line.rstrip()
-            
+
             if stripped.startswith("#"):
                 continue
-            
+
+            # Function bodies are shell or python code (heredocs, quoted
+            # strings), not BitBake assignments
+            if context.owner(line_num).startswith("FUNC:"):
+                in_multiline = False
+                continue
+
             if not in_multiline:
                 match = self.VAR_START_PATTERN.match(stripped)
                 if match:
                     var_name = match.group(1)
+                    quote = match.group(2)
                     # Check if line ends with quote (complete) or continuation
-                    if not stripped.endswith('"') and not stripped.endswith('\\'):
+                    if not stripped.endswith(quote) and not stripped.endswith('\\'):
                         # Starts assignment but doesn't complete or continue
                         in_multiline = True
                         start_line = line_num
             else:
                 # In multiline mode
-                if stripped.endswith('"'):
+                if stripped.endswith(quote):
                     in_multiline = False
                 elif stripped.endswith('\\'):
                     continue  # Proper continuation
