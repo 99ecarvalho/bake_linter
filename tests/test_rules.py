@@ -4231,6 +4231,29 @@ SRCREV = "${AUTOREV}"
         assert len(results) == 1
         assert results[0].rule_id == "REPRO001"
 
+    def test_bbappend_finding_points_at_the_remote_fetch(self):
+        """The finding is reported on the line that adds the remote source,
+        not on an earlier local-only SRC_URI line."""
+        from bake_linter.rules.supply_chain import MissingLicenseChecksumInBbappendRule
+
+        content = '''SRC_URI += "file://fix.patch"
+SRC_URI:append = " \\
+    file://extra.conf \\
+    https://example.com/extra-1.0.tar.gz \\
+"
+'''
+        context = FileContext(
+            path=Path("foo_%.bbappend"),
+            content=content,
+            lines=content.splitlines(keepends=True),
+            variables={},
+        )
+
+        results = MissingLicenseChecksumInBbappendRule().check(context)
+
+        assert len(results) == 1
+        assert results[0].line == 4
+
     def test_bbappend_src_uri_without_lic_check(self):
         """Test that a bbappend fetching upstream source without a license
         check is flagged."""

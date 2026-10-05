@@ -167,9 +167,9 @@ class MissingLicenseChecksumInBbappendRule(BaseRule):
         if not str(context.path).endswith('.bbappend'):
             return results
 
-        adds_remote_source = False
         has_lic_check = False
-        src_uri_line = 0
+        # Line of the first remote fetch, which is what the finding is about
+        remote_line = 0
         in_src_uri = False
 
         for line_num, line in enumerate(context.lines, start=1):
@@ -183,20 +183,18 @@ class MissingLicenseChecksumInBbappendRule(BaseRule):
 
             if not in_src_uri and self.SRC_URI_MODIFY_PATTERN.match(stripped):
                 in_src_uri = True
-                if src_uri_line == 0:
-                    src_uri_line = line_num
 
             if in_src_uri:
-                if self.REMOTE_FETCH_PATTERN.search(stripped):
-                    adds_remote_source = True
+                if remote_line == 0 and self.REMOTE_FETCH_PATTERN.search(stripped):
+                    remote_line = line_num
                 # The assignment ends on the first line not continued with '\'
                 if not stripped.endswith('\\'):
                     in_src_uri = False
 
-        if adds_remote_source and not has_lic_check:
+        if remote_line and not has_lic_check:
             results.append(self.create_result(
                 file=context,
-                line=src_uri_line,
+                line=remote_line,
                 message=(
                     "bbappend fetches upstream source without updating "
                     "LIC_FILES_CHKSUM"
