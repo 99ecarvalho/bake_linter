@@ -344,6 +344,22 @@ class FileContext:
             return owner
         return owner.split(":", 1)[0]
 
+    def assignment_at(self, line: int) -> Optional["Assignment"]:
+        """The logical assignment a 1-indexed line is part of (its first line
+        or a continuation line), or None."""
+        return self.structure.assignment_at(line)
+
+    def function_at(self, line: int) -> Optional["Function"]:
+        """The shell or python function a 1-indexed line is part of, header
+        and closing brace included, or None."""
+        return self.structure.function_at(line)
+
+    def is_top_level_assignment(self, line: int) -> bool:
+        """Whether a 1-indexed line starts a BitBake assignment: not a
+        continuation line, not a function body, not a comment."""
+        assignment = self.assignment_at(line)
+        return assignment is not None and assignment.line == line
+
     @cached_property
     def function_lines(self) -> List["FunctionLine"]:
         """Logical lines of every function body, continuation lines joined,

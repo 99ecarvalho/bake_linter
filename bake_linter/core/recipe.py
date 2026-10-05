@@ -47,6 +47,9 @@ FUNCTION_PATTERN = re.compile(
     r'^\s*(?:(?:python|fakeroot)\s+)*(?P<name>[\w${}.+-]+(?::[\w${}.+-]+)*)?\s*\(\s*\)\s*\{'
 )
 PYTHON_DEF_PATTERN = re.compile(r'^def\s+(?P<name>\w+)\s*\(')
+# "python" among the keywords before a function name: python do_foo() {,
+# fakeroot python f() {, python () {
+PYTHON_FUNCTION_PATTERN = re.compile(r'^\s*(?:fakeroot\s+)*python\b')
 
 INHERIT_PATTERN = re.compile(r'^\s*inherit(?:_defer)?\s+(?P<classes>.+)$')
 INCLUDE_PATTERN = re.compile(r'^\s*(?P<kind>require|include|include_all)\s+(?P<path>\S+)')
@@ -77,17 +80,49 @@ class Assignment:
 
 
 @dataclass
+class Function:
+    """One function: a shell or python task/function, or a def."""
+    name: str            # "do_install:append", "anonymous", or the def name
+    line: int            # header line (1-indexed)
+    end_line: int        # closing brace, or last line of a def body
+    python: bool         # python code (python f() { or def f(d):)
+
+    def contains(self, line: int) -> bool:
+        return self.line <= line <= self.end_line
+
+
+@dataclass
 class RecipeStructure:
     owners: List[str] = field(default_factory=list)
     assignments: List[Assignment] = field(default_factory=list)
     inherits: Set[str] = field(default_factory=set)
     includes: List[str] = field(default_factory=list)
+    functions: List[Function] = field(default_factory=list)
 
     def owner(self, line: int) -> str:
         """Owner of a 1-indexed line: a variable name, "FUNC:<name>", "#" or ""."""
         if 1 <= line <= len(self.owners):
             return self.owners[line - 1]
         return ""
+
+    def assignment_at(self, line: int) -> Optional[Assignment]:
+        """The logical assignment a 1-indexed line is part of, if any."""
+        index = self.__dict__.get("_assignment_index")
+        if index is None:
+            index = {}
+            for assignment in self.assignments:
+                for n in range(assignment.line, assignment.end_line + 1):
+                    index[n] = assignment
+            self.__dict__["_assignment_index"] = index
+        return index.get(line)
+
+    def function_at(self, line: int) -> Optional[Function]:
+        """The function a 1-indexed line is part of (header and closing
+        brace included), if any."""
+        for function in self.functions:
+            if function.contains(line):
+                return function
+        return None
 
 
 def _unquote(value: str) -> str:
@@ -115,6 +150,7 @@ def parse_structure(lines: List[str]) -> RecipeStructure:
     parts: List[str] = []
     function: Optional[str] = None
     python_def = False
+    open_function: Optional[Function] = None
 
     for line_num, raw in enumerate(lines, start=1):
         line = raw.rstrip("\n")
@@ -124,6 +160,7 @@ def parse_structure(lines: List[str]) -> RecipeStructure:
             owners.append(FUNCTION_PREFIX + function)
             if line.startswith("}"):
                 function = None
+                open_function.end_line = line_num
             continue
 
         if python_def:
@@ -131,6 +168,8 @@ def parse_structure(lines: List[str]) -> RecipeStructure:
                 python_def = False
             else:
                 owners.append(FUNCTION_PREFIX + "def")
+                if stripped:
+                    open_function.end_line = line_num
                 continue
 
         if current is not None:
@@ -150,13 +189,24 @@ def parse_structure(lines: List[str]) -> RecipeStructure:
         if function_match:
             function = function_match.group("name") or "anonymous"
             owners.append(FUNCTION_PREFIX + function)
+            open_function = Function(
+                name=function, line=line_num, end_line=line_num,
+                python=bool(PYTHON_FUNCTION_PATTERN.match(line)),
+            )
+            structure.functions.append(open_function)
             if stripped.endswith("}") and stripped.count("{") == stripped.count("}"):
                 function = None
             continue
 
-        if PYTHON_DEF_PATTERN.match(line):
+        def_match = PYTHON_DEF_PATTERN.match(line)
+        if def_match:
             python_def = True
             owners.append(FUNCTION_PREFIX + "def")
+            open_function = Function(
+                name=def_match.group("name"), line=line_num, end_line=line_num,
+                python=True,
+            )
+            structure.functions.append(open_function)
             continue
 
         inherit_match = INHERIT_PATTERN.match(line)
@@ -197,6 +247,8 @@ def parse_structure(lines: List[str]) -> RecipeStructure:
     if current is not None:
         current.value = _unquote(" ".join(p for p in parts if p))
         current.end_line = len(lines)
+    if function is not None:
+        open_function.end_line = len(lines)
 
     return structure
 
