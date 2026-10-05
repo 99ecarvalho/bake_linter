@@ -759,6 +759,20 @@ class InstallDirectoryTrailingSlashRule(BaseRule):
         r'\s*$'  # end of line (or just whitespace)
     )
 
+    INSTALL_COMMAND = re.compile(r'^\s*install\s')
+    SHORT_OPTIONS = re.compile(r'^-([a-zA-Z0-9]+)$')
+
+    @classmethod
+    def _creates_or_targets_directory(cls, command: str) -> bool:
+        """install -d / -Dd... / --directory, or -t / --target-directory."""
+        for token in command.split()[1:]:
+            if token in ("--directory", "-t") or token.startswith("--target-directory"):
+                return True
+            match = cls.SHORT_OPTIONS.match(token)
+            if match and "d" in re.sub(r'[0-9]', '', match.group(1)):
+                return True
+        return False
+
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
         
@@ -769,8 +783,14 @@ class InstallDirectoryTrailingSlashRule(BaseRule):
             if stripped.startswith("#"):
                 continue
             
-            # Look for install commands
-            if "install " in stripped and "${D}" in stripped:
+            # Look for install commands: the install command itself, not
+            # oe_libinstall or a word ending in "install"
+            if self.INSTALL_COMMAND.match(stripped) and "${D}" in stripped:
+                # install -d creates the directory, and install -t DIR
+                # names the destination directory: there is no file
+                # destination whose trailing slash matters
+                if self._creates_or_targets_directory(stripped):
+                    continue
                 match = self.INSTALL_PATTERN.search(stripped)
                 if match:
                     dir_var = match.group(1)
