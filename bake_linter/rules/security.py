@@ -189,6 +189,8 @@ class NoChecksumRule(BaseRule):
     # URI schemes that should have checksums
     CHECKSUM_SCHEMES = {"http", "https", "ftp", "s3"}
 
+    CHECKSUM_FLAG = re.compile(r'SRC_URI\[[^\]]*(?:md5|sha1|sha256|sha384|sha512)sum\]')
+
     def check(self, context: FileContext) -> List[LintResult]:
         if not self.is_applicable(context):
             return []
@@ -209,12 +211,9 @@ class NoChecksumRule(BaseRule):
         if not has_remote:
             return []
         
-        # Check for checksum variables
-        has_checksum = False
-        for line in context.lines:
-            if "SRC_URI[" in line and ("sha256sum]" in line or "md5sum]" in line):
-                has_checksum = True
-                break
+        # Check for checksum variables: fetch2 verifies any of these
+        # (SRC_URI[sha256sum], SRC_URI[foo.sha512sum], ...)
+        has_checksum = any(self.CHECKSUM_FLAG.search(line) for line in context.lines)
         
         if not has_checksum:
             results.append(self.create_result(
