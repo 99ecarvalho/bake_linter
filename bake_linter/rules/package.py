@@ -37,28 +37,69 @@ class RdependsOnDevPackageRule(BaseRule):
     groups = ["packaging", "dependency"]
     hint = "Move -dev packages to DEPENDS, use runtime library in RDEPENDS"
 
-    RDEPENDS_PATTERN = re.compile(r'^RDEPENDS[_:]')
-    DEV_PACKAGE_PATTERN = re.compile(r'\b(\S+-dev)\b')
+    # Version constraints: foo (>= 1.0)
+    VERSION_CONSTRAINT_PATTERN = re.compile(r'\([^)]*\)')
+    # Recipes insane.bbclass does not check: kernel module packages such as
+    # kernel-module-lirc-dev are not development packages. module inherits
+    # module-base.
+    SKIP_CLASSES = {"kernel", "module-base", "module"}
+
+    @staticmethod
+    def _rdepends_package(name: str) -> str:
+        """The package an RDEPENDS assignment is for: ${PN}-foo for
+        RDEPENDS:${PN}-foo:append, "" for a bare RDEPENDS."""
+        if name.startswith("RDEPENDS_"):
+            return name[len("RDEPENDS_"):]
+        parts = name.split(":")
+        return parts[1] if len(parts) > 1 else ""
 
     def check(self, context: FileContext) -> List[LintResult]:
         results = []
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            if stripped.startswith("#"):
+
+        # The same check insane.bbclass runs as the dev-deps QA test
+        if context.inherits & self.SKIP_CLASSES:
+            return results
+
+        def expand(name: str) -> str:
+            return name.replace("${PN}", context.pn).replace("${BPN}", context.pn)
+
+        # INSANE_SKIP applies to every package, INSANE_SKIP:pkg to one
+        skips: dict = {}
+        structures = [context.structure] + [
+            i.structure for i in context.included_files or []
+        ]
+        for structure in structures:
+            for a in structure.assignments:
+                if a.base != "INSANE_SKIP" or a.flag:
+                    continue
+                key = expand(a.overrides[0]) if a.overrides else ""
+                skips.setdefault(key, set()).update(a.value.split())
+
+        for a in context.structure.assignments:
+            if a.flag or not (a.base == "RDEPENDS" or a.base.startswith("RDEPENDS_")):
                 continue
-            
-            if self.RDEPENDS_PATTERN.match(stripped):
-                matches = self.DEV_PACKAGE_PATTERN.findall(stripped)
-                for dev_pkg in matches:
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message=f"Development package '{dev_pkg}' in RDEPENDS (should be build-time only)",
-                        context=stripped[:60],
-                        hint=f"Move '{dev_pkg}' to DEPENDS; use runtime library in RDEPENDS",
-                    ))
+            package = self._rdepends_package(a.name)
+            expanded = expand(package) or context.pn
+
+            if "-dev" in expanded or "-staticdev" in expanded or "-dbg" in expanded:
+                continue
+            if "packagegroup-" in expanded or "-image" in expanded:
+                continue
+            skip = skips.get("", set()) | skips.get(expanded, set())
+            if "dev-deps" in skip or "build-deps" in skip:
+                continue
+
+            value = self.VERSION_CONSTRAINT_PATTERN.sub(" ", a.value)
+            for dev_pkg in value.split():
+                if not dev_pkg.endswith("-dev"):
+                    continue
+                results.append(self.create_result(
+                    file=context,
+                    line=a.line,
+                    message=f"Development package '{dev_pkg}' in RDEPENDS (should be build-time only)",
+                    context=context.lines[a.line - 1].strip()[:60],
+                    hint=f"Move '{dev_pkg}' to DEPENDS; use runtime library in RDEPENDS",
+                ))
         
         return results
 
