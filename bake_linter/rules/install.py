@@ -148,13 +148,13 @@ class CpInsteadOfInstallRule(BaseRule):
 class InstallWithoutModeRule(BaseRule):
     """
     Check for install commands without explicit permission mode.
-    
-    Relying on default umask for permissions can lead to:
-    - Inconsistent file permissions across builds
-    - Security issues from overly permissive defaults
-    - Unexpected behavior in different build environments
+
+    install gives files mode 0755 (rwxr-xr-x) unless -m says otherwise, so
+    leaving it out can lead to:
+    - Data and configuration files installed executable
+    - Permissions that depend on the default rather than on intent
     """
-    
+
     rule_id = "INSTALL002"
     name = "Install Without Explicit Mode"
     description = "Detects install commands without explicit -m permission mode"
@@ -162,70 +162,64 @@ class InstallWithoutModeRule(BaseRule):
     groups = ["install", "security"]
     hint = "Add '-m 0755' for binaries, '-m 0644' for data files"
 
-    # Pattern to detect install command (not install -d which doesn't need -m)
-    # Looking for install commands that copy files (not just -d for directory)
-    INSTALL_PATTERN = re.compile(r'^\s*install\s+')
-    
-    # Pattern to detect -d flag (directory creation, doesn't need -m)
-    DIR_FLAG_PATTERN = re.compile(r'\s-d\s')
-    
-    # Pattern to detect -m flag (handles various valid forms):
-    # -m 0644, -m0644, -Dm 0644, -Dm0644, -D -m 0644, etc.
-    MODE_FLAG_PATTERN = re.compile(r'-[A-Za-z]*m\s*[0-7]{3,4}')
-    
-    # Pattern to detect we're in a do_install task
-    INSTALL_TASK_PATTERN = re.compile(r'^do_install(?:[_:]|$|\s*\(\))')
+    # Short options that take an argument: -m MODE, -o OWNER, -g GROUP,
+    # -S SUFFIX, -t DIRECTORY
+    SHORT_WITH_ARGUMENT = "mogSt"
+    LONG_WITH_ARGUMENT = {"--mode", "--owner", "--group", "--suffix", "--target-directory"}
+    # do_install, do_install_ptest, ...
+    INSTALL_TASK = re.compile(r'^do_install(?:_\w+)?$')
+
+    def _parse_options(self, words: List[str]) -> tuple:
+        """(has_mode, creates_directories) for an install command."""
+        has_mode = False
+        directories = False
+        skip_next = False
+        for word in words[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if word == "--":
+                break
+            if word.startswith("--"):
+                name = word.split("=", 1)[0]
+                if name == "--mode":
+                    has_mode = True
+                elif name == "--directory":
+                    directories = True
+                skip_next = name in self.LONG_WITH_ARGUMENT and "=" not in word
+            elif word.startswith("-") and len(word) > 1:
+                # A cluster such as -Dm0644, -dm 0755 or -Dm 0644
+                for index, letter in enumerate(word[1:], start=1):
+                    if letter == "d":
+                        directories = True
+                    elif letter in self.SHORT_WITH_ARGUMENT:
+                        has_mode = has_mode or letter == "m"
+                        skip_next = index == len(word) - 1
+                        break
+        return has_mode, directories
 
     def check(self, context: FileContext) -> List[LintResult]:
+        from bake_linter.core.recipe import command_words
         results = []
-        in_do_install = False
-        brace_depth = 0
-        
-        for line_num, line in enumerate(context.lines, start=1):
-            stripped = line.strip()
-            
-            # Skip comments
-            if stripped.startswith("#"):
+
+        for line in context.function_lines:
+            if not self.INSTALL_TASK.match(line.function.split(":", 1)[0]):
                 continue
-            
-            # Track if we're inside do_install
-            if self.INSTALL_TASK_PATTERN.match(stripped):
-                in_do_install = True
-                if '{' in stripped:
-                    brace_depth = 1
+            words = command_words(line.text)
+            if words[:1] != ["install"]:
                 continue
-            
-            # Track brace depth
-            if in_do_install:
-                brace_depth += stripped.count('{') - stripped.count('}')
-                if brace_depth <= 0:
-                    in_do_install = False
-                    brace_depth = 0
-                    continue
-                
-                # Check for install command without -m (but not -d only)
-                if self.INSTALL_PATTERN.match(stripped):
-                    # Skip if it's just directory creation (-d flag present, no source files)
-                    if self.DIR_FLAG_PATTERN.search(stripped):
-                        # Check if there are source files after -d (install -d dir is ok, install -d -m ... src dst needs -m)
-                        # Simple heuristic: if -d is the only flag before ${D}, it's just dir creation
-                        if stripped.count('${D}') == 1 and not self.MODE_FLAG_PATTERN.search(stripped):
-                            continue
-                    
-                    # Check if -m flag is present
-                    if not self.MODE_FLAG_PATTERN.search(stripped):
-                        # Skip pure directory creation
-                        if self.DIR_FLAG_PATTERN.search(stripped) and stripped.count('$') <= 2:
-                            continue
-                        
-                        results.append(self.create_result(
-                            file=context,
-                            line=line_num,
-                            message="install command without explicit -m permission mode",
-                            context=stripped[:60],
-                            hint="Add -m 0755 for executables, -m 0644 for data files",
-                        ))
-        
+            has_mode, directories = self._parse_options(words)
+            # install -d only creates directories, which get 0755 as they should
+            if has_mode or directories:
+                continue
+            results.append(self.create_result(
+                file=context,
+                line=line.line,
+                message="install command without explicit -m permission mode",
+                context=line.text[:60],
+                hint="Add -m 0755 for executables, -m 0644 for data files",
+            ))
+
         return results
 
 

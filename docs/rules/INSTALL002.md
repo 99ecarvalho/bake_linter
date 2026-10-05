@@ -12,6 +12,11 @@
 
 Detects install commands without explicit -m permission mode
 
+`install -d` (also in a cluster such as `-dm`, or `--directory`) only creates
+directories and is not reported. The mode may be given as `-m MODE`,
+`-mMODE`, `-Dm MODE`, `--mode=MODE` or `--mode MODE`, in octal, symbolic or as
+a variable.
+
 ## Example of Bad Code
 
 ```bitbake
@@ -24,7 +29,9 @@ do_install() {
 
 ## Why This Is Bad
 
-Without explicit `-m` modes, install uses umask-dependent defaults which vary by system. Reviewers can't tell what permissions are intended.
+Without `-m`, install gives every file mode 0755 (rwxr-xr-x), so data and
+configuration files end up executable. Reviewers also can't tell what
+permissions are intended.
 
 ## How to Fix It
 
