@@ -639,6 +639,11 @@ class SystemdAutoEnableRule(BaseRule):
     def _systemd_packages(self, context: FileContext) -> set:
         """Distinct packages this recipe declares systemd services for."""
         conditional = InvalidOverrideOrderingRule.CONDITIONAL_OVERRIDE_PATTERN
+
+        def resolve(package: str) -> str:
+            # ${PN} and foo name the same package in foo_1.0.bb
+            return package.replace("${PN}", context.pn).replace("${BPN}", context.pn)
+
         packages = set()
         for line in context.lines:
             stripped = line.strip()
@@ -648,10 +653,10 @@ class SystemdAutoEnableRule(BaseRule):
                 # SYSTEMD_SERVICE:append or SYSTEMD_SERVICE:class-target name
                 # no package: they change the unsuffixed value.
                 if package not in self.OPERATIONS and not conditional.match(package):
-                    packages.add(package)
+                    packages.add(resolve(package))
             match = self.PACKAGES_PATTERN.match(stripped)
             if match:
-                packages.update(match.group(1).split())
+                packages.update(resolve(p) for p in match.group(1).split())
         return packages
 
     def check(self, context: FileContext) -> List[LintResult]:
