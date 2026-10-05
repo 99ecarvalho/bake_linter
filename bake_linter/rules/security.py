@@ -235,11 +235,12 @@ class InsecurePermissionsRule(BaseRule):
     default_severity = Severity.WARNING
     groups = ["security"]
 
-    # Patterns for overly permissive permissions
+    # Patterns for overly permissive permissions, recursive first: chmod
+    # takes -R before or after the mode, and one message per line is given
     INSECURE_PATTERNS = [
+        (re.compile(r'chmod\s+(?:-R\s+777|777\s+-R)\b'), "Recursive chmod 777 is dangerous"),
         (re.compile(r'chmod\s+777'), "chmod 777 is overly permissive"),
         (re.compile(r'chmod\s+666'), "chmod 666 allows world-write access"),
-        (re.compile(r'chmod\s+-R\s+777'), "Recursive chmod 777 is dangerous"),
     ]
 
     def check(self, context: FileContext) -> List[LintResult]:
@@ -260,7 +261,8 @@ class InsecurePermissionsRule(BaseRule):
                         context=stripped[:60],
                         hint="Use more restrictive permissions (e.g., 755 or 644)",
                     ))
-        
+                    break
+
         return results
 
 
