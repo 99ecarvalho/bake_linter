@@ -1,6 +1,6 @@
 # SECURITY005 - Dangerous rm -rf Usage
 
-**Severity:** error
+**Severity:** warning
 
 **Category:** security
 
@@ -11,6 +11,8 @@
 ## Description
 
 Detects rm -rf with potentially dangerous patterns
+
+Emptying `${D}` or a directory in it (`rm -rf ${D}/*`, `rm -rf ${D}${datadir}/*`) is a warning: it only stays inside the package if the variables are set. `rm -rf /` and `rm -rf /*` are always reported as errors. A glob that selects files by name (`rm -rf ${D}${PYTHON_SITEPACKAGES_DIR}/*.egg`) does not empty the directory and is not reported.
 
 ## Example of Bad Code
 
@@ -61,7 +63,7 @@ This rule can be configured in `.bake-linter.yaml`:
 rules:
   SECURITY005:
     enabled: true  # or false to disable
-    severity: error  # override severity (error, warning, info)
+    severity: warning  # override severity (error, warning, info)
     # options:
     #   key: value  # Add rule-specific options if any
 ```

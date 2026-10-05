@@ -297,7 +297,7 @@ The generated HTML is output to `_site/` and is excluded from version control.
 | SECURITY002 | Missing Checksum | Warning | Check SRC_URI has checksums |
 | SECURITY003 | Insecure Permissions | Warning | Detect overly permissive chmod |
 | SECURITY004 | Hardcoded Credentials | Error | Detect potential hardcoded secrets |
-| SECURITY005 | Dangerous rm -rf | Error | Detect rm -rf with dangerous patterns |
+| SECURITY005 | Dangerous rm -rf | Warning | Detect rm -rf with dangerous patterns |
 | SECURITY006 | eval Usage | Warning | Detect eval in shell tasks |
 | SECURITY007 | Build Path Leakage | Warning | Detect ${S}/${WORKDIR} in runtime files |
 | SECURITY008 | SUID/SGID Binary Detection | Warning | Detect chmod 4xxx/2xxx without security comment |

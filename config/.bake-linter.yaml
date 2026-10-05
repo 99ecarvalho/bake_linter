@@ -382,7 +382,7 @@ rules:
 
   SECURITY005:
     enabled: true
-    severity: error
+    severity: warning
     # description: Dangerous rm -rf Usage
 
   SECURITY006:

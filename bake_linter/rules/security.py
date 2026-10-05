@@ -396,16 +396,23 @@ class DangerousRmRfRule(BaseRule):
     rule_id = "SECURITY005"
     name = "Dangerous rm -rf Usage"
     description = "Detects rm -rf with potentially dangerous patterns"
-    default_severity = Severity.ERROR
+    default_severity = Severity.WARNING
     groups = ["security"]
     hint = "Add guards to verify variables are set before rm -rf"
 
-    # Dangerous rm patterns
+    # A whole directory's contents: "/*" ends the argument. /*.egg or
+    # /*-tests select files by name and are not the same thing.
+    ALL_CONTENTS = r'/\*(?=\s|"|\'|;|$)'
+
+    # rm -rf / and rm -rf /* delete the build host: always an error
+    ROOT_PATTERNS = [
+        re.compile(r'rm\s+-rf?\s+/(?:\s|$)'),  # rm -rf /
+        re.compile(r'rm\s+-rf?\s+' + ALL_CONTENTS),  # rm -rf /*
+    ]
+    # Emptying ${D} or a directory in it: dangerous if the variable is empty
     DANGEROUS_PATTERNS = [
-        re.compile(r'rm\s+-rf?\s+/\s'),  # rm -rf /
-        re.compile(r'rm\s+-rf?\s+/\*'),  # rm -rf /*
-        re.compile(r'rm\s+-rf?\s+\$\{D\}/\*'),  # rm -rf ${D}/*
-        re.compile(r'rm\s+-rf?\s+\$\{D\}\$\{[^}]+\}/\*'),  # rm -rf ${D}${VAR}/*
+        re.compile(r'rm\s+-rf?\s+\$\{D\}' + ALL_CONTENTS),  # rm -rf ${D}/*
+        re.compile(r'rm\s+-rf?\s+\$\{D\}\$\{[^}]+\}' + ALL_CONTENTS),  # rm -rf ${D}${VAR}/*
     ]
     
     # Pattern to check for unguarded variable deletion
@@ -420,16 +427,20 @@ class DangerousRmRfRule(BaseRule):
             if stripped.startswith("#"):
                 continue
             
-            for pattern in self.DANGEROUS_PATTERNS:
-                if pattern.search(stripped):
-                    results.append(self.create_result(
-                        file=context,
-                        line=line_num,
-                        message="Potentially dangerous rm -rf pattern",
-                        context=stripped[:60],
-                        hint="Add guards: [ -n \"${VAR}\" ] && rm -rf ...",
-                    ))
-                    break
+            if any(p.search(stripped) for p in self.ROOT_PATTERNS):
+                severity = Severity.ERROR
+            elif any(p.search(stripped) for p in self.DANGEROUS_PATTERNS):
+                severity = None
+            else:
+                continue
+            results.append(self.create_result(
+                file=context,
+                line=line_num,
+                message="Potentially dangerous rm -rf pattern",
+                context=stripped[:60],
+                hint="Add guards: [ -n \"${VAR}\" ] && rm -rf ...",
+                severity=severity,
+            ))
         
         return results
 
