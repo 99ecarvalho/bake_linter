@@ -15,6 +15,7 @@ old override syntax, and many style issues. It also runs
 command gives both tools' findings.
 
 - [Features](#features)
+- [The HTML report](#the-html-report)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Exit codes](#exit-codes)
@@ -46,6 +47,36 @@ command gives both tools' findings.
 - **Configuration** in one YAML or JSON file, with command-line overrides.
 - **oelint-adv** runs as a second pass when it is installed.
 - **A pre-commit hook** that lints only the staged recipes.
+
+## The HTML report
+
+`bake-linter --output html,report.html <layers>` writes a self-contained
+report. These screenshots are from a run over three directories of
+poky: `meta/recipes-extended`, `meta/recipes-connectivity` and
+`meta-skeleton`.
+
+The summary, with the counts by severity, the views and the severity
+filters:
+
+![Report summary with counts by severity, view tabs and severity filters](docs/screenshots/summary.png)
+
+Findings grouped by rule family and rule, each with its hint and the
+recipe lines around it:
+
+![Findings grouped by rule, with the hint and the source lines](docs/screenshots/by-rule.png)
+
+The same findings for one recipe:
+
+![One recipe with its findings and the lines they point at](docs/screenshots/by-file.png)
+
+The statistics view: severities, categories, the rules and files with the
+most findings, and an overall score:
+
+![Statistics dashboard with charts by severity, category, rule and file](docs/screenshots/statistics.png)
+
+Every rule ID opens the rule's documentation, with an example and the fix:
+
+![Rule documentation opened from a finding](docs/screenshots/rule-help.png)
 
 ## Installation
 
