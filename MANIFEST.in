@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+recursive-include docs/rules *.md
+include config/.bake-linter.yaml

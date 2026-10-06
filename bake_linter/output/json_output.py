@@ -135,6 +135,7 @@ class JsonFormatter(BaseFormatter):
             "infos": summary.infos,
             "rules_executed": summary.rules_executed,
             "skipped_files": summary.skipped_files if self.verbose else len(summary.skipped_files),
+            "runtime_errors": summary.runtime_errors,
             "exit_code": summary.get_exit_code().value,
         }
 

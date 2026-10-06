@@ -27,7 +27,8 @@ from pathlib import Path
 from typing import List, Dict, Optional, TextIO, TYPE_CHECKING
 from collections import defaultdict
 import html
-import json
+
+from bake_linter.output.base import html_json
 
 if TYPE_CHECKING:
     from bake_linter.core.oelint_integration import OelintResult, OelintSummary
@@ -447,23 +448,23 @@ class OelintHtmlFormatter:
         top_files = sorted(file_stats, key=lambda x: -x[1])[:10]
         
         # Encode data for JavaScript
-        severity_json = json.dumps(severity_data)
-        category_labels = json.dumps(list(category_counts.keys()))
-        category_errors = json.dumps([v['errors'] for v in category_counts.values()])
-        category_warnings = json.dumps([v['warnings'] for v in category_counts.values()])
-        category_infos = json.dumps([v['infos'] for v in category_counts.values()])
-        
-        top_rule_labels = json.dumps([r[0] for r in top_rules])
-        top_rule_values = json.dumps([r[1] for r in top_rules])
-        top_rule_errors = json.dumps([r[2] for r in top_rules])
-        top_rule_warnings = json.dumps([r[3] for r in top_rules])
-        top_rule_infos = json.dumps([r[4] for r in top_rules])
-        
-        top_file_labels = json.dumps([f[0] for f in top_files])
-        top_file_values = json.dumps([f[1] for f in top_files])
-        top_file_errors = json.dumps([f[2] for f in top_files])
-        top_file_warnings = json.dumps([f[3] for f in top_files])
-        top_file_infos = json.dumps([f[4] for f in top_files])
+        severity_json = html_json(severity_data)
+        category_labels = html_json(list(category_counts.keys()))
+        category_errors = html_json([v['errors'] for v in category_counts.values()])
+        category_warnings = html_json([v['warnings'] for v in category_counts.values()])
+        category_infos = html_json([v['infos'] for v in category_counts.values()])
+
+        top_rule_labels = html_json([r[0] for r in top_rules])
+        top_rule_values = html_json([r[1] for r in top_rules])
+        top_rule_errors = html_json([r[2] for r in top_rules])
+        top_rule_warnings = html_json([r[3] for r in top_rules])
+        top_rule_infos = html_json([r[4] for r in top_rules])
+
+        top_file_labels = html_json([f[0] for f in top_files])
+        top_file_values = html_json([f[1] for f in top_files])
+        top_file_errors = html_json([f[2] for f in top_files])
+        top_file_warnings = html_json([f[3] for f in top_files])
+        top_file_infos = html_json([f[4] for f in top_files])
         
         return f"""
         <div class="statistics-container">
@@ -594,7 +595,7 @@ class OelintHtmlFormatter:
                 # Provide a default message
                 docs[rule_id] = f"# {rule_id}\n\nNo documentation available for this rule.\n\nPlease refer to the oelint-adv documentation at: https://github.com/priv-kweihmann/oelint-adv"
         
-        return json.dumps(docs)
+        return html_json(docs)
 
     def _get_styles(self) -> str:
         """Get embedded CSS styles."""

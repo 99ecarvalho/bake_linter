@@ -165,9 +165,10 @@ bake_linter reads the first of these files that exists in the current
 directory: `.bake-linter.yaml`, `.bake-linter.yml`, `.bake-linter.json`,
 `bake-linter.yaml`, `bake-linter.yml`, `bake-linter.json`. If none does, it
 falls back to [config/.bake-linter.yaml](config/.bake-linter.yaml) in the
-bake_linter checkout, which lists every rule and is a good starting point to
-copy. `--config FILE` picks a file explicitly. The file in use is printed at
-startup.
+bake_linter checkout (also bundled in installed distributions), which lists
+every rule and is a good starting point to copy. `--config FILE` picks a file
+explicitly. The file in use is printed to standard error at startup, keeping
+JSON and JSON Lines on standard output machine-readable.
 
 ```yaml
 rules:
@@ -204,6 +205,12 @@ exclude:
 Command-line options override the file, and the file overrides the built-in
 defaults. `enable` and `disable` lists of rule IDs, and `enable_groups`, are
 accepted too.
+
+An explicit CLI `--enable` or `--enable-group` replaces the configured
+selection and overrides configured disables for the selected rules. CLI
+`--disable` and `--disable-group` take precedence when both are supplied.
+An empty `enable: []` selects no built-in rules. Invalid configuration types
+produce exit code 3.
 
 ## Inline suppression
 

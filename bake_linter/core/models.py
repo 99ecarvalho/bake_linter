@@ -78,10 +78,12 @@ def get_rule_docs_path(rule_id: str) -> Optional[Path]:
     import importlib.resources
     try:
         # Try to find the docs directory in the package
-        docs_dir = Path(__file__).parent.parent.parent / "docs" / "rules"
-        doc_file = docs_dir / f"{rule_id}.md"
-        if doc_file.exists():
-            return doc_file
+        package_dir = Path(__file__).parent.parent
+        for docs_dir in (package_dir.parent / "docs" / "rules",
+                         package_dir / "data" / "rules"):
+            doc_file = docs_dir / f"{rule_id}.md"
+            if doc_file.is_file():
+                return doc_file
     except Exception:
         pass
     return None
@@ -482,6 +484,7 @@ class LintSummary:
     infos: int = 0
     rules_executed: int = 0
     skipped_files: List[str] = field(default_factory=list)
+    runtime_errors: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -491,7 +494,8 @@ class LintSummary:
     def from_results(cls, results: List[LintResult], 
                      files_scanned: int,
                      rules_executed: int,
-                     skipped_files: Optional[List[str]] = None) -> "LintSummary":
+                     skipped_files: Optional[List[str]] = None,
+                     runtime_errors: Optional[List[str]] = None) -> "LintSummary":
         """Create summary from a list of lint results."""
         files_with_issues = len(set(r.file for r in results))
         errors = sum(1 for r in results if r.severity == Severity.ERROR)
@@ -507,10 +511,13 @@ class LintSummary:
             infos=infos,
             rules_executed=rules_executed,
             skipped_files=skipped_files or [],
+            runtime_errors=runtime_errors or [],
         )
 
     def get_exit_code(self) -> ExitCode:
         """Determine appropriate exit code based on results."""
+        if self.skipped_files or self.runtime_errors:
+            return ExitCode.RUNTIME_ERROR
         if self.errors > 0:
             return ExitCode.ERRORS_FOUND
         elif self.warnings > 0:

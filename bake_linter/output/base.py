@@ -17,11 +17,17 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional, TextIO, TYPE_CHECKING
 import sys
+import json
 
 from bake_linter.core.models import LintResult, LintSummary
 
 if TYPE_CHECKING:
     from bake_linter.core.oelint_integration import OelintResult, OelintSummary
+
+
+def html_json(data) -> str:
+    """Encode JSON for a script element without allowing HTML end tags."""
+    return json.dumps(data).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
 class BaseFormatter(ABC):
