@@ -107,7 +107,7 @@ class HtmlFormatter(BaseFormatter):
             <p class="timestamp">Generated: {timestamp}</p>
             <div class="copyright-section">
                 <!-- START: DO NOT REMOVE OR MODIFY THIS COPYRIGHT NOTICE -->
-                <p class="copyright-main">© 2024-2026 <a href="https://www.apliant.com.br/cv" target="_blank" class="author-link">Eduardo Correia</a> — <a href="https://www.apliant.com.br/cv" target="_blank" class="cv-link">📄 Curriculum Vitae</a></p>
+                <p class="copyright-main">© 2024-2026 <a href="https://www.apliant.com.br/eduardo" target="_blank" class="author-link">Eduardo Correia</a> — <a href="https://www.apliant.com.br/eduardo" target="_blank" class="cv-link">📄 Curriculum Vitae</a></p>
                 <p class="copyright-links">
                     <a href="mailto:ecorreia@apliant.com.br" class="contact-link">📧 ecorreia@apliant.com.br</a>
                     <span class="link-separator">•</span>
