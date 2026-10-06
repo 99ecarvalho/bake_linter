@@ -738,6 +738,11 @@ class HtmlFormatter(BaseFormatter):
             box-sizing: border-box;
         }
         
+        /* Form controls do not inherit the page font by default */
+        button, input, select, textarea {
+            font-family: inherit;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             line-height: 1.6;
@@ -1187,13 +1192,13 @@ class HtmlFormatter(BaseFormatter):
         }
         
         .file-path {
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
             flex-grow: 1;
             word-break: break-all;
         }
         
         .file-path-link {
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
             flex-grow: 1;
             word-break: break-all;
             color: inherit;
@@ -1302,7 +1307,7 @@ class HtmlFormatter(BaseFormatter):
             padding: 8px;
             background: rgba(0,0,0,0.05);
             border-radius: 4px;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
             font-size: 0.9em;
             overflow-x: auto;
         }
@@ -1335,7 +1340,7 @@ class HtmlFormatter(BaseFormatter):
         }
         
         .file-link {
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
             color: #667eea;
             margin-right: 10px;
             text-decoration: none;
@@ -1404,7 +1409,7 @@ class HtmlFormatter(BaseFormatter):
             padding: 0 10px;
             text-align: right;
             color: #999;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
             font-size: 0.85em;
             user-select: none;
             flex-shrink: 0;

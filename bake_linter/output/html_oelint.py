@@ -615,6 +615,11 @@ class OelintHtmlFormatter:
 
 * { box-sizing: border-box; }
 
+/* Form controls do not inherit the page font by default */
+button, input, select, textarea {
+    font-family: inherit;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     line-height: 1.6;
