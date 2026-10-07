@@ -29,6 +29,9 @@ import re
 
 from bake_linter.core.models import LintResult, LintSummary, Severity, get_rule_docs_content
 from bake_linter.output.base import BaseFormatter, html_json
+from bake_linter.output.report_ui import (
+    REPORT_SCRIPT, REPORT_STYLES, empty_report_message, error_rate_class, summary_status,
+)
 
 
 class HtmlFormatter(BaseFormatter):
@@ -98,6 +101,7 @@ class HtmlFormatter(BaseFormatter):
     <title>{html.escape(self.title)}</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     {self._get_styles()}
+    {REPORT_STYLES}
 </head>
 <body>
     <div class="container">
@@ -128,27 +132,30 @@ class HtmlFormatter(BaseFormatter):
         
         <div class="severity-filters">
             <span class="filter-label">Filter by Severity:</span>
-            <button class="filter-btn active" data-severity="error">🔴 Errors</button>
-            <button class="filter-btn active" data-severity="warning">🟡 Warnings</button>
-            <button class="filter-btn active" data-severity="info">🔵 Info</button>
+            <button class="filter-btn active" aria-pressed="true" data-severity="error">🔴 Errors</button>
+            <button class="filter-btn active" aria-pressed="true" data-severity="warning">🟡 Warnings</button>
+            <button class="filter-btn active" aria-pressed="true" data-severity="info">🔵 Info</button>
         </div>
         
+        <p id="filter-status" class="filter-status" role="status" aria-live="polite"></p>
         <div id="files" class="tab-content">
+            <p class="filter-empty" hidden>No findings match the selected severities.</p>
             <div class="expand-controls">
                 <button class="expand-btn" data-action="expand-all" data-target="files">▼ Expand All</button>
                 <button class="expand-btn" data-action="collapse-all" data-target="files">▲ Collapse All</button>
             </div>
-            {self._render_files_section(by_file)}
+            {empty_report_message(summary) or self._render_files_section(by_file)}
         </div>
         
         <div id="rules" class="tab-content active">
+            <p class="filter-empty" hidden>No findings match the selected severities.</p>
             <div class="expand-controls">
                 <button class="expand-btn" data-action="expand-all" data-target="rules">▼▼ Items</button>
                 <button class="expand-btn" data-action="expand-level1" data-target="rules">▲ Files</button>
                 <button class="expand-btn" data-action="collapse-level1" data-target="rules">▲▲ Rules</button>
                 <button class="expand-btn" data-action="collapse-all" data-target="rules">▲▲▲ Categories</button>
             </div>
-            {self._render_rules_section(by_rule, by_file, rule_categories)}
+            {empty_report_message(summary) or self._render_rules_section(by_rule, by_file, rule_categories)}
         </div>
         
         <div id="statistics" class="tab-content">
@@ -169,11 +176,11 @@ class HtmlFormatter(BaseFormatter):
     </div>
     
     <!-- Rule Documentation Modal -->
-    <div id="rule-docs-modal" class="rule-docs-modal">
+    <div id="rule-docs-modal" class="rule-docs-modal" role="dialog" aria-modal="true" aria-labelledby="rule-docs-title">
         <div class="rule-docs-modal-content">
             <div class="rule-docs-modal-header">
                 <h2 id="rule-docs-title">Rule Documentation</h2>
-                <button class="rule-docs-close" onclick="closeRuleDocsModal()">&times;</button>
+                <button class="rule-docs-close" aria-label="Close rule documentation" onclick="closeRuleDocsModal()">&times;</button>
             </div>
             <div id="rule-docs-body" class="rule-docs-modal-body">
                 <p>Loading documentation...</p>
@@ -184,34 +191,30 @@ class HtmlFormatter(BaseFormatter):
     <!-- Rule Documentation Data -->
     <script id="rule-docs-data" type="application/json">{self._get_rule_docs_data(by_rule)}</script>
     
+    {REPORT_SCRIPT}
     {self._get_scripts()}
 </body>
 </html>"""
 
     def _render_summary(self, summary: LintSummary) -> str:
         """Render the summary dashboard."""
-        status_class = "success" if summary.total_issues == 0 else (
-            "error" if summary.errors > 0 else "warning"
-        )
-        status_text = "All Clear!" if summary.total_issues == 0 else (
-            f"{summary.total_issues} Issue(s) Found"
-        )
-        
+        status_class, status_text = summary_status(summary)
+
         return f"""
         <section class="summary {status_class}">
             <div class="summary-header">
                 <span class="status-badge {status_class}">{status_text}</span>
             </div>
             <div class="summary-stats">
-                <div class="stat error">
+                <div class="stat error{' zero' if summary.errors == 0 else ''}">
                     <span class="stat-value">{summary.errors}</span>
                     <span class="stat-label">Errors</span>
                 </div>
-                <div class="stat warning">
+                <div class="stat warning{' zero' if summary.warnings == 0 else ''}">
                     <span class="stat-value">{summary.warnings}</span>
                     <span class="stat-label">Warnings</span>
                 </div>
-                <div class="stat info">
+                <div class="stat info{' zero' if summary.infos == 0 else ''}">
                     <span class="stat-value">{summary.infos}</span>
                     <span class="stat-label">Info</span>
                 </div>
@@ -588,6 +591,7 @@ class HtmlFormatter(BaseFormatter):
         
         return f"""
         <div class="statistics-container">
+            <p id="chart-unavailable" class="chart-unavailable" hidden>Charts are unavailable. Numerical statistics and findings remain available.</p>
             <h2>📊 Analysis Dashboard</h2>
             
             <div class="stats-grid">
@@ -632,7 +636,7 @@ class HtmlFormatter(BaseFormatter):
                 </div>
                 
                 <div class="chart-card">
-                    <h3>📈 Quick Stats</h3>
+                    <h3>📈 Quick Stats · Visible Findings</h3>
                     <div class="quick-stats">
                         <div class="quick-stat">
                             <span class="qs-value" id="qs-total-issues">{summary.total_issues}</span>
@@ -652,9 +656,9 @@ class HtmlFormatter(BaseFormatter):
                         </div>
                         <div class="quick-stat">
                             <span class="qs-value" id="qs-avg-issues-file">{summary.total_issues / max(len(by_file), 1):.1f}</span>
-                            <span class="qs-label">Avg Issues/File</span>
+                            <span class="qs-label">Avg Issues/Affected File</span>
                         </div>
-                        <div class="quick-stat error-highlight">
+                        <div class="quick-stat {error_rate_class(summary)}">
                             <span class="qs-value" id="qs-error-rate">{(summary.errors / max(summary.total_issues, 1) * 100):.1f}%</span>
                             <span class="qs-label">Error Rate</span>
                         </div>
@@ -670,7 +674,7 @@ class HtmlFormatter(BaseFormatter):
                             <span class="health-label">Code Health</span>
                         </div>
                     </div>
-                    <p class="chart-description">Based on error/warning ratio and issue density</p>
+                    <p class="chart-description">Full analysis score; severity filters do not change it</p>
                 </div>
             </div>
         </div>
@@ -697,7 +701,9 @@ class HtmlFormatter(BaseFormatter):
             "errors": {summary.errors},
             "warnings": {summary.warnings},
             "infos": {summary.infos},
-            "filesScanned": {summary.files_scanned}
+            "filesScanned": {summary.files_scanned},
+            "analysisIncomplete": {html_json(bool(getattr(summary, "runtime_errors", []) or getattr(summary, "skipped_files", [])))},
+            "ruleCategories": {html_json(rule_categories)}
         }}
         </script>
         """
@@ -2000,15 +2006,6 @@ class HtmlFormatter(BaseFormatter):
             const visibleWarnings = document.querySelectorAll('#files .issue.warning:not(.hidden-by-filter)').length;
             const visibleInfos = document.querySelectorAll('#files .issue.info:not(.hidden-by-filter)').length;
             
-            // Update summary stat values if they exist
-            const errorStat = document.querySelector('.stat.error .stat-value');
-            const warningStat = document.querySelector('.stat.warning .stat-value');
-            const infoStat = document.querySelector('.stat.info .stat-value');
-            
-            if (errorStat) errorStat.textContent = visibleErrors;
-            if (warningStat) warningStat.textContent = visibleWarnings;
-            if (infoStat) infoStat.textContent = visibleInfos;
-            
             // Update charts if they exist
             updateChartsWithFilter(visibleErrors, visibleWarnings, visibleInfos);
         }
@@ -2028,6 +2025,7 @@ class HtmlFormatter(BaseFormatter):
         
         function initializeCharts() {
             if (chartsInitialized) return;
+            if (typeof Chart === 'undefined') return;
             
             const dataElement = document.getElementById('chart-data');
             if (!dataElement) return;
@@ -2363,12 +2361,12 @@ class HtmlFormatter(BaseFormatter):
                     }
                 });
             }
+            applySeverityFilters();
         }
         
         // Function to update charts when filters change
         function updateChartsWithFilter(errors, warnings, infos) {
-            const charts = window.linterCharts;
-            if (!charts) return;
+            const charts = window.linterCharts || {};
             
             const dataElement = document.getElementById('chart-data');
             const originalData = dataElement ? JSON.parse(dataElement.textContent) : null;
@@ -2397,9 +2395,9 @@ class HtmlFormatter(BaseFormatter):
                 const infoWeight = 1;
                 const totalIssues = errors + warnings + infos;
                 
-                const weightedScore = (errors * errorWeight) + 
-                                      (warnings * warningWeight) + 
-                                      (infos * infoWeight);
+                const weightedScore = (originalData.errors * errorWeight) +
+                                      (originalData.warnings * warningWeight) +
+                                      (originalData.infos * infoWeight);
                 
                 const maxExpectedScore = (originalData ? originalData.filesScanned : 1) * 50;
                 let healthScore = Math.max(0, 100 - (weightedScore / Math.max(maxExpectedScore, 1)) * 100);
@@ -2442,10 +2440,8 @@ class HtmlFormatter(BaseFormatter):
                     rulesTriggered.set(ruleId, { name: ruleName, errors: 0, warnings: 0, infos: 0 });
                 }
                 
-                // Determine category from rule ID prefix (extract letters before numbers)
-                // This dynamically supports all rule prefixes without hardcoding
-                const prefixMatch = ruleId.match(/^([A-Z]+)/);
-                const category = prefixMatch ? prefixMatch[1] : 'OTHER';
+                // Use the same registered category as the initial report.
+                const category = originalData.ruleCategories[ruleId] || 'OTHER';
                 
                 if (!categoriesAffected.has(category)) {
                     categoriesAffected.set(category, { errors: 0, warnings: 0, infos: 0 });
@@ -2488,6 +2484,7 @@ class HtmlFormatter(BaseFormatter):
             if (qsCategories) qsCategories.textContent = categoriesCount;
             if (qsAvg) qsAvg.textContent = avgIssuesPerFile;
             if (qsErrorRate) qsErrorRate.textContent = errorRate;
+            updateReportState(errors, warnings, infos);
             
             // Update Category Bar Chart
             if (charts.categoryBar && categoriesAffected.size > 0) {
@@ -2709,7 +2706,9 @@ class HtmlFormatter(BaseFormatter):
                     '<p>Create a documentation file at <code>docs/rules/' + ruleId + '.md</code></p>';
             }
             
+            modal._trigger = document.activeElement;
             modal.classList.add('active');
+            modal.querySelector('.rule-docs-close').focus();
             document.body.style.overflow = 'hidden';  // Prevent background scroll
         }
         
@@ -2718,6 +2717,7 @@ class HtmlFormatter(BaseFormatter):
             const modal = document.getElementById('rule-docs-modal');
             if (modal) {
                 modal.classList.remove('active');
+                if (modal._trigger) modal._trigger.focus();
                 document.body.style.overflow = '';  // Restore scroll
             }
         }
